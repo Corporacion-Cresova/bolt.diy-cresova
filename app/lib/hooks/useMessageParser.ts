@@ -1,10 +1,29 @@
 import type { Message } from 'ai';
 import { useCallback, useState } from 'react';
 import { EnhancedStreamingMessageParser } from '~/lib/runtime/enhanced-message-parser';
+import type { ActionCallbackData } from '~/lib/runtime/message-parser';
 import { workbenchStore } from '~/lib/stores/workbench';
+import { isDevServerCommand } from '~/lib/cresova/dev-server';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('useMessageParser');
+const builderLogger = createScopedLogger('CresovaBuilder');
+
+/**
+ * Models frequently emit the dev server as a plain `shell` action. Shell actions block the
+ * action queue until the process exits, which a server never does, so the rest of the artifact
+ * (and the preview) never happens. Bolt already has a non blocking action type for servers,
+ * so we normalise the action before it reaches the runner.
+ */
+function normalizeAction(data: ActionCallbackData): ActionCallbackData {
+  if (data.action.type !== 'shell' || !isDevServerCommand(data.action.content)) {
+    return data;
+  }
+
+  builderLogger.info(`Promoting shell dev server command to a start action: ${data.action.content}`);
+
+  return { ...data, action: { type: 'start', content: data.action.content } };
+}
 
 const messageParser = new EnhancedStreamingMessageParser({
   callbacks: {
@@ -19,7 +38,8 @@ const messageParser = new EnhancedStreamingMessageParser({
 
       workbenchStore.updateArtifact(data, { closed: true });
     },
-    onActionOpen: (data) => {
+    onActionOpen: (rawData) => {
+      const data = normalizeAction(rawData);
       logger.trace('onActionOpen', data.action);
 
       /*
@@ -30,7 +50,8 @@ const messageParser = new EnhancedStreamingMessageParser({
         workbenchStore.addAction(data);
       }
     },
-    onActionClose: (data) => {
+    onActionClose: (rawData) => {
+      const data = normalizeAction(rawData);
       logger.trace('onActionClose', data.action);
 
       /*

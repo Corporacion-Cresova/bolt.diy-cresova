@@ -28,8 +28,14 @@ import type { ElementInfo } from '~/components/workbench/Inspector';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
+import { ARTIFACT_RECOVERY_PROMPT, AUTO_START_ANNOTATION, runExecutionGuard } from '~/lib/cresova/execution-guard';
 
 const logger = createScopedLogger('Chat');
+
+const extractMessageText = (message: Message): string =>
+  Array.isArray(message.content)
+    ? ((message.content as { type: string; text?: string }[]).find((item) => item.type === 'text')?.text ?? '')
+    : message.content;
 
 export function Chat() {
   renderLogger.trace('Chat');
@@ -209,6 +215,70 @@ export const ChatImpl = memo(
         storeMessageHistory,
       });
     }, [messages, isLoading, parseMessages]);
+
+    /*
+     * Cresova Execution Guard: once a build turn finished streaming and every action ran, verify
+     * the turn actually produced a running app (artifact -> files -> dependencies -> server ->
+     * preview) and complete the missing step instead of waiting for the user to ask again.
+     */
+    const messagesRef = useRef(messages);
+    messagesRef.current = messages;
+
+    const recoveryAttemptsRef = useRef(0);
+    const guardedMessageIdRef = useRef<string | undefined>(undefined);
+    const hasStreamedRef = useRef(false);
+
+    useEffect(() => {
+      if (isLoading) {
+        hasStreamedRef.current = true;
+      }
+    }, [isLoading]);
+
+    useEffect(() => {
+      // never guard messages restored from history, only turns produced in this session
+      if (isLoading || fakeLoading || chatMode !== 'build' || error != null || !hasStreamedRef.current) {
+        return;
+      }
+
+      const lastMessage = messages[messages.length - 1];
+
+      if (!lastMessage || lastMessage.role !== 'assistant' || guardedMessageIdRef.current === lastMessage.id) {
+        return;
+      }
+
+      // the guard's own auto start message must not re-trigger the guard
+      if (lastMessage.annotations?.includes(AUTO_START_ANNOTATION)) {
+        guardedMessageIdRef.current = lastMessage.id;
+        return;
+      }
+
+      if (chatStore.get().aborted) {
+        return;
+      }
+
+      guardedMessageIdRef.current = lastMessage.id;
+
+      const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+
+      runExecutionGuard({
+        assistantMessageId: lastMessage.id,
+        userMessage: lastUserMessage ? extractMessageText(lastUserMessage) : '',
+        recoveryAttempt: recoveryAttemptsRef.current,
+        requestArtifactRecovery: () => {
+          recoveryAttemptsRef.current += 1;
+          append({
+            role: 'user',
+            content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${ARTIFACT_RECOVERY_PROMPT}`,
+            annotations: ['hidden'],
+          });
+        },
+        appendAssistantMessage: (message) => {
+          setMessages([...messagesRef.current, message]);
+        },
+      }).catch((guardError) => {
+        logger.error('Cresova execution guard failed', guardError);
+      });
+    }, [messages, isLoading, fakeLoading, chatMode, error]);
 
     const scrollTextArea = () => {
       const textarea = textareaRef.current;
@@ -408,6 +478,9 @@ export const ChatImpl = memo(
       }
 
       runAnimation();
+
+      // a new user request gets a fresh recovery budget
+      recoveryAttemptsRef.current = 0;
 
       if (!chatStarted) {
         setFakeLoading(true);

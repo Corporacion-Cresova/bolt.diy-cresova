@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react';
 import { motion, type HTMLMotionProps, type Variants } from 'framer-motion';
 import { computed } from 'nanostores';
-import { memo, useCallback, useEffect, useState, useMemo } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { Popover, Transition } from '@headlessui/react';
 import { diffLines, type Change } from 'diff';
@@ -294,7 +294,9 @@ export const Workbench = memo(
 
     // const modifiedFiles = Array.from(useStore(workbenchStore.unsavedFiles).keys());
 
-    const hasPreview = useStore(computed(workbenchStore.previews, (previews) => previews.length > 0));
+    const activePreviewUrl = useStore(
+      computed(workbenchStore.previews, (previews) => previews.find((preview) => preview.ready)?.baseUrl),
+    );
     const showWorkbench = useStore(workbenchStore.showWorkbench);
     const selectedFile = useStore(workbenchStore.selectedFile);
     const currentDocument = useStore(workbenchStore.currentDocument);
@@ -313,11 +315,22 @@ export const Workbench = memo(
       workbenchStore.currentView.set(view);
     };
 
+    /*
+     * Cresova Builder: the panel follows the running app. Switching on the preview URL (instead
+     * of on "there is at least one preview") also covers restarts and follow-up edits, where the
+     * boolean never changes and the user was left staring at the code panel.
+     */
+    const lastPreviewUrlRef = useRef<string | undefined>(undefined);
+
     useEffect(() => {
-      if (hasPreview) {
-        setSelectedView('preview');
+      // a preview refresh briefly clears the url, that must not count as a new server
+      if (!activePreviewUrl || activePreviewUrl === lastPreviewUrlRef.current) {
+        return;
       }
-    }, [hasPreview]);
+
+      lastPreviewUrlRef.current = activePreviewUrl;
+      setSelectedView('preview');
+    }, [activePreviewUrl]);
 
     useEffect(() => {
       workbenchStore.setDocuments(files);

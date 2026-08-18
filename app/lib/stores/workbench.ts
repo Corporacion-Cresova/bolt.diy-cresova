@@ -83,6 +83,21 @@ export class WorkbenchStore {
     this.#globalExecutionQueue = this.#globalExecutionQueue.then(() => callback());
   }
 
+  /**
+   * Resolves once every queued action has been executed.
+   *
+   * Actions are appended while the response is still streaming, so we keep awaiting until the
+   * queue stops growing. Used by the Cresova execution guard to inspect the result of a turn.
+   */
+  async waitForPendingActions(): Promise<void> {
+    let awaited: Promise<void> | undefined;
+
+    while (awaited !== this.#globalExecutionQueue) {
+      awaited = this.#globalExecutionQueue;
+      await awaited;
+    }
+  }
+
   get previews() {
     return this.#previewsStore.previews;
   }
@@ -575,7 +590,13 @@ export class WorkbenchStore {
         this.setSelectedFile(fullPath);
       }
 
-      if (this.currentView.value !== 'code') {
+      /*
+       * Follow the file being written, but never steal the panel from a running preview:
+       * once an app is live, edits should be watched in the preview (Cresova Builder).
+       */
+      const hasLivePreview = this.previews.get().some((preview) => preview.ready);
+
+      if (this.currentView.value !== 'code' && !hasLivePreview) {
         this.currentView.set('code');
       }
 
