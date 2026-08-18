@@ -4,20 +4,6 @@ import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 
-interface OpenRouterModel {
-  name: string;
-  id: string;
-  context_length: number;
-  pricing: {
-    prompt: number;
-    completion: number;
-  };
-}
-
-interface OpenRouterModelsResponse {
-  data: OpenRouterModel[];
-}
-
 export default class OpenRouterProvider extends BaseProvider {
   name = 'OpenRouter';
   getApiKeyLink = 'https://openrouter.ai/settings/keys';
@@ -26,63 +12,71 @@ export default class OpenRouterProvider extends BaseProvider {
     apiTokenKey: 'OPEN_ROUTER_API_KEY',
   };
 
+  /*
+   * ============================================================
+   * CRESOVA - MODELOS SELECCIONADOS PARA PROGRAMACIÓN
+   * ============================================================
+   *
+   * Hemos deshabilitado deliberadamente el catálogo dinámico
+   * de OpenRouter para mostrar únicamente modelos seleccionados.
+   *
+   * Esto evita tener cientos de modelos innecesarios en Bolt
+   * y nos permite controlar exactamente qué modelos utilizamos.
+   */
+
   staticModels: ModelInfo[] = [
-    /*
-     * Essential fallback models - only the most stable/reliable ones
-     * Claude 3.5 Sonnet via OpenRouter: 200k context
-     */
+    // ==========================================================
+    // 1. DEEPSEEK V4 FLASH
+    // Principal recomendado para uso diario.
+    // Muy económico, rápido y fuerte en coding/agentes.
+    // 1M tokens de contexto.
+    // ==========================================================
     {
-      name: 'anthropic/claude-3.5-sonnet',
-      label: 'Claude 3.5 Sonnet',
+      name: 'deepseek/deepseek-v4-flash',
+      label: '⚡ DeepSeek V4 Flash — Recomendado / Económico',
       provider: 'OpenRouter',
-      maxTokenAllowed: 200000,
+      maxTokenAllowed: 1000000,
     },
 
-    // GPT-4o via OpenRouter: 128k context
+    // ==========================================================
+    // 2. QWEN3 CODER NEXT
+    // Especializado específicamente en programación,
+    // tool use y agentes de código.
+    // 262K tokens de contexto.
+    // ==========================================================
     {
-      name: 'openai/gpt-4o',
-      label: 'GPT-4o',
+      name: 'qwen/qwen3-coder-next',
+      label: '💻 Qwen3 Coder Next — Coding',
       provider: 'OpenRouter',
-      maxTokenAllowed: 128000,
+      maxTokenAllowed: 262144,
+    },
+
+    // ==========================================================
+    // 3. QWEN 3.6 PLUS
+    // Para proyectos complejos, frontend, razonamiento
+    // y trabajo sobre repositorios grandes.
+    // 1M tokens de contexto.
+    // ==========================================================
+    {
+      name: 'qwen/qwen3.6-plus',
+      label: '🧠 Qwen3.6 Plus — Coding Premium',
+      provider: 'OpenRouter',
+      maxTokenAllowed: 1000000,
+    },
+
+    // ==========================================================
+    // 4. DEEPSEEK V4 PRO
+    // Modelo de máxima capacidad de DeepSeek.
+    // Para tareas realmente difíciles y refactors grandes.
+    // 1M tokens de contexto.
+    // ==========================================================
+    {
+      name: 'deepseek/deepseek-v4-pro',
+      label: '🔥 DeepSeek V4 Pro — Máxima Calidad',
+      provider: 'OpenRouter',
+      maxTokenAllowed: 1000000,
     },
   ];
-
-  async getDynamicModels(
-    _apiKeys?: Record<string, string>,
-    _settings?: IProviderSetting,
-    _serverEnv: Record<string, string> = {},
-  ): Promise<ModelInfo[]> {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/models', {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const data = (await response.json()) as OpenRouterModelsResponse;
-
-      return data.data
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((m) => {
-          // Get accurate context window from OpenRouter API
-          const contextWindow = m.context_length || 32000; // Use API value or fallback
-
-          // Cap at reasonable limits to prevent issues (OpenRouter has some very large models)
-          const maxAllowed = 1000000; // 1M tokens max for safety
-          const finalContext = Math.min(contextWindow, maxAllowed);
-
-          return {
-            name: m.id,
-            label: `${m.name} - in:$${(m.pricing.prompt * 1_000_000).toFixed(2)} out:$${(m.pricing.completion * 1_000_000).toFixed(2)} - context ${finalContext >= 1000000 ? Math.floor(finalContext / 1000000) + 'M' : Math.floor(finalContext / 1000) + 'k'}`,
-            provider: this.name,
-            maxTokenAllowed: finalContext,
-          };
-        });
-    } catch (error) {
-      console.error('Error getting OpenRouter models:', error);
-      return [];
-    }
-  }
 
   getModelInstance(options: {
     model: string;
@@ -107,8 +101,7 @@ export default class OpenRouterProvider extends BaseProvider {
     const openRouter = createOpenRouter({
       apiKey,
     });
-    const instance = openRouter.chat(model) as LanguageModelV1;
 
-    return instance;
+    return openRouter.chat(model) as LanguageModelV1;
   }
 }
