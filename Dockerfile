@@ -101,3 +101,6 @@ ENV VITE_LOG_LEVEL=${VITE_LOG_LEVEL} \
 
 RUN mkdir -p /app/run
 CMD ["pnpm", "run", "dev", "--host"]
+
+# ---- default production stage for EasyPanel ----
+FROM bolt-ai-production AS final
