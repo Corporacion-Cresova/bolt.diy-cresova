@@ -19,4 +19,7 @@ interface Env {
   XAI_API_KEY: string;
   PERPLEXITY_API_KEY: string;
   AWS_BEDROCK_CONFIG: string;
+
+  /** Optional. Enables the verified stock photo catalog for generated sites. */
+  PEXELS_API_KEY: string;
 }

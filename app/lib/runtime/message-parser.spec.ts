@@ -843,3 +843,48 @@ describe('malformed artifacts from smaller models', () => {
     expect(collectActions(input).map((action) => action.type)).toEqual(['shell', 'start']);
   });
 });
+
+describe('responses continued after hitting the token limit', () => {
+  function parseWithArtifactCount(input: string) {
+    let artifactsOpened = 0;
+    const parser = new StreamingMessageParser({
+      callbacks: {
+        onArtifactOpen: () => {
+          artifactsOpened++;
+        },
+      },
+    });
+
+    const output = parser.parse('message_1', input);
+
+    return { output, artifactsOpened, blocks: (output.match(/__boltArtifact__/g) || []).length };
+  }
+
+  it('renders one block when the model reopens the artifact mid-message', () => {
+    const input =
+      '<boltArtifact id="a" title="A"><boltAction type="file" filePath="a.ts">a</boltAction></boltArtifact>' +
+      '<boltArtifact id="a" title="A"><boltAction type="file" filePath="b.ts">b</boltAction></boltArtifact>' +
+      '<boltArtifact id="a" title="A"><boltAction type="file" filePath="c.ts">c</boltAction></boltArtifact>';
+
+    expect(parseWithArtifactCount(input).blocks).toBe(1);
+  });
+
+  it('keeps every action under the same artifact id', () => {
+    const ids: string[] = [];
+    const parser = new StreamingMessageParser({
+      callbacks: {
+        onActionClose: (data) => {
+          ids.push(data.artifactId);
+        },
+      },
+    });
+
+    parser.parse(
+      'message_1',
+      '<boltArtifact id="a" title="A"><boltAction type="shell">npm install</boltAction></boltArtifact>' +
+        '<boltArtifact id="a" title="A"><boltAction type="start">npm run dev</boltAction></boltArtifact>',
+    );
+
+    expect(new Set(ids).size).toBe(1);
+  });
+});

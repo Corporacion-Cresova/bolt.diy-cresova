@@ -40,10 +40,14 @@ export const CRESOVA_DESIGN_KIT = `
   - Services: an editorial list separated by hairline rules, each item with a name, one sentence of
     what it includes and a price hint. Cards are the fallback, not the default.
   - Process: 3-4 numbered steps, horizontal on desktop. Numbering only when order truly matters.
-  - Gallery: asymmetric grid of real photos, never four equal squares.
+  - Gallery: asymmetric grid of real photos from <cresova_images>, never four equal squares.
   - Testimonials: one large quote with attribution, or two side by side. Never a carousel.
   - Contact: two columns, form or WhatsApp action on one side, hours and service area on the other.
   - Footer: business data, navigation, legal line.
+
+  IMAGE PLACEMENT: the hero photo carries the page, so give it real height (min 70vh on desktop)
+  and an object-cover fit so it never stretches. A section with no suitable photo is better solid
+  than filled with an unrelated one.
 
   FLOATING WHATSAPP: fixed bottom-right, 56px, accent background, lucide MessageCircle icon,
   aria-label in the page language, href https://wa.me/NUMERO.

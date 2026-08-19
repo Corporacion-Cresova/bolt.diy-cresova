@@ -80,6 +80,9 @@ export class ActionRunner {
   onDeployAlert?: (alert: DeployAlert) => void;
   buildOutput?: { path: string; exitCode: number; output: string };
 
+  /** Actions already run, so a continued response repeating them does not run them twice. */
+  #executedSignatures = new Set<string>();
+
   constructor(
     webcontainerPromise: Promise<WebContainer>,
     getShellTerminal: () => BoltShell,
@@ -139,6 +142,13 @@ export class ActionRunner {
       return; // No return value here
     }
 
+    if (!isStreaming && this.#isRepeatOfAnExecutedAction(data.action)) {
+      logger.info(`[Cresova Builder] Skipping a repeated ${data.action.type} action`);
+      this.#updateAction(actionId, { ...action, ...data.action, status: 'complete', executed: true });
+
+      return;
+    }
+
     this.#updateAction(actionId, { ...action, ...data.action, executed: !isStreaming });
 
     this.#currentExecutionPromise = this.#currentExecutionPromise
@@ -152,6 +162,23 @@ export class ActionRunner {
     await this.#currentExecutionPromise;
 
     return;
+  }
+
+  /**
+   * A continued response often repeats every action emitted so far. Re-running them means
+   * reinstalling dependencies, rewriting identical files and restarting a healthy dev server,
+   * so an action identical to one already run is treated as done.
+   */
+  #isRepeatOfAnExecutedAction(action: BoltAction): boolean {
+    const signature = `${action.type}:${'filePath' in action ? action.filePath : ''}:${action.content}`;
+
+    if (this.#executedSignatures.has(signature)) {
+      return true;
+    }
+
+    this.#executedSignatures.add(signature);
+
+    return false;
   }
 
   async #executeAction(actionId: string, isStreaming: boolean = false) {

@@ -58,6 +58,9 @@ interface MessageState {
 
   /** A file action with no usable path cannot be written anywhere, so it is parsed but not emitted. */
   skipCurrentAction: boolean;
+
+  /** Artifacts reopened later in the same message fold into this one instead of stacking up. */
+  firstArtifactId?: string;
 }
 
 /**
@@ -293,7 +296,16 @@ export class StreamingMessageParser {
               const type = this.#extractAttribute(artifactTag, 'type') as string;
 
               // const artifactId = this.#extractAttribute(artifactTag, 'id') as string;
-              const artifactId = `${messageId}-${state.artifactCounter++}`;
+              /*
+               * When a response is continued because it hit the token limit, models routinely
+               * reopen the artifact and repeat every action already emitted. Folding the repeat
+               * into the first artifact keeps one growing block in the chat instead of three
+               * stacked copies, and keeps every action under a single runner so the duplicates
+               * can be recognised and skipped.
+               */
+              const isRepeatedArtifact = state.firstArtifactId !== undefined;
+              const artifactId = state.firstArtifactId ?? `${messageId}-${state.artifactCounter++}`;
+              state.firstArtifactId = artifactId;
 
               if (!artifactTitle) {
                 logger.warn('Artifact title missing');
@@ -319,9 +331,12 @@ export class StreamingMessageParser {
                 ...currentArtifact,
               });
 
-              const artifactFactory = this._options.artifactElement ?? createArtifactElement;
-
-              output += artifactFactory({ messageId, artifactId });
+              if (isRepeatedArtifact) {
+                logger.info('Artifact reopened in a continued response, folding it into the first one');
+              } else {
+                const artifactFactory = this._options.artifactElement ?? createArtifactElement;
+                output += artifactFactory({ messageId, artifactId });
+              }
 
               i = openTagEnd + 1;
             } else {

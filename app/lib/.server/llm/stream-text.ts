@@ -7,6 +7,7 @@ import { PromptLibrary } from '~/lib/common/prompt-library';
 import { CRESOVA_BUILD_CONTRACT } from '~/lib/common/prompts/cresova-build-contract';
 import { CRESOVA_DESIGN_KIT } from '~/lib/common/prompts/cresova-design-kit';
 import { detectBuildIntent } from '~/lib/cresova/build-intent';
+import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
 import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { createScopedLogger } from '~/utils/logger';
@@ -52,6 +53,45 @@ function sanitizeText(text: string): string {
   sanitized = sanitized.replace(/<boltAction type="file" filePath="package-lock\.json">[\s\S]*?<\/boltAction>/g, '');
 
   return sanitized.trim();
+}
+
+/**
+ * Renders the image section of the prompt.
+ *
+ * With real URLs the model has nothing to invent. Without them it gets a placeholder service that
+ * always resolves, which is far better than a hallucinated Pexels id that 404s and leaves a hole
+ * where the hero image should be.
+ */
+function renderPhotoCatalog(photos: CatalogPhoto[]): string {
+  if (photos.length === 0) {
+    return `
+<cresova_images>
+  No verified photo catalog is available for this request.
+  - Use https://picsum.photos/seed/SLUG/WIDTH/HEIGHT, replacing SLUG with a word related to the
+    section. That service always resolves.
+  - NEVER invent a Pexels or Unsplash URL. Invented photo ids return 404 and leave holes in the page.
+  - source.unsplash.com is discontinued and must never be used.
+</cresova_images>
+`;
+  }
+
+  return `
+<cresova_images>
+  These photo URLs were fetched for this request and are known to work. Use them verbatim,
+  copying the URL character for character, and pick the one that fits each section.
+
+${photos.map((photo, index) => `  ${index + 1}. ${photo.url}\n     depicts: ${photo.alt}`).join('\n')}
+
+  Rules:
+  - NEVER invent a different Pexels or Unsplash URL, and never edit these ones. An invented photo
+    id returns 404 and leaves a hole in the page.
+  - source.unsplash.com is discontinued and must never be used.
+  - If you need more images than the list holds, reuse one or fall back to
+    https://picsum.photos/seed/SLUG/WIDTH/HEIGHT.
+  - Always set width and height or aspect-ratio on the img, and write the alt text in the page
+    language using the description above.
+</cresova_images>
+`;
 }
 
 export async function streamText(props: {
@@ -178,6 +218,12 @@ export async function streamText(props: {
     if (lastUserMessage && detectBuildIntent(lastUserMessage.content)) {
       logger.info('Cresova design kit injected for a build request');
       systemPrompt = `${systemPrompt}\n${CRESOVA_DESIGN_KIT}`;
+
+      const query = buildPhotoQuery(lastUserMessage.content);
+      const photos = await fetchPhotoCatalog(query, serverEnv?.PEXELS_API_KEY || process.env.PEXELS_API_KEY);
+
+      logger.info(`Photo catalog for "${query}": ${photos.length} image(s)`);
+      systemPrompt = `${systemPrompt}\n${renderPhotoCatalog(photos)}`;
     }
   }
 

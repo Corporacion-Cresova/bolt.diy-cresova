@@ -220,8 +220,8 @@ The year is 2025.
   - Honour prefers-reduced-motion.
 
   Images:
-  - Real photography from Pexels URLs matching the business sector. Never Unsplash, never invented
-    local paths, never base64, never SVG drawings imitating photos.
+  - Use only the URLs given in <cresova_images>. Never invent a stock photo URL, never use a local
+    path that does not exist, never base64, never an SVG drawing imitating a photograph.
   - Always set width/height or aspect-ratio to prevent layout shift. Alt text in the page language.
   - Icons come from lucide-react, never emoji.
 
