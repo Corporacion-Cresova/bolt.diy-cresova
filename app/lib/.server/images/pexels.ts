@@ -25,7 +25,11 @@ interface PexelsPhoto {
  * Returns an empty list when no API key is configured; the prompt then falls back to a
  * placeholder service that always resolves.
  */
-export async function fetchPhotoCatalog(query: string, apiKey: string | undefined, count = 8): Promise<CatalogPhoto[]> {
+export async function fetchPhotoCatalog(
+  query: string,
+  apiKey: string | undefined,
+  count = 12,
+): Promise<CatalogPhoto[]> {
   if (!apiKey || !query.trim()) {
     return [];
   }

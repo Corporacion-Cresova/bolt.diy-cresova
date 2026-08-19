@@ -46,8 +46,17 @@ export const CRESOVA_DESIGN_KIT = `
   - Footer: business data, navigation, legal line.
 
   IMAGE PLACEMENT: the hero photo carries the page, so give it real height (min 70vh on desktop)
-  and an object-cover fit so it never stretches. A section with no suitable photo is better solid
-  than filled with an unrelated one.
+  and an object-cover fit so it never stretches. Use a photo from <cresova_images> in the hero and
+  in at least two more sections: a page with one lonely image looks unfinished. A section with no
+  suitable photo is better solid than filled with an unrelated one.
+
+  ICONS: only these lucide-react names, they are guaranteed to exist. Importing an icon that does
+  not exist breaks the build, and invented names like Crane or Tow are the usual cause:
+  Phone, Mail, MapPin, Clock, MessageCircle, Star, Check, CheckCircle2, ArrowRight, ArrowUpRight,
+  ChevronRight, ChevronDown, Menu, X, Shield, ShieldCheck, Award, Truck, Wrench, Hammer, Sparkles,
+  Droplets, Zap, Users, ThumbsUp, Calendar, CreditCard, Quote, Instagram, Facebook, Send, Home,
+  Building2, Car, Heart, Leaf, Lock, Search, Settings, Trash2, Timer, TrendingUp.
+  If none fits, use a plain shape or text instead of guessing a name.
 
   FLOATING WHATSAPP: fixed bottom-right, 56px, accent background, lucide MessageCircle icon,
   aria-label in the page language, href https://wa.me/NUMERO.
