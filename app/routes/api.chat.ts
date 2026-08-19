@@ -40,11 +40,21 @@ function parseCookies(cookieHeader: string): Record<string, string> {
 }
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
+  /*
+   * Cresova Builder: a dead upstream used to hang the UI forever. The old handler only logged
+   * "attempting recovery" without recovering anything, so the request never ended and the chat
+   * stayed in "generating" until the user reloaded. Aborting turns that into a visible error.
+   *
+   * Two minutes of complete silence, not 45 seconds: cheap models go quiet for a while on long
+   * files, and killing a healthy stream would be worse than the bug.
+   */
+  const streamAbort = new AbortController();
   const streamRecovery = new StreamRecoveryManager({
-    timeout: 45000,
-    maxRetries: 2,
+    timeout: 120000,
+    maxRetries: 1,
     onTimeout: () => {
-      logger.warn('Stream timeout - attempting recovery');
+      logger.warn('No stream activity for 120s, aborting the request');
+      streamAbort.abort(new Error('The model stopped responding. No output was received for 2 minutes.'));
     },
   });
 
@@ -209,6 +219,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
         const options: StreamingOptions = {
           supabaseConnection: supabase,
+          abortSignal: streamAbort.signal,
           toolChoice: 'auto',
           tools: mcpService.toolsWithoutExecute,
           maxSteps: maxLLMSteps,

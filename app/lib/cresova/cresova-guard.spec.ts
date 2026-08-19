@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { detectBuildIntent, stripMessageMetadata } from './build-intent';
 import { isDevServerCommand } from './dev-server';
+import {
+  DEFAULT_COMMAND_TIMEOUT_MS,
+  ensureNonInteractiveFlags,
+  getCommandTimeout,
+  LONG_COMMAND_TIMEOUT_MS,
+  makeCommandNonInteractive,
+} from './shell-watchdog';
 
 describe('detectBuildIntent', () => {
   it('detects Spanish build requests', () => {
@@ -43,5 +50,38 @@ describe('isDevServerCommand', () => {
     expect(isDevServerCommand('vite build')).toBe(false);
     expect(isDevServerCommand('mkdir src')).toBe(false);
     expect(isDevServerCommand('')).toBe(false);
+  });
+});
+
+describe('getCommandTimeout', () => {
+  it('gives installs and builds a long budget', () => {
+    expect(getCommandTimeout('npm install')).toBe(LONG_COMMAND_TIMEOUT_MS);
+    expect(getCommandTimeout('npx update-browserslist-db@latest && npm install')).toBe(LONG_COMMAND_TIMEOUT_MS);
+    expect(getCommandTimeout('npm run build')).toBe(LONG_COMMAND_TIMEOUT_MS);
+  });
+
+  it('keeps everyday commands on the short budget', () => {
+    expect(getCommandTimeout('mkdir src')).toBe(DEFAULT_COMMAND_TIMEOUT_MS);
+    expect(getCommandTimeout('ls -la')).toBe(DEFAULT_COMMAND_TIMEOUT_MS);
+  });
+});
+
+describe('ensureNonInteractiveFlags', () => {
+  it('stops npx and npm init from asking for confirmation', () => {
+    expect(ensureNonInteractiveFlags('npx shadcn@latest init')).toBe('npx --yes shadcn@latest init');
+    expect(ensureNonInteractiveFlags('npm init vite')).toBe('npm init --yes vite');
+  });
+
+  it('does not duplicate a flag that is already there', () => {
+    expect(ensureNonInteractiveFlags('npx --yes serve')).toBe('npx --yes serve');
+    expect(ensureNonInteractiveFlags('npx -y serve')).toBe('npx -y serve');
+  });
+
+  it('leaves unrelated commands untouched', () => {
+    expect(ensureNonInteractiveFlags('npm install')).toBe('npm install');
+  });
+
+  it('adds a non-interactive environment for one-off commands', () => {
+    expect(makeCommandNonInteractive('npm install')).toBe('export CI=true FORCE_COLOR=0 && npm install');
   });
 });

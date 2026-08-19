@@ -6,6 +6,12 @@ import { createScopedLogger } from '~/utils/logger';
 import { unreachable } from '~/utils/unreachable';
 import type { ActionCallbackData } from './message-parser';
 import type { BoltShell } from '~/utils/shell';
+import {
+  ensureNonInteractiveFlags,
+  getCommandTimeout,
+  makeCommandNonInteractive,
+  MAX_COMMAND_INTERRUPTS,
+} from '~/lib/cresova/shell-watchdog';
 
 const logger = createScopedLogger('ActionRunner');
 
@@ -267,15 +273,55 @@ export class ActionRunner {
       action.content = validationResult.modifiedCommand;
     }
 
-    const resp = await shell.executeCommand(this.runnerId.get(), action.content, () => {
-      logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
-      action.abort();
-    });
+    const resp = await this.#executeWithWatchdog(shell, action);
     logger.debug(`${action.type} Shell Response: [exit code:${resp?.exitCode}]`);
 
     if (resp?.exitCode != 0) {
       const enhancedError = this.#createEnhancedShellError(action.content, resp?.exitCode, resp?.output);
       throw new ActionCommandError(enhancedError.title, enhancedError.details);
+    }
+  }
+
+  /**
+   * Runs a one-off command with a watchdog: if it outlives its budget we send Ctrl-C so the shell
+   * is released and the queue keeps moving, instead of hanging the whole build forever.
+   */
+  async #executeWithWatchdog(shell: BoltShell, action: ActionState) {
+    const timeoutMs = getCommandTimeout(action.content);
+    const command = makeCommandNonInteractive(action.content);
+
+    let interrupts = 0;
+
+    const execution = shell.executeCommand(this.runnerId.get(), command, () => {
+      logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
+      action.abort();
+    });
+
+    const watchdog = setInterval(() => {
+      if (interrupts >= MAX_COMMAND_INTERRUPTS) {
+        return;
+      }
+
+      interrupts++;
+      logger.warn(
+        `[Cresova Builder] "${action.content}" exceeded ${Math.round(timeoutMs / 1000)}s, interrupting (${interrupts}/${MAX_COMMAND_INTERRUPTS})`,
+      );
+      shell.terminal?.input('\x03');
+    }, timeoutMs);
+
+    try {
+      const resp = await execution;
+
+      if (interrupts > 0) {
+        throw new ActionCommandError(
+          `Command timed out after ${Math.round(timeoutMs / 1000)}s and was interrupted`,
+          resp?.output || 'The command produced no output before timing out. It was most likely waiting for input.',
+        );
+      }
+
+      return resp;
+    } finally {
+      clearInterval(watchdog);
     }
   }
 
@@ -295,7 +341,11 @@ export class ActionRunner {
       unreachable('Shell terminal not found');
     }
 
-    const resp = await shell.executeCommand(this.runnerId.get(), action.content, () => {
+    /*
+     * No watchdog here on purpose: a dev server is supposed to keep running, so a timeout would
+     * kill the very thing we want alive.
+     */
+    const resp = await shell.executeCommand(this.runnerId.get(), ensureNonInteractiveFlags(action.content), () => {
       logger.debug(`[${action.type}]:Aborting Action\n\n`, action);
       action.abort();
     });
