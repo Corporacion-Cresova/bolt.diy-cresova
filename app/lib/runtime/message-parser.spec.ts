@@ -888,3 +888,52 @@ describe('responses continued after hitting the token limit', () => {
     expect(new Set(ids).size).toBe(1);
   });
 });
+
+describe('actions cut off by the token limit', () => {
+  function parseFiles(input: string) {
+    const files: Record<string, string> = {};
+    const parser = new StreamingMessageParser({
+      callbacks: {
+        onActionClose: (data) => {
+          if (data.action.type === 'file') {
+            files[(data.action as unknown as { filePath: string }).filePath] = data.action.content;
+          }
+        },
+      },
+    });
+
+    parser.parse('message_1', input);
+
+    return files;
+  }
+
+  it('never writes a bolt tag into the file being generated', () => {
+    const files = parseFiles(
+      '<boltArtifact id="a" title="A"><boltAction type="file" filePath="package.json">{"dependencies":{"react":"^' +
+        '<boltArtifact id="a" title="A"><boltAction type="file" filePath="package.json">{"name":"ok"}</boltAction></boltArtifact>',
+    );
+
+    expect(files['package.json']).not.toContain('boltArtifact');
+    expect(files['package.json'].trim()).toBe('{"name":"ok"}');
+  });
+
+  it('closes an action interrupted by the next action instead of swallowing it', () => {
+    const files = parseFiles(
+      '<boltArtifact id="a" title="A">' +
+        '<boltAction type="file" filePath="a.ts">const a = ' +
+        '<boltAction type="file" filePath="b.ts">const b = 2;</boltAction>' +
+        '</boltArtifact>',
+    );
+
+    expect(files['a.ts']).not.toContain('boltAction');
+    expect(files['b.ts'].trim()).toBe('const b = 2;');
+  });
+
+  it('leaves a well formed artifact untouched', () => {
+    const files = parseFiles(
+      '<boltArtifact id="a" title="A"><boltAction type="file" filePath="a.ts">const a = 1;</boltAction></boltArtifact>',
+    );
+
+    expect(files['a.ts'].trim()).toBe('const a = 1;');
+  });
+});

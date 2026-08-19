@@ -112,9 +112,56 @@ export const selectStarterTemplate = async (options: { message: string; model: s
   }
 };
 
-const getGitHubRepoContent = async (repoName: string): Promise<{ name: string; path: string; content: string }[]> => {
+type TemplateFile = { name: string; path: string; content: string };
+
+/**
+ * Reads a template vendored into public/templates.
+ *
+ * GitHub allows 60 unauthenticated requests an hour and an import used to spend a large share of
+ * them, so imports failed for an hour at a time. A vendored template costs zero requests and
+ * cannot be broken by a third party repository changing.
+ *
+ * Run `node scripts/vendor-templates.mjs` to refresh them.
+ */
+const getVendoredTemplate = async (repoName: string): Promise<TemplateFile[] | null> => {
+  const slug = repoName.split('/').pop();
+
+  if (!slug) {
+    return null;
+  }
+
   try {
-    // Instead of directly fetching from GitHub, use our own API endpoint as a proxy
+    const response = await fetch(`/templates/${slug}.json`);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as { files?: { path: string; content: string }[] };
+
+    if (!data.files?.length) {
+      return null;
+    }
+
+    return data.files.map((file) => ({
+      name: file.path.split('/').pop() || file.path,
+      path: file.path,
+      content: file.content,
+    }));
+  } catch {
+    return null;
+  }
+};
+
+const getGitHubRepoContent = async (repoName: string): Promise<TemplateFile[]> => {
+  const vendored = await getVendoredTemplate(repoName);
+
+  if (vendored) {
+    return vendored;
+  }
+
+  try {
+    // not vendored: fall back to GitHub through our own endpoint
     const response = await fetch(`/api/github-template?repo=${encodeURIComponent(repoName)}`);
 
     if (!response.ok) {
