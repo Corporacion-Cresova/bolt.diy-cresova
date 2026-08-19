@@ -1,9 +1,8 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { createDataStream, generateId } from 'ai';
-import { MAX_RESPONSE_SEGMENTS, MAX_TOKENS, type FileMap } from '~/lib/.server/llm/constants';
+import { MAX_RESPONSE_SEGMENTS, type FileMap } from '~/lib/.server/llm/constants';
 import { CONTINUE_PROMPT } from '~/lib/common/prompts/prompts';
 import { streamText, type Messages, type StreamingOptions } from '~/lib/.server/llm/stream-text';
-import SwitchableStream from '~/lib/.server/llm/switchable-stream';
 import type { IProviderSetting } from '~/types/model';
 import { createScopedLogger } from '~/utils/logger';
 import { getFilePaths, selectContext } from '~/lib/.server/llm/select-context';
@@ -20,6 +19,10 @@ export async function action(args: ActionFunctionArgs) {
 }
 
 const logger = createScopedLogger('api.chat');
+
+function noop() {
+  // replaced as soon as the deferred below is constructed
+}
 
 function parseCookies(cookieHeader: string): Record<string, string> {
   const cookies: Record<string, string> = {};
@@ -83,8 +86,6 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const providerSettings: Record<string, IProviderSetting> = JSON.parse(
     parseCookies(cookieHeader || '').providers || '{}',
   );
-
-  const stream = new SwitchableStream();
 
   const cumulativeUsage = {
     completionTokens: 0,
@@ -225,6 +226,18 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           // logger.debug('Code Files Selected');
         }
 
+        /*
+         * A continued response is started from inside onFinish, which runs after execute() has
+         * already returned. createDataStream closes the stream once execute resolves, so those
+         * continuations were generated and paid for on the server but never reached the browser:
+         * the answer simply stopped mid-file. execute now waits for the whole chain.
+         */
+        let segmentsUsed = 0;
+        let markAllSegmentsDone: () => void = noop;
+        const allSegmentsDone = new Promise<void>((resolve) => {
+          markAllSegmentsDone = resolve;
+        });
+
         const options: StreamingOptions = {
           supabaseConnection: supabase,
           abortSignal: streamAbort.signal,
@@ -264,17 +277,34 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               } satisfies ProgressAnnotation);
               await new Promise((resolve) => setTimeout(resolve, 0));
 
-              // stream.close();
+              markAllSegmentsDone();
+
               return;
             }
 
-            if (stream.switches >= MAX_RESPONSE_SEGMENTS) {
-              throw Error('Cannot continue message: Maximum segments reached');
+            /*
+             * This used to read stream.switches, which nothing ever increments, so the ceiling was
+             * never enforced and every log line reported the same number of segments left.
+             */
+            segmentsUsed++;
+
+            if (segmentsUsed >= MAX_RESPONSE_SEGMENTS) {
+              logger.warn(`Stopping after ${segmentsUsed} segments: the response is still incomplete`);
+              dataStream.writeData({
+                type: 'progress',
+                label: 'response',
+                status: 'complete',
+                order: progressCounter++,
+                message: 'Response too long, stopped early',
+              } satisfies ProgressAnnotation);
+              markAllSegmentsDone();
+
+              return;
             }
 
-            const switchesLeft = MAX_RESPONSE_SEGMENTS - stream.switches;
-
-            logger.info(`Reached max token limit (${MAX_TOKENS}): Continuing message (${switchesLeft} switches left)`);
+            logger.info(
+              `Hit the completion limit: continuing (segment ${segmentsUsed + 1} of ${MAX_RESPONSE_SEGMENTS})`,
+            );
 
             const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
             const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
@@ -285,21 +315,31 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               content: `[Model: ${model}]\n\n[Provider: ${provider}]\n\n${CONTINUE_PROMPT}`,
             });
 
-            const result = await streamText({
-              messages: [...processedMessages],
-              env: context.cloudflare?.env,
-              options,
-              apiKeys,
-              files,
-              providerSettings,
-              promptId,
-              contextOptimization,
-              contextFiles: filteredFiles,
-              chatMode,
-              designScheme,
-              summary,
-              messageSliceId,
-            });
+            let result;
+
+            try {
+              result = await streamText({
+                messages: [...processedMessages],
+                env: context.cloudflare?.env,
+                options,
+                apiKeys,
+                files,
+                providerSettings,
+                promptId,
+                contextOptimization,
+                contextFiles: filteredFiles,
+                chatMode,
+                designScheme,
+                summary,
+                messageSliceId,
+              });
+            } catch (error) {
+              // never leave execute waiting on a chain that will not continue
+              logger.error('Continuation failed', error);
+              markAllSegmentsDone();
+
+              return;
+            }
 
             result.mergeIntoDataStream(dataStream);
 
@@ -367,6 +407,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           streamRecovery.stop();
         })();
         result.mergeIntoDataStream(dataStream);
+
+        streamAbort.signal.addEventListener('abort', () => markAllSegmentsDone());
+
+        // keep the data stream open until the last continuation has been merged into it
+        await allSegmentsDone;
       },
       onError: (error: any) => {
         // Provide more specific error messages for common issues
