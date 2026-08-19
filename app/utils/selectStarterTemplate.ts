@@ -118,7 +118,17 @@ const getGitHubRepoContent = async (repoName: string): Promise<{ name: string; p
     const response = await fetch(`/api/github-template?repo=${encodeURIComponent(repoName)}`);
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      /*
+       * The endpoint explains what went wrong in `details` (a rate limit, a repository that does
+       * not resolve, a network failure). Discarding it left the user with a status code and no
+       * way to act on it.
+       */
+      const reason = await response
+        .json<{ details?: string; error?: string }>()
+        .then((body) => body.details || body.error)
+        .catch(() => undefined);
+
+      throw new Error(reason || `Template request failed with status ${response.status}`);
     }
 
     // Our API will return the files in the format we need

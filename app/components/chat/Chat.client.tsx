@@ -494,10 +494,13 @@ export const ChatImpl = memo(
 
           if (template !== 'blank') {
             const temResp = await getTemplates(template, title).catch((e) => {
+              logger.error('Starter template import failed', e);
+
               if (e.message.includes('rate limit')) {
                 toast.warning('Rate limit exceeded. Skipping starter template\n Continuing with blank template');
               } else {
-                toast.warning('Failed to import starter template\n Continuing with blank template');
+                // surface the reason: "failed" alone gives the user nothing to act on
+                toast.warning(`No se pudo importar la plantilla: ${e.message}\nContinuando con plantilla en blanco`);
               }
 
               return null;
