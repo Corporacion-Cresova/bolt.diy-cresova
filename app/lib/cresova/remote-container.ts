@@ -29,12 +29,16 @@ export class RunnerConnection {
 
   constructor(
     private _url: string,
-    private _token: string,
+    private _ticket: string,
     private _projectId: string,
   ) {}
 
   async connect(): Promise<{ previewUrl: string; port: number }> {
-    const address = `${this._url}/connect?projectId=${encodeURIComponent(this._projectId)}&token=${encodeURIComponent(this._token)}`;
+    /*
+     * A ticket, not the shared secret: it is scoped to this project, expires in minutes, and is
+     * issued by the app server through /api/runner-ticket.
+     */
+    const address = `${this._url}/connect?projectId=${encodeURIComponent(this._projectId)}&ticket=${encodeURIComponent(this._ticket)}`;
 
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(address);

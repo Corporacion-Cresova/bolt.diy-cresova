@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
 import { WebSocketServer } from 'ws';
+import { verifyTicket } from './tickets.mjs';
 import { ProjectManager } from './projects.mjs';
 import { isValidProjectId } from './paths.mjs';
 
@@ -15,12 +15,9 @@ if (!TOKEN) {
   process.exit(1);
 }
 
-/** Constant time compare so the token cannot be guessed by timing the response. */
-function tokenMatches(candidate) {
-  const expected = Buffer.from(TOKEN);
-  const given = Buffer.from(String(candidate ?? ''));
-
-  return expected.length === given.length && timingSafeEqual(expected, given);
+if (TOKEN.length < 32) {
+  console.error('RUNNER_TOKEN must be at least 32 characters: it is the key that signs access tickets.');
+  process.exit(1);
 }
 
 const sockets = new Map();
@@ -153,7 +150,12 @@ server.on('upgrade', (request, socket, head) => {
 
   const projectId = url.searchParams.get('projectId');
 
-  if (!tokenMatches(url.searchParams.get('token')) || !isValidProjectId(projectId ?? '')) {
+  /*
+   * The browser presents a ticket signed by the app server, not the shared secret itself: anything
+   * the browser holds is readable by anyone who opens the app, and this secret grants the right to
+   * run commands on the host.
+   */
+  if (!isValidProjectId(projectId ?? '') || !verifyTicket(TOKEN, projectId, url.searchParams.get('ticket'))) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     socket.destroy();
 

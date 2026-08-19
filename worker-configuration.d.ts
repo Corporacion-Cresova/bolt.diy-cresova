@@ -22,4 +22,10 @@ interface Env {
 
   /** Optional. Enables the verified stock photo catalog for generated sites. */
   PEXELS_API_KEY: string;
+
+  /** Optional. Secret shared with the Cresova Runner; signs the tickets the browser presents. */
+  RUNNER_TOKEN: string;
+
+  /** Optional. WebSocket address of the Cresova Runner, for example wss://runner.cresova.com */
+  RUNNER_URL: string;
 }
