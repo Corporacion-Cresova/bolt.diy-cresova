@@ -20,6 +20,9 @@ export async function action(args: ActionFunctionArgs) {
 
 const logger = createScopedLogger('api.chat');
 
+/** Absolute ceiling for one response, continuations included. */
+const RESPONSE_HARD_LIMIT_MS = 600_000;
+
 function noop() {
   // replaced as soon as the deferred below is constructed
 }
@@ -344,13 +347,20 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             result.mergeIntoDataStream(dataStream);
 
             (async () => {
-              for await (const part of result.fullStream) {
-                if (part.type === 'error') {
-                  const error: any = part.error;
-                  logger.error(`${error}`);
-
-                  return;
+              try {
+                for await (const part of result.fullStream) {
+                  if (part.type === 'error') {
+                    logger.error(`${(part.error as Error) ?? 'stream error'}`);
+                    return;
+                  }
                 }
+              } finally {
+                /*
+                 * Whatever happens to this segment, execute() must stop waiting. An upstream error
+                 * mid-stream skips onFinish, and without this the response never closed and the
+                 * browser reported a network error with the build left paused.
+                 */
+                markAllSegmentsDone();
               }
             })();
 
@@ -401,17 +411,41 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
                 logger.error('Token-related error detected - possible token limit exceeded');
               }
 
+              markAllSegmentsDone();
+
               return;
             }
           }
           streamRecovery.stop();
+
+          /*
+           * A stream that ends without onFinish, which happens when the upstream drops, must not
+           * leave execute() waiting forever. Resolving twice is a no-op.
+           */
+          markAllSegmentsDone();
         })();
         result.mergeIntoDataStream(dataStream);
 
         streamAbort.signal.addEventListener('abort', () => markAllSegmentsDone());
 
-        // keep the data stream open until the last continuation has been merged into it
-        await allSegmentsDone;
+        /*
+         * Keep the data stream open until the last continuation has been merged into it, but never
+         * indefinitely: a response that cannot close leaves the user looking at a paused build,
+         * and a late segment is worth less than a request that always terminates.
+         */
+        let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+
+        await Promise.race([
+          allSegmentsDone,
+          new Promise<void>((resolve) => {
+            releaseTimer = setTimeout(() => {
+              logger.warn('Closing the response after 10 minutes without a clean finish');
+              resolve();
+            }, RESPONSE_HARD_LIMIT_MS);
+          }),
+        ]);
+
+        clearTimeout(releaseTimer);
       },
       onError: (error: any) => {
         // Provide more specific error messages for common issues
