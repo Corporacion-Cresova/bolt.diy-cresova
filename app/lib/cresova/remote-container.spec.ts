@@ -13,8 +13,27 @@ import { RemoteContainer, RunnerConnection, runCommand } from './remote-containe
 const RUNNER_ENTRY = join(process.cwd(), 'runner/src/index.mjs');
 const RUNNER_READY = existsSync(join(process.cwd(), 'runner/node_modules/ws'));
 
+/**
+ * Signs a ticket exactly the way api.runner-ticket does, so this exercises the real handshake
+ * rather than a convenience shortcut.
+ */
+async function issueTicket(secret: string, projectId: string) {
+  const expiresAt = Date.now() + 60_000;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${projectId}.${expiresAt}`));
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+
+  return `${expiresAt}.${base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
+}
+
 const PORT = 39871;
-const TOKEN = 'integration-token';
+const SECRET = 'an-integration-secret-of-at-least-32-chars';
 
 describe.skipIf(!RUNNER_READY)('RemoteContainer against a live runner', () => {
   let runner: ChildProcess;
@@ -26,7 +45,7 @@ describe.skipIf(!RUNNER_READY)('RemoteContainer against a live runner', () => {
       env: {
         ...process.env,
         PORT: String(PORT),
-        RUNNER_TOKEN: TOKEN,
+        RUNNER_TOKEN: SECRET,
         PROJECT_ROOT: projectRoot,
         PREVIEW_DOMAIN: 'preview.test',
       },
@@ -42,11 +61,17 @@ describe.skipIf(!RUNNER_READY)('RemoteContainer against a live runner', () => {
   });
 
   async function connect(projectId: string) {
-    const connection = new RunnerConnection(`ws://127.0.0.1:${PORT}`, TOKEN, projectId);
+    const connection = new RunnerConnection(`ws://127.0.0.1:${PORT}`, await issueTicket(SECRET, projectId), projectId);
     const details = await connection.connect();
 
     return { connection, details };
   }
+
+  it('refuses a connection without a valid ticket', async () => {
+    const connection = new RunnerConnection(`ws://127.0.0.1:${PORT}`, 'not-a-ticket', 'intruder-demo');
+
+    await expect(connection.connect()).rejects.toThrow();
+  });
 
   it('reports a preview url and the workdir the app expects', async () => {
     const { connection, details } = await connect('cycle-demo');
