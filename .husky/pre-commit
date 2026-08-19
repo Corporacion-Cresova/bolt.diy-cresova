@@ -2,6 +2,9 @@
 
 echo "🔍 Running pre-commit hook to check the code looks good... 🔍"
 
+# Bump the build number shown in the header so every commit is identifiable once deployed
+node scripts/update-version.mjs && git add app/version.json
+
 # Load NVM if available (useful for managing Node.js versions)
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"

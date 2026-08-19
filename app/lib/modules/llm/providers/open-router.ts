@@ -25,12 +25,14 @@ export default class OpenRouterProvider extends BaseProvider {
    */
 
   staticModels: ModelInfo[] = [
-    // ==========================================================
-    // 1. DEEPSEEK V4 FLASH
-    // Principal recomendado para uso diario.
-    // Muy económico, rápido y fuerte en coding/agentes.
-    // 1M tokens de contexto.
-    // ==========================================================
+    /*
+     * ==========================================================
+     * 1. DEEPSEEK V4 FLASH
+     * Principal recomendado para uso diario.
+     * Muy económico, rápido y fuerte en coding/agentes.
+     * 1M tokens de contexto.
+     * ==========================================================
+     */
     {
       name: 'deepseek/deepseek-v4-flash',
       label: '⚡ DeepSeek V4 Flash — Recomendado / Económico',
@@ -38,12 +40,14 @@ export default class OpenRouterProvider extends BaseProvider {
       maxTokenAllowed: 1000000,
     },
 
-    // ==========================================================
-    // 2. QWEN3 CODER NEXT
-    // Especializado específicamente en programación,
-    // tool use y agentes de código.
-    // 262K tokens de contexto.
-    // ==========================================================
+    /*
+     * ==========================================================
+     * 2. QWEN3 CODER NEXT
+     * Especializado específicamente en programación,
+     * tool use y agentes de código.
+     * 262K tokens de contexto.
+     * ==========================================================
+     */
     {
       name: 'qwen/qwen3-coder-next',
       label: '💻 Qwen3 Coder Next — Coding',
@@ -51,12 +55,14 @@ export default class OpenRouterProvider extends BaseProvider {
       maxTokenAllowed: 262144,
     },
 
-    // ==========================================================
-    // 3. QWEN 3.6 PLUS
-    // Para proyectos complejos, frontend, razonamiento
-    // y trabajo sobre repositorios grandes.
-    // 1M tokens de contexto.
-    // ==========================================================
+    /*
+     * ==========================================================
+     * 3. QWEN 3.6 PLUS
+     * Para proyectos complejos, frontend, razonamiento
+     * y trabajo sobre repositorios grandes.
+     * 1M tokens de contexto.
+     * ==========================================================
+     */
     {
       name: 'qwen/qwen3.6-plus',
       label: '🧠 Qwen3.6 Plus — Coding Premium',
@@ -64,12 +70,14 @@ export default class OpenRouterProvider extends BaseProvider {
       maxTokenAllowed: 1000000,
     },
 
-    // ==========================================================
-    // 4. DEEPSEEK V4 PRO
-    // Modelo de máxima capacidad de DeepSeek.
-    // Para tareas realmente difíciles y refactors grandes.
-    // 1M tokens de contexto.
-    // ==========================================================
+    /*
+     * ==========================================================
+     * 4. DEEPSEEK V4 PRO
+     * Modelo de máxima capacidad de DeepSeek.
+     * Para tareas realmente difíciles y refactors grandes.
+     * 1M tokens de contexto.
+     * ==========================================================
+     */
     {
       name: 'deepseek/deepseek-v4-pro',
       label: '🔥 DeepSeek V4 Pro — Máxima Calidad',
