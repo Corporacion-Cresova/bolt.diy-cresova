@@ -73,27 +73,43 @@ function showPreview(): void {
   }
 }
 
+const TICK_MS = 1000;
+
 async function waitForPreview(timeoutMs: number, giveUp?: () => boolean): Promise<boolean> {
   if (hasReadyPreview()) {
     return true;
   }
 
   return new Promise<boolean>((resolve) => {
+    /*
+     * The budget only runs down while the tab is visible. WebContainer executes the install and
+     * the dev server inside this tab, and browsers throttle hidden tabs hard, so counting wall
+     * clock time meant giving up on a build that was merely running slowly in the background.
+     */
+    let remainingMs = timeoutMs;
+
     const finish = (ready: boolean) => {
-      clearTimeout(timeout);
-      clearInterval(giveUpInterval);
+      clearInterval(ticker);
       unsubscribe();
       resolve(ready);
     };
 
-    const timeout = setTimeout(() => finish(false), timeoutMs);
-
-    // stop waiting as soon as the start action itself reported a failure
-    const giveUpInterval = setInterval(() => {
+    const ticker = setInterval(() => {
       if (giveUp?.()) {
         finish(false);
+        return;
       }
-    }, 1000);
+
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
+      remainingMs -= TICK_MS;
+
+      if (remainingMs <= 0) {
+        finish(false);
+      }
+    }, TICK_MS);
 
     const unsubscribe = workbenchStore.previews.listen((previews) => {
       if (previews.some((preview) => preview.ready)) {
