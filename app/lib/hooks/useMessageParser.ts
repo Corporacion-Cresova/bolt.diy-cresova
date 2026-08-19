@@ -88,7 +88,19 @@ export function useMessageParser() {
 
     for (const [index, message] of messages.entries()) {
       if (message.role === 'assistant' || message.role === 'user') {
-        const newParsedContent = messageParser.parse(message.id, extractTextContent(message));
+        let newParsedContent = '';
+
+        /*
+         * The parser runs on whatever the model produced, and a malformed artifact used to throw
+         * here, bubble up through the render and replace the entire app with an error screen.
+         * A broken message is worth losing; the session is not.
+         */
+        try {
+          newParsedContent = messageParser.parse(message.id, extractTextContent(message));
+        } catch (error) {
+          builderLogger.error('Failed to parse a message, skipping it', error);
+        }
+
         setParsedMessages((prevParsed) => ({
           ...prevParsed,
           [index]: !reset ? (prevParsed[index] || '') + newParsedContent : newParsedContent,

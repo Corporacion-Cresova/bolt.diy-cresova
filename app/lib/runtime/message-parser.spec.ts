@@ -788,3 +788,58 @@ function runTest(input: string | string[], outputOrExpectedResult: string | Expe
 
   expect(result).toEqual(expected.output);
 }
+
+describe('malformed artifacts from smaller models', () => {
+  function collectActions(input: string) {
+    const actions: { type?: string; filePath?: string }[] = [];
+    const parser = new StreamingMessageParser({
+      callbacks: {
+        onActionClose: (data) => {
+          actions.push({ type: data.action.type, filePath: (data.action as { filePath?: string }).filePath });
+        },
+      },
+    });
+
+    parser.parse('message_1', input);
+
+    return actions;
+  }
+
+  it('does not crash on a file action without a file path', () => {
+    const input = '<boltArtifact id="a" title="A"><boltAction type="file">console.log(1)</boltAction></boltArtifact>';
+
+    expect(() => collectActions(input)).not.toThrow();
+  });
+
+  it('ignores the pathless file action instead of writing it somewhere random', () => {
+    const input =
+      '<boltArtifact id="a" title="A">' +
+      '<boltAction type="file">orphan</boltAction>' +
+      '<boltAction type="file" filePath="src/app.ts">real</boltAction>' +
+      '</boltArtifact>';
+
+    expect(collectActions(input)).toEqual([{ type: 'file', filePath: 'src/app.ts' }]);
+  });
+
+  it('accepts the attribute names models use instead of filePath', () => {
+    const input =
+      '<boltArtifact id="a" title="A">' +
+      '<boltAction type="file" path="src/a.ts">a</boltAction>' +
+      '<boltAction type="file" file="src/b.ts">b</boltAction>' +
+      '<boltAction type="file" filename="src/c.ts">c</boltAction>' +
+      '</boltArtifact>';
+
+    expect(collectActions(input).map((action) => action.filePath)).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts']);
+  });
+
+  it('keeps shell and start actions working around a broken file action', () => {
+    const input =
+      '<boltArtifact id="a" title="A">' +
+      '<boltAction type="file">orphan</boltAction>' +
+      '<boltAction type="shell">npm install</boltAction>' +
+      '<boltAction type="start">npm run dev</boltAction>' +
+      '</boltArtifact>';
+
+    expect(collectActions(input).map((action) => action.type)).toEqual(['shell', 'start']);
+  });
+});

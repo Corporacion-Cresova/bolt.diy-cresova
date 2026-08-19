@@ -55,6 +55,18 @@ interface MessageState {
   currentArtifact?: BoltArtifactData;
   currentAction: BoltActionData;
   actionId: number;
+
+  /** A file action with no usable path cannot be written anywhere, so it is parsed but not emitted. */
+  skipCurrentAction: boolean;
+}
+
+/**
+ * A file action is only actionable if we know where to write it. Smaller models sometimes emit
+ * `<boltAction type="file">` with no path at all, which used to crash the parser mid-render and
+ * take the whole app down with it.
+ */
+function isUnusableFileAction(action: BoltActionData): boolean {
+  return 'type' in action && action.type === 'file' && !(action as FileAction).filePath;
 }
 
 function cleanoutMarkdownSyntax(content: string) {
@@ -90,6 +102,7 @@ export class StreamingMessageParser {
         artifactCounter: 0,
         currentAction: { content: '' },
         actionId: 0,
+        skipCurrentAction: false,
       };
 
       this.#messages.set(messageId, state);
@@ -150,7 +163,7 @@ export class StreamingMessageParser {
 
             if ('type' in currentAction && currentAction.type === 'file') {
               // Remove markdown code block syntax if present and file is not markdown
-              if (!currentAction.filePath.endsWith('.md')) {
+              if (!currentAction.filePath?.endsWith('.md')) {
                 content = cleanoutMarkdownSyntax(content);
                 content = cleanEscapedTags(content);
               }
@@ -159,6 +172,15 @@ export class StreamingMessageParser {
             }
 
             currentAction.content = content;
+
+            if (state.skipCurrentAction) {
+              state.skipCurrentAction = false;
+              state.insideAction = false;
+              state.currentAction = { content: '' };
+              i = closeIndex + ARTIFACT_ACTION_TAG_CLOSE.length;
+
+              continue;
+            }
 
             this._options.callbacks?.onActionClose?.({
               artifactId: currentArtifact.id,
@@ -179,10 +201,10 @@ export class StreamingMessageParser {
 
             i = closeIndex + ARTIFACT_ACTION_TAG_CLOSE.length;
           } else {
-            if ('type' in currentAction && currentAction.type === 'file') {
+            if ('type' in currentAction && currentAction.type === 'file' && !state.skipCurrentAction) {
               let content = input.slice(i);
 
-              if (!currentAction.filePath.endsWith('.md')) {
+              if (!currentAction.filePath?.endsWith('.md')) {
                 content = cleanoutMarkdownSyntax(content);
                 content = cleanEscapedTags(content);
               }
@@ -212,13 +234,20 @@ export class StreamingMessageParser {
               state.insideAction = true;
 
               state.currentAction = this.#parseActionTag(input, actionOpenIndex, actionEndIndex);
+              state.skipCurrentAction = isUnusableFileAction(state.currentAction);
 
-              this._options.callbacks?.onActionOpen?.({
-                artifactId: currentArtifact.id,
-                messageId,
-                actionId: String(state.actionId++),
-                action: state.currentAction as BoltAction,
-              });
+              const actionId = String(state.actionId++);
+
+              if (state.skipCurrentAction) {
+                logger.warn('Ignoring a file action with no file path, it cannot be written anywhere');
+              } else {
+                this._options.callbacks?.onActionOpen?.({
+                  artifactId: currentArtifact.id,
+                  messageId,
+                  actionId,
+                  action: state.currentAction as BoltAction,
+                });
+              }
 
               i = actionEndIndex + 1;
             } else {
@@ -366,10 +395,16 @@ export class StreamingMessageParser {
         (actionAttributes as SupabaseAction).filePath = filePath;
       }
     } else if (actionType === 'file') {
-      const filePath = this.#extractAttribute(actionTag, 'filePath') as string;
+      /*
+       * Cheaper models routinely reach for a different attribute name. Accepting the common
+       * variants costs nothing and saves a whole round trip.
+       */
+      const filePath = (['filePath', 'path', 'file', 'filename']
+        .map((attribute) => this.#extractAttribute(actionTag, attribute))
+        .find(Boolean) ?? '') as string;
 
       if (!filePath) {
-        logger.debug('File path not specified');
+        logger.warn('File action without a file path, it will be ignored');
       }
 
       (actionAttributes as FileAction).filePath = filePath;
