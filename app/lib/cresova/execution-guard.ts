@@ -1,7 +1,7 @@
 import type { Message } from 'ai';
 import type { ActionState } from '~/lib/runtime/action-runner';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { createCommandsMessage } from '~/utils/projectCommands';
+import { generateId } from '~/utils/fileUtils';
 import { createScopedLogger } from '~/utils/logger';
 import { detectBuildIntent } from './build-intent';
 import { detectWorkspaceCommands, hasInstalledDependencies } from './dev-server';
@@ -174,20 +174,28 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
     return 'no-start-command';
   }
 
-  const needsInstall = Boolean(commands.setupCommand) && !(await hasInstalledDependencies());
-  const autoStartMessage = createCommandsMessage({
-    ...commands,
-    setupCommand: needsInstall ? commands.setupCommand : undefined,
-    followupMessage: 'Starting the application so the preview can be shown.',
-  });
+  const needsInstall = !(await hasInstalledDependencies());
 
-  if (!autoStartMessage) {
-    return 'no-start-command';
-  }
+  /*
+   * Install and start go in one command on purpose. As two separate actions the server could be
+   * started before the install had finished, which fails with "vite: command not found", and any
+   * command queued in between interrupts the one running. Chained in a single start action they
+   * cannot be separated, and start actions do not block the queue.
+   */
+  const command = needsInstall ? `npm install && ${commands.startCommand}` : commands.startCommand;
 
-  autoStartMessage.annotations = [AUTO_START_ANNOTATION];
+  const autoStartMessage: Message = {
+    id: generateId(),
+    role: 'assistant',
+    createdAt: new Date(),
+    annotations: [AUTO_START_ANNOTATION],
+    content: `Starting the application so the preview can be shown.
+<boltArtifact id="cresova-auto-start" title="Start Application" type="bundled">
+<boltAction type="start">${command}</boltAction>
+</boltArtifact>`,
+  };
 
-  logger.info(`Missing start action, running "${commands.startCommand}"${needsInstall ? ' after install' : ''}`);
+  logger.info(`Missing start action, running "${command}"`);
   context.appendAssistantMessage(autoStartMessage);
 
   const ready = await waitForPreview(PREVIEW_TIMEOUT_MS);

@@ -35,5 +35,8 @@ export function ensureNonInteractiveFlags(command: string): string {
  * how some dev servers and test runners behave, so start actions keep their plain environment.
  */
 export function makeCommandNonInteractive(command: string): string {
-  return `export CI=true FORCE_COLOR=0 && ${ensureNonInteractiveFlags(command)}`;
+  const hardened = ensureNonInteractiveFlags(command);
+
+  // some commands arrive already prefixed; stacking a second export is noise in the terminal
+  return /^\s*export\s+CI=/.test(hardened) ? hardened : `export CI=true FORCE_COLOR=0 && ${hardened}`;
 }
