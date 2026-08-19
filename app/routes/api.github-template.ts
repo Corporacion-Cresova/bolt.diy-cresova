@@ -1,20 +1,10 @@
 import { json } from '@remix-run/cloudflare';
 import JSZip from 'jszip';
 
-// Function to detect if we're running in Cloudflare
-function isCloudflareEnvironment(context: any): boolean {
-  // Check if we're in production AND have Cloudflare Pages specific env vars
-  const isProduction = process.env.NODE_ENV === 'production';
-  const hasCfPagesVars = !!(
-    context?.cloudflare?.env?.CF_PAGES ||
-    context?.cloudflare?.env?.CF_PAGES_URL ||
-    context?.cloudflare?.env?.CF_PAGES_COMMIT_SHA
-  );
-
-  return isProduction && hasCfPagesVars;
-}
-
-// Cloudflare-compatible method using GitHub Contents API
+/*
+ * Function to detect if we're running in Cloudflare
+ * Cloudflare-compatible method using GitHub Contents API
+ */
 async function fetchRepoContentsCloudflare(repo: string, githubToken?: string) {
   const baseUrl = 'https://api.github.com';
 
@@ -240,12 +230,19 @@ export async function loader({ request, context }: { request: Request; context: 
     const githubToken =
       context?.cloudflare?.env?.GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.VITE_GITHUB_ACCESS_TOKEN;
 
+    /*
+     * The archive costs two API requests; the Contents API costs one per file, so a 30 file
+     * template burns half of GitHub's unauthenticated hourly budget in a single import and the
+     * next one fails. Always try the archive first, whatever the environment, and keep the
+     * per-file route only as a fallback.
+     */
     let fileList;
 
-    if (isCloudflareEnvironment(context)) {
-      fileList = await fetchRepoContentsCloudflare(repo, githubToken);
-    } else {
+    try {
       fileList = await fetchRepoContentsZip(repo, githubToken);
+    } catch (zipError) {
+      console.warn('Archive download failed, falling back to the per-file API:', zipError);
+      fileList = await fetchRepoContentsCloudflare(repo, githubToken);
     }
 
     // Filter out .git files for both methods
