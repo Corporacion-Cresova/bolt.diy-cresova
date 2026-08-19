@@ -1,4 +1,5 @@
 import { WORK_DIR } from '~/utils/constants';
+import { RemoteShellProcess, spawnRemoteProcess, type RemoteProcess } from './remote-shell';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('CresovaRunner');
@@ -162,27 +163,57 @@ export class RemoteContainer {
       this._connection.call<string[]>('fs.readdir', { path, options }),
   };
 
-  async spawn(command: string, args: string[] = []) {
-    return runCommand(this._connection, command, args);
-  }
-
-  on(event: 'server-ready', listener: (port: number, url: string) => void): () => void;
-  on(event: string, listener: (...args: never[]) => void): () => void;
-  on(event: string, listener: (...args: never[]) => void): () => void {
-    if (event !== 'server-ready') {
-      return () => {
-        /*
-         * 'port' and 'preview-message' have no server side equivalent yet, so there is nothing to
-         * unsubscribe from. Returning a function keeps the caller's cleanup code uniform.
-         */
-      };
+  /**
+   * Mirrors `WebContainer.spawn`.
+   *
+   * `/bin/jsh` is how the app opens a shell session, so it gets one that speaks the same OSC
+   * protocol; anything else is a single command with the streams a process has.
+   */
+  async spawn(command: string, args: string[] = []): Promise<RemoteProcess> {
+    if (command === '/bin/jsh' || command === 'jsh') {
+      return new RemoteShellProcess(this._connection);
     }
 
-    return this._connection.on('server-ready', (received) => {
-      if (received.type === 'server-ready') {
-        (listener as unknown as (port: number, url: string) => void)(received.port, received.url);
-      }
-    });
+    return spawnRemoteProcess(this._connection, command, args);
+  }
+
+  /**
+   * Mirrors the WebContainer events the app listens to.
+   *
+   * The runner reports a single `server-ready`; the workbench needs both events from it, because
+   * `server-ready` triggers the preview refresh while `port` is what actually puts the preview in
+   * the list. Only one is ever reported by the runner, so both are driven from it.
+   */
+  on(event: 'server-ready', listener: (port: number, url: string) => void): () => void;
+  on(event: 'port', listener: (port: number, type: 'open' | 'close', url: string) => void): () => void;
+  on(event: string, listener: (...args: never[]) => void): () => void;
+  on(event: string, listener: (...args: never[]) => void): () => void {
+    if (event === 'server-ready') {
+      return this._connection.on('server-ready', (received) => {
+        if (received.type === 'server-ready') {
+          (listener as unknown as (port: number, url: string) => void)(received.port, received.url);
+        }
+      });
+    }
+
+    if (event === 'port') {
+      return this._connection.on('server-ready', (received) => {
+        if (received.type === 'server-ready') {
+          (listener as unknown as (port: number, type: 'open' | 'close', url: string) => void)(
+            received.port,
+            'open',
+            received.url,
+          );
+        }
+      });
+    }
+
+    return () => {
+      /*
+       * 'preview-message' has no server side equivalent: the preview is a proxied page, not an
+       * iframe we control. Returning a function keeps the caller's cleanup code uniform.
+       */
+    };
   }
 
   async setPreviewScript() {
@@ -219,6 +250,7 @@ export function runCommand(
   command: string,
   args: string[] = [],
   onOutput?: (chunk: string) => void,
+  onStart?: (processId: string) => void,
 ): Promise<CommandResult & { processId: string }> {
   return new Promise((resolve, reject) => {
     let output = '';
@@ -258,6 +290,7 @@ export function runCommand(
       .call<string>('spawn', { command, args })
       .then((id) => {
         processId = id;
+        onStart?.(id);
 
         for (const event of held.splice(0)) {
           handle(event);

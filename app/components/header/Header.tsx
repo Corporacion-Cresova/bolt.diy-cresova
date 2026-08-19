@@ -6,6 +6,7 @@ import { HeaderActionButtons } from './HeaderActionButtons.client';
 import { ChatDescription } from '~/lib/persistence/ChatDescription.client';
 import { CresovaLogo } from './CresovaLogo';
 import { VersionBadge } from './VersionBadge';
+import { BackendBadge } from './BackendBadge';
 
 export function Header() {
   const chat = useStore(chatStore);
@@ -32,6 +33,7 @@ export function Header() {
       )}
       <div className="flex items-center gap-3">
         {chat.started && <ClientOnly>{() => <HeaderActionButtons chatStarted={chat.started} />}</ClientOnly>}
+        <ClientOnly>{() => <BackendBadge />}</ClientOnly>
         <VersionBadge />
       </div>
     </header>

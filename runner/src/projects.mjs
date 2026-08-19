@@ -6,6 +6,7 @@ import { isValidProjectId, resolveInsideProject } from './paths.mjs';
 
 const PORT_RANGE_START = 41000;
 const PORT_RANGE_END = 41999;
+const KILL_GRACE_MS = 4000;
 const READY_POLL_MS = 500;
 const READY_TIMEOUT_MS = 180_000;
 
@@ -141,6 +142,13 @@ export class ProjectManager {
       cwd: project.dir,
       env: projectEnv(project.port),
       shell: true,
+
+      /*
+       * Its own process group. `shell: true` means the child is a shell, and a dev server started
+       * as `npm install && npm run dev` is its grandchild: signalling the shell alone would leave
+       * the server holding the port. Killing the group reaches every descendant.
+       */
+      detached: true,
     });
 
     const processId = String(child.pid ?? Math.random().toString(36).slice(2));
@@ -166,9 +174,26 @@ export class ProjectManager {
     this.#projects.get(projectId)?.processes.get(processId)?.stdin?.write(data);
   }
 
+  /**
+   * Stops a command. SIGTERM first so a dev server can shut down cleanly, then SIGKILL if it is
+   * still there: the browser side shell waits for the exit before it will run anything else, so a
+   * process that ignores the signal would block the whole session.
+   */
   kill(projectId, processId) {
-    const child = this.#projects.get(projectId)?.processes.get(processId);
-    child?.kill('SIGTERM');
+    const project = this.#projects.get(projectId);
+    const child = project?.processes.get(processId);
+
+    if (!child) {
+      return;
+    }
+
+    killTree(child);
+
+    setTimeout(() => {
+      if (project.processes.get(processId) === child) {
+        killTree(child, 'SIGKILL');
+      }
+    }, KILL_GRACE_MS).unref?.();
   }
 
   /**
@@ -226,7 +251,7 @@ export class ProjectManager {
     clearInterval(project.readyWatcher);
 
     for (const child of project.processes.values()) {
-      child.kill('SIGTERM');
+      killTree(child);
     }
 
     this.#projects.delete(projectId);
@@ -251,5 +276,28 @@ export class ProjectManager {
       projects: this.#projects.size,
       running: [...this.#projects.values()].filter((project) => project.processes.size > 0).length,
     };
+  }
+}
+
+/**
+ * Stops a command and everything it started.
+ *
+ * Children are spawned detached, so the child's pid is also its process group id and a negative
+ * pid signals the whole group. If the group is already gone the kill throws, which is the normal
+ * case for a command that just exited on its own.
+ */
+export function killTree(child, signal = 'SIGTERM') {
+  if (!child?.pid) {
+    return;
+  }
+
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    try {
+      child.kill(signal);
+    } catch {
+      // already gone
+    }
   }
 }
