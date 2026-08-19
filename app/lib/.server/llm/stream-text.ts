@@ -5,6 +5,8 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODIFICATIONS_TAG_NAME, PROVIDER_LIST,
 import type { IProviderSetting } from '~/types/model';
 import { PromptLibrary } from '~/lib/common/prompt-library';
 import { CRESOVA_BUILD_CONTRACT } from '~/lib/common/prompts/cresova-build-contract';
+import { CRESOVA_DESIGN_KIT } from '~/lib/common/prompts/cresova-design-kit';
+import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { createScopedLogger } from '~/utils/logger';
@@ -166,6 +168,17 @@ export async function streamText(props: {
   if (chatMode === 'build') {
     // Cresova Builder: restate the execution protocol for models that follow it loosely.
     systemPrompt = `${systemPrompt}\n${CRESOVA_BUILD_CONTRACT}`;
+
+    /*
+     * The concrete design kit is only worth its tokens when a site is being created. On follow-up
+     * edits the choices already live in the code, so re-sending the menu just costs money.
+     */
+    const lastUserMessage = processedMessages.filter((message) => message.role === 'user').slice(-1)[0];
+
+    if (lastUserMessage && detectBuildIntent(lastUserMessage.content)) {
+      logger.info('Cresova design kit injected for a build request');
+      systemPrompt = `${systemPrompt}\n${CRESOVA_DESIGN_KIT}`;
+    }
   }
 
   if (chatMode === 'build' && contextFiles && contextOptimization) {
