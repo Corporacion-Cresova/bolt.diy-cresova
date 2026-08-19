@@ -62,6 +62,21 @@ function sanitizeText(text: string): string {
  * always resolves, which is far better than a hallucinated Pexels id that 404s and leaves a hole
  * where the hero image should be.
  */
+/**
+ * Finds the message carrying the user's actual request.
+ *
+ * The template import flow appends a synthetic user message ("TEMPLATE INSTRUCTIONS ... template
+ * import is done ...") marked hidden. Taking the last user message picked that one up, so the
+ * photo search ran on boilerplate instead of on the business, and returned unrelated images.
+ */
+function findUserRequest<T extends Omit<Message, 'id'>>(messages: T[]): T | undefined {
+  const visible = messages.filter(
+    (message) => message.role === 'user' && !(message.annotations as unknown[] | undefined)?.includes('hidden'),
+  );
+
+  return visible[visible.length - 1] ?? messages.find((message) => message.role === 'user');
+}
+
 function renderPhotoCatalog(photos: CatalogPhoto[]): string {
   if (photos.length === 0) {
     return `
@@ -213,7 +228,7 @@ export async function streamText(props: {
      * The concrete design kit is only worth its tokens when a site is being created. On follow-up
      * edits the choices already live in the code, so re-sending the menu just costs money.
      */
-    const lastUserMessage = processedMessages.filter((message) => message.role === 'user').slice(-1)[0];
+    const lastUserMessage = findUserRequest(processedMessages);
 
     if (lastUserMessage && detectBuildIntent(lastUserMessage.content)) {
       logger.info('Cresova design kit injected for a build request');

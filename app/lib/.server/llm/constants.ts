@@ -20,7 +20,14 @@ export const PROVIDER_COMPLETION_LIMITS: Record<string, number> = {
   HuggingFace: 4096,
   Mistral: 8192,
   Ollama: 8192,
-  OpenRouter: 8192,
+
+  /*
+   * OpenRouter fronts models with wildly different output limits and the 8192 default made every
+   * website generation hit the cap and need continuations. Raise it per install with
+   * MAX_COMPLETION_TOKENS once you know your models accept more; too high a value is rejected by
+   * some upstreams, so the safe default stays.
+   */
+  OpenRouter: Number(process.env.MAX_COMPLETION_TOKENS) || 8192,
   Perplexity: 8192,
   Together: 8192,
   xAI: 8192,
@@ -44,7 +51,12 @@ export function isReasoningModel(modelName: string): boolean {
 }
 
 // limits the number of model responses that can be returned in a single request
-export const MAX_RESPONSE_SEGMENTS = 2;
+/*
+ * A full website does not fit in one completion, so the response is continued. Two segments left
+ * generations stopping half way through the components, which is what users saw as "it froze".
+ * Each extra segment costs tokens, so this is a ceiling for the rare long build, not a target.
+ */
+export const MAX_RESPONSE_SEGMENTS = 5;
 
 export interface File {
   type: 'file';
