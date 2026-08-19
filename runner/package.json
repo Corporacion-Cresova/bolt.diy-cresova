@@ -1,0 +1,15 @@
+{
+  "name": "cresova-runner",
+  "private": true,
+  "type": "module",
+  "description": "Runs Cresova Builder projects on the server instead of in the browser tab",
+  "scripts": {
+    "start": "node src/index.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
