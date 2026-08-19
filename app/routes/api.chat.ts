@@ -45,16 +45,17 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
    * "attempting recovery" without recovering anything, so the request never ended and the chat
    * stayed in "generating" until the user reloaded. Aborting turns that into a visible error.
    *
-   * Two minutes of complete silence, not 45 seconds: cheap models go quiet for a while on long
-   * files, and killing a healthy stream would be worse than the bug.
+   * The budget applies per phase, not to the whole request: the clock is reset after each step
+   * completes, because the summary and context calls are full LLM round trips of their own and
+   * their combined time was aborting perfectly healthy requests.
    */
   const streamAbort = new AbortController();
   const streamRecovery = new StreamRecoveryManager({
-    timeout: 120000,
+    timeout: 180000,
     maxRetries: 1,
     onTimeout: () => {
-      logger.warn('No stream activity for 120s, aborting the request');
-      streamAbort.abort(new Error('The model stopped responding. No output was received for 2 minutes.'));
+      logger.warn('No activity for 180s, aborting the request');
+      streamAbort.abort(new Error('The model stopped responding. No output was received for 3 minutes.'));
     },
   });
 
@@ -110,6 +111,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         let messageSliceId = 0;
 
         const processedMessages = await mcpService.processToolInvocations(messages, dataStream);
+        streamRecovery.updateActivity();
 
         if (processedMessages.length > 3) {
           messageSliceId = processedMessages.length - 3;
@@ -157,6 +159,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             summary,
             chatId: processedMessages.slice(-1)?.[0]?.id,
           } as ContextAnnotation);
+
+          // the summary was a full LLM round trip of its own, the watchdog restarts from here
+          streamRecovery.updateActivity();
 
           // Update context buffer
           logger.debug('Updating Context Buffer');
@@ -213,6 +218,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             order: progressCounter++,
             message: 'Code Files Selected',
           } satisfies ProgressAnnotation);
+
+          // same for the context selection call
+          streamRecovery.updateActivity();
 
           // logger.debug('Code Files Selected');
         }
@@ -333,6 +341,9 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           summary,
           messageSliceId,
         });
+
+        // the model is connected, the budget from here on covers time to first token
+        streamRecovery.updateActivity();
 
         (async () => {
           for await (const part of result.fullStream) {

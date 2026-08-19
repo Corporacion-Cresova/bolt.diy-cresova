@@ -121,24 +121,50 @@ async function fetchRepoContentsCloudflare(repo: string, githubToken?: string) {
 }
 
 // Your existing method for non-Cloudflare environments
-async function fetchRepoContentsZip(repo: string, githubToken?: string) {
-  const baseUrl = 'https://api.github.com';
+/**
+ * Resolves the archive to download for a template repository.
+ *
+ * The default branch is tried first because it always exists. Asking for /releases/latest, as
+ * this used to, fails with a 404 on every template repository that never published a release,
+ * which is most of them, and made template import fail deterministically outside Cloudflare.
+ */
+async function resolveZipballUrl(repo: string, headers: HeadersInit, baseUrl: string): Promise<string> {
+  const repoResponse = await fetch(`${baseUrl}/repos/${repo}`, { headers });
 
-  // Get the latest release
-  const releaseResponse = await fetch(`${baseUrl}/repos/${repo}/releases/latest`, {
-    headers: {
-      Accept: 'application/vnd.github.v3+json',
-      'User-Agent': 'bolt.diy-app',
-      ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
-    },
-  });
+  if (repoResponse.ok) {
+    const repoData = (await repoResponse.json()) as { default_branch?: string };
+    const branch = repoData.default_branch || 'main';
 
-  if (!releaseResponse.ok) {
-    throw new Error(`GitHub API error: ${releaseResponse.status} - ${releaseResponse.statusText}`);
+    return `${baseUrl}/repos/${repo}/zipball/${branch}`;
   }
 
-  const releaseData = (await releaseResponse.json()) as any;
-  const zipballUrl = releaseData.zipball_url;
+  if (repoResponse.status === 403) {
+    throw new Error(
+      'GitHub API rate limit reached. Set a GITHUB_TOKEN environment variable to raise the limit from 60 to 5000 requests per hour.',
+    );
+  }
+
+  // last resort: a published release, for repositories we cannot read metadata from
+  const releaseResponse = await fetch(`${baseUrl}/repos/${repo}/releases/latest`, { headers });
+
+  if (!releaseResponse.ok) {
+    throw new Error(`GitHub API error: ${repoResponse.status} - ${repoResponse.statusText}`);
+  }
+
+  const releaseData = (await releaseResponse.json()) as { zipball_url: string };
+
+  return releaseData.zipball_url;
+}
+
+async function fetchRepoContentsZip(repo: string, githubToken?: string) {
+  const baseUrl = 'https://api.github.com';
+  const headers = {
+    Accept: 'application/vnd.github.v3+json',
+    'User-Agent': 'cresova-builder',
+    ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
+  };
+
+  const zipballUrl = await resolveZipballUrl(repo, headers, baseUrl);
 
   // Fetch the zipball
   const zipResponse = await fetch(zipballUrl, {
@@ -148,7 +174,7 @@ async function fetchRepoContentsZip(repo: string, githubToken?: string) {
   });
 
   if (!zipResponse.ok) {
-    throw new Error(`Failed to fetch release zipball: ${zipResponse.status}`);
+    throw new Error(`Failed to download the template archive: ${zipResponse.status} ${zipResponse.statusText}`);
   }
 
   // Get the zip content as ArrayBuffer
