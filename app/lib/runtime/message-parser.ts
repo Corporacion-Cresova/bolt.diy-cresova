@@ -157,7 +157,54 @@ export class StreamingMessageParser {
         if (state.insideAction) {
           const closeIndex = input.indexOf(ARTIFACT_ACTION_TAG_CLOSE, i);
 
+          /*
+           * A response cut off by the token limit leaves an action open, and the continuation
+           * starts with a fresh tag. Without this, everything that followed was appended to the
+           * file being written: a package.json ending in `"^<boltArtifact id="...` that npm
+           * cannot parse, which then stalls the whole build.
+           */
+          const interruptIndex = [input.indexOf(ARTIFACT_TAG_OPEN, i), input.indexOf(ARTIFACT_ACTION_TAG_OPEN, i)]
+            .filter((index) => index !== -1)
+            .sort((a, b) => a - b)[0];
+
+          const wasInterrupted = interruptIndex !== undefined && (closeIndex === -1 || interruptIndex < closeIndex);
+
           const currentAction = state.currentAction;
+
+          if (wasInterrupted) {
+            logger.warn('Action was cut off by a new tag, closing it at that point');
+
+            currentAction.content += input.slice(i, interruptIndex);
+
+            let content = currentAction.content.trim();
+
+            if ('type' in currentAction && currentAction.type === 'file') {
+              if (!currentAction.filePath?.endsWith('.md')) {
+                content = cleanoutMarkdownSyntax(content);
+                content = cleanEscapedTags(content);
+              }
+
+              content += '\n';
+            }
+
+            currentAction.content = content;
+
+            if (!state.skipCurrentAction) {
+              this._options.callbacks?.onActionClose?.({
+                artifactId: currentArtifact.id,
+                messageId,
+                actionId: String(state.actionId - 1),
+                action: currentAction as BoltAction,
+              });
+            }
+
+            state.skipCurrentAction = false;
+            state.insideAction = false;
+            state.currentAction = { content: '' };
+            i = interruptIndex;
+
+            continue;
+          }
 
           if (closeIndex !== -1) {
             currentAction.content += input.slice(i, closeIndex);
@@ -205,7 +252,8 @@ export class StreamingMessageParser {
             i = closeIndex + ARTIFACT_ACTION_TAG_CLOSE.length;
           } else {
             if ('type' in currentAction && currentAction.type === 'file' && !state.skipCurrentAction) {
-              let content = input.slice(i);
+              // never stream a tag into the file, even before the action is formally closed
+              let content = interruptIndex !== undefined ? input.slice(i, interruptIndex) : input.slice(i);
 
               if (!currentAction.filePath?.endsWith('.md')) {
                 content = cleanoutMarkdownSyntax(content);
