@@ -84,4 +84,13 @@ describe('ensureNonInteractiveFlags', () => {
   it('adds a non-interactive environment for one-off commands', () => {
     expect(makeCommandNonInteractive('npm install')).toBe('export CI=true FORCE_COLOR=0 && npm install');
   });
+
+  it('does not stack a second environment prefix', () => {
+    const alreadyHardened = 'export CI=true DEBIAN_FRONTEND=noninteractive FORCE_COLOR=0 && npm install';
+    expect(makeCommandNonInteractive(alreadyHardened)).toBe(alreadyHardened);
+  });
+
+  it('treats a chained install and dev server as a long running command', () => {
+    expect(isDevServerCommand('npm install && npm run dev')).toBe(true);
+  });
 });
