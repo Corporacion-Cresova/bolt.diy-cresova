@@ -17,6 +17,13 @@ const logger = createScopedLogger('CresovaRunner');
 const PROJECT_ID_KEY = 'cresova.projectId';
 const CONNECT_TIMEOUT_MS = 15_000;
 
+/*
+ * The ticket answers in milliseconds when the server is healthy. It is bounded anyway because this
+ * call sits in front of booting WebContainer: if it ever hung, the workbench would have nothing to
+ * run on and the whole session would freeze rather than simply falling back.
+ */
+const TICKET_TIMEOUT_MS = 5_000;
+
 /**
  * Identifies this browser's workspace on the runner.
  *
@@ -56,7 +63,18 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
 export async function connectToRunner(): Promise<RemoteContainer | undefined> {
   const projectId = getProjectId();
 
-  const response = await fetch(`/api/runner-ticket?projectId=${encodeURIComponent(projectId)}`);
+  const giveUp = new AbortController();
+  const ticketDeadline = setTimeout(() => giveUp.abort(), TICKET_TIMEOUT_MS);
+
+  let response: Response;
+
+  try {
+    response = await fetch(`/api/runner-ticket?projectId=${encodeURIComponent(projectId)}`, {
+      signal: giveUp.signal,
+    });
+  } finally {
+    clearTimeout(ticketDeadline);
+  }
 
   if (!response.ok) {
     logger.warn(`The ticket endpoint answered ${response.status}, staying on WebContainer`);
