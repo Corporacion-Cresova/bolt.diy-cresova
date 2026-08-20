@@ -12,6 +12,15 @@ export type ExecutionBackend = 'starting' | 'webcontainer' | 'runner' | 'runner-
  */
 export const executionBackendStore = atom<ExecutionBackend>('starting');
 
+/**
+ * Why the runner was not used, when it was configured but did not work.
+ *
+ * Falling back silently is the right behaviour — a runner that is down should degrade the product,
+ * not break it — but silence is what makes someone believe server side execution is on when it is
+ * not. The badge shows this so the difference is visible without opening a console.
+ */
+export const runnerFailureStore = atom<string | undefined>(undefined);
+
 const logger = createScopedLogger('CresovaRunner');
 
 const PROJECT_ID_KEY = 'cresova.projectId';
@@ -77,6 +86,8 @@ async function requestTicket(projectId: string) {
 
   if (!response.ok) {
     logger.warn(`The ticket endpoint answered ${response.status}, staying on WebContainer`);
+    runnerFailureStore.set(`El servidor no pudo emitir un ticket (HTTP ${response.status}).`);
+
     return undefined;
   }
 

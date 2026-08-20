@@ -1,7 +1,7 @@
 import { WebContainer } from '@webcontainer/api';
 import { WORK_DIR_NAME } from '~/utils/constants';
 import { cleanStackTrace } from '~/utils/stacktrace';
-import { connectToRunner, executionBackendStore } from '~/lib/cresova/execution-backend';
+import { connectToRunner, executionBackendStore, runnerFailureStore } from '~/lib/cresova/execution-backend';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('CresovaRunner');
@@ -88,7 +88,14 @@ async function selectExecutionBackend(): Promise<WebContainer> {
       return remote as unknown as WebContainer;
     }
   } catch (error) {
-    logger.warn(`Could not reach the runner, falling back to WebContainer: ${(error as Error).message}`);
+    const reason = (error as Error).message;
+    logger.warn(`Could not reach the runner, falling back to WebContainer: ${reason}`);
+
+    /*
+     * Recorded rather than only logged: the fallback is silent by design, and silence is exactly
+     * what makes someone believe the VPS is in use when it is not.
+     */
+    runnerFailureStore.set(reason);
   }
 
   const instance = await bootWebContainer();
