@@ -9,6 +9,15 @@ import { RemoteShellProcess, spawnRemoteProcess, type RemoteProcess } from './re
  */
 export { RunnerConnection, runCommand, type CommandResult, type RunnerEvent } from './runner-connection';
 
+/** The subset of WebContainer's watcher events the file store acts on. */
+interface WatchEvent {
+  type: 'add_file' | 'change' | 'add_dir' | 'remove_file' | 'remove_dir' | 'update_directory';
+  path: string;
+  buffer?: Uint8Array;
+}
+
+type WatchCallback = (events: WatchEvent[]) => void;
+
 /**
  * Exposes the runner with the shape the app already uses for WebContainer, so the workbench, the
  * action runner and the file store keep working unchanged.
@@ -19,11 +28,19 @@ export class RemoteContainer {
   constructor(private _connection: RunnerConnection) {}
 
   fs = {
-    writeFile: (path: string, content: string) => this._connection.call<void>('fs.writeFile', { path, content }),
+    writeFile: async (path: string, content: string) => {
+      await this._connection.call<void>('fs.writeFile', { path, content });
+      this.#announceWrite(path, content);
+    },
     readFile: (path: string) => this._connection.call<string>('fs.readFile', { path }),
-    mkdir: (path: string, _options?: { recursive?: boolean }) => this._connection.call<void>('fs.mkdir', { path }),
-    rm: (path: string, options?: { recursive?: boolean; force?: boolean }) =>
-      this._connection.call<void>('fs.rm', { path, options }),
+    mkdir: async (path: string, options?: { recursive?: boolean }) => {
+      await this._connection.call<void>('fs.mkdir', { path });
+      this.#announceMkdir(path, options?.recursive ?? false);
+    },
+    rm: async (path: string, options?: { recursive?: boolean; force?: boolean }) => {
+      await this._connection.call<void>('fs.rm', { path, options });
+      this.#announce([{ type: options?.recursive ? 'remove_dir' : 'remove_file', path: this.#absolute(path) }]);
+    },
     readdir: (path: string, options?: { withFileTypes?: boolean }) =>
       this._connection.call<string[]>('fs.readdir', { path, options }),
   };
@@ -89,11 +106,86 @@ export class RemoteContainer {
   }
 
   internal = {
-    watchPaths: () => {
-      /*
-       * The browser holds the source of truth for the file tree and pushes every change, so there
-       * is nothing to watch back. Files created by a command are not reflected yet.
-       */
+    /**
+     * Mirrors `WebContainer.internal.watchPaths`.
+     *
+     * There is no filesystem to watch on this side, but the browser is the one writing the files,
+     * so it can report its own writes. The alternative — a watcher on the VPS — would have to
+     * stream every path `npm install` touches through the socket to say nothing useful.
+     *
+     * The gap this leaves is files a *command* creates on the server: a scaffolder's output or a
+     * generated lockfile stay invisible until something reads them back.
+     */
+    watchPaths: (_config: unknown, callback: WatchCallback) => {
+      this.#watchers.add(callback);
+
+      return {
+        close: () => this.#watchers.delete(callback),
+      };
     },
   };
+
+  #watchers = new Set<WatchCallback>();
+
+  /** Paths already reported, so a rewrite is a `change` and the file store keeps its count right. */
+  #reported = new Set<string>();
+
+  #announce(events: WatchEvent[]) {
+    if (events.length === 0) {
+      return;
+    }
+
+    for (const watcher of this.#watchers) {
+      watcher(events);
+    }
+  }
+
+  /** The file store keys everything by absolute path; callers write relative ones. */
+  #absolute(path: string): string {
+    const trimmed = path.trim();
+
+    return trimmed.startsWith('/') ? trimmed : `${this.workdir}/${trimmed.replace(/^\.\//, '')}`;
+  }
+
+  #announceWrite(path: string, content: string) {
+    const absolute = this.#absolute(path);
+    const type = this.#reported.has(absolute) ? 'change' : 'add_file';
+    this.#reported.add(absolute);
+
+    /*
+     * The store decides whether a file is binary by looking at the bytes, so the content has to
+     * arrive as bytes rather than as the string it was written from.
+     */
+    const buffer = typeof content === 'string' ? new TextEncoder().encode(content) : new Uint8Array(content);
+
+    this.#announce([{ type, path: absolute, buffer }]);
+  }
+
+  /**
+   * A recursive mkdir creates every missing ancestor, and the tree needs a node for each of them,
+   * or a folder several levels deep has nothing to hang from.
+   */
+  #announceMkdir(path: string, recursive: boolean) {
+    const absolute = this.#absolute(path);
+
+    if (!recursive) {
+      this.#announce([{ type: 'add_dir', path: absolute }]);
+      return;
+    }
+
+    const segments = absolute.slice(this.workdir.length).split('/').filter(Boolean);
+    const events: WatchEvent[] = [];
+    let current = this.workdir;
+
+    for (const segment of segments) {
+      current = `${current}/${segment}`;
+
+      if (!this.#reported.has(current)) {
+        this.#reported.add(current);
+        events.push({ type: 'add_dir', path: current });
+      }
+    }
+
+    this.#announce(events);
+  }
 }

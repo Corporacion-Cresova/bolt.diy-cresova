@@ -286,6 +286,26 @@ mucho después como `npm error enoent ... package.json`.
 Ahora `toWorkdirRelative` convierte sólo las absolutas y deja las relativas en paz, y un fallo de
 escritura **corta la acción** en vez de callarse.
 
+### El árbol de archivos vacío no era un problema estético
+
+En el camino del VPS, `internal.watchPaths` era un no-op, así que el árbol quedaba vacío. Eso no
+sólo se ve mal: el mismo almacén alimenta el arranque automático, la detección del comando de inicio
+y **el contexto que se le manda al modelo en la fase 2**. Con el árbol vacío, la fase 2 no sabe qué
+construyó la fase 1.
+
+La solución no fue observar el disco en el servidor — eso obligaría a mandar por el socket cada ruta
+que toca `npm install` para no decir nada útil — sino que el navegador reporte sus propias
+escrituras: es él quien las hace. `remote-container.ts` emite el evento después de que la escritura
+tiene éxito, nunca antes.
+
+### Un puerto abierto no es una vista previa que funcione
+
+Vite abre su puerto y **después** resuelve dependencias, así que la primera petición puede llegar
+antes de que haya algo que responder. Anunciar `server-ready` en cuanto aparece el puerto ponía una
+página en blanco delante del usuario que sólo se arreglaba recargando a mano. Ahora el runner hace
+una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
+primera carga del navegador es la segunda petición, no la primera.
+
 ### La causa raíz de casi todos los fallos de generación
 
 El modelo tiene que escribir un sitio web entero con **8192 tokens de salida**. Eso fuerza
@@ -364,9 +384,9 @@ workbench le pide la siguiente por su cuenta.
 
 Ninguno impide generar y ver un sitio.
 
-- Los archivos creados por un comando no se reflejan en el árbol de archivos. El navegador tiene la
-  fuente de la verdad y empuja cada cambio, pero nada observa la dirección contraria
-  (`internal.watchPaths` es un no-op).
+- Los archivos creados por **un comando** en el servidor no se reflejan en el árbol de archivos: lo
+  que escribe el navegador sí (el adaptador reporta sus propias escrituras), pero la salida de un
+  andamiaje o un lockfile generado siguen invisibles hasta que algo los lea de vuelta.
 - La búsqueda de texto del workbench es una función de WebContainer sin equivalente en el servidor
   (`internal.textSearch`). Degrada de forma limpia: devuelve vacío.
 - Los errores en tiempo de ejecución de la vista previa no se reenvían: la vista previa es una
@@ -381,7 +401,7 @@ Ninguno impide generar y ver un sitio.
 | Etapa 4: Docker por proyecto | Aislamiento real entre proyectos + pool precalentado. |
 | Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
-| Cerrar los límites de §6 | `watchPaths` y `textSearch` son los que más se notarían. |
+| Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
 | Calidad visual | Prioridad 2, después de la base. |
 
 ## 8. Cómo verificar
@@ -389,7 +409,7 @@ Ninguno impide generar y ver un sitio.
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 156 pruebas en 17 archivos
+npx vitest run        # 159 pruebas en 17 archivos
 pnpm build            # remix vite build
 ```
 

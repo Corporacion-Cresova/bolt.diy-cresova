@@ -95,6 +95,51 @@ describe.skipIf(!RUNNER_READY)('RemoteContainer against a live runner', () => {
     connection.close();
   });
 
+  it('reports its own writes, so the file tree fills in without a watcher on the server', async () => {
+    const { connection } = await connect('watch-demo');
+    const container = new RemoteContainer(connection);
+
+    const seen: Array<{ type: string; path: string; content?: string }> = [];
+    container.internal.watchPaths({}, (events) => {
+      for (const event of events) {
+        seen.push({
+          type: event.type,
+          path: event.path,
+          content: event.buffer && new TextDecoder().decode(event.buffer),
+        });
+      }
+    });
+
+    await container.fs.mkdir('app/routes', { recursive: true });
+    await container.fs.writeFile('app/routes/index.tsx', 'const a = 1;');
+    await container.fs.writeFile('app/routes/index.tsx', 'const a = 2;');
+    await container.fs.rm('app/routes/index.tsx');
+
+    expect(seen).toEqual([
+      { type: 'add_dir', path: '/home/project/app', content: undefined },
+      { type: 'add_dir', path: '/home/project/app/routes', content: undefined },
+      { type: 'add_file', path: '/home/project/app/routes/index.tsx', content: 'const a = 1;' },
+      { type: 'change', path: '/home/project/app/routes/index.tsx', content: 'const a = 2;' },
+      { type: 'remove_file', path: '/home/project/app/routes/index.tsx', content: undefined },
+    ]);
+
+    connection.close();
+  });
+
+  it('says nothing about a write the runner refused', async () => {
+    const { connection } = await connect('watch-refused-demo');
+    const container = new RemoteContainer(connection);
+
+    const seen: string[] = [];
+    container.internal.watchPaths({}, (events) => seen.push(...events.map((event) => event.path)));
+
+    await expect(container.fs.writeFile('../escape.txt', 'nope')).rejects.toThrow(/escapes/);
+
+    expect(seen).toEqual([]);
+
+    connection.close();
+  });
+
   it('captures the result of a command that exits before spawn is acknowledged', async () => {
     const { connection } = await connect('fast-demo');
     const result = await runCommand(connection, 'echo', ['listo']);

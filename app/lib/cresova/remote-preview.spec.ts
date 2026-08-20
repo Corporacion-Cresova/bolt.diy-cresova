@@ -204,6 +204,61 @@ describe.skipIf(!RUNNER_READY)('a project running end to end on the runner', () 
     connection.close();
   }, 60_000);
 
+  /*
+   * An open port is not a working preview. Vite binds its port and only then resolves dependencies,
+   * so announcing the server the moment the port appears puts a blank page in front of the user
+   * that only a manual reload fixes.
+   */
+  it('waits until the server answers a request, not just until it opens its port', async () => {
+    const projectId = 'slow-demo';
+    const connection = new RunnerConnection(`ws://127.0.0.1:${PORT}`, await issueTicket(SECRET, projectId), projectId);
+    await connection.connect();
+
+    const container = new RemoteContainer(connection);
+
+    const serverReady = new Promise<number>((resolve) => {
+      container.on('server-ready', () => resolve(Date.now()));
+    });
+
+    /*
+     * Listens straight away and refuses every request for three seconds, the way a dev server that
+     * is still starting up behaves. Refusing rather than hanging keeps the test quick.
+     */
+    await container.fs.writeFile(
+      'slow.js',
+      [
+        "const { createServer } = require('node:http');",
+        'const answersAt = Date.now() + 3000;',
+        'createServer((request, response) => {',
+        '  if (Date.now() < answersAt) { request.socket.destroy(); return; }',
+        "  response.end('<h1>Ya puedo responder</h1>');",
+        '}).listen(Number(process.env.PORT));',
+      ].join('\n'),
+    );
+
+    const shell = new BoltShell();
+    await shell.init(container as never, fakeTerminal());
+    await shell.ready();
+
+    const startedAt = Date.now();
+    void shell.executeCommand('slow', 'node slow.js');
+
+    const announcedAt = await Promise.race([
+      serverReady,
+      new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error('no server-ready')), 30_000)),
+    ]);
+
+    expect(announcedAt - startedAt).toBeGreaterThanOrEqual(3000);
+
+    // the point of waiting: the first load the user gets is already a real page
+    const page = await getThroughProxy(`${projectId}.${PREVIEW_DOMAIN}`);
+
+    expect(page.status).toBe(200);
+    expect(page.body).toContain('Ya puedo responder');
+
+    connection.close();
+  }, 60_000);
+
   it('does not serve a project to a host that names a different one', async () => {
     const page = await getThroughProxy(`someone-elses-project.${PREVIEW_DOMAIN}`);
 
