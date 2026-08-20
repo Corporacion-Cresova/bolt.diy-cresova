@@ -23,5 +23,25 @@ export const CRESOVA_BUILD_CONTRACT = `
   - If the dev server is already running, do NOT start it again: Vite/HMR picks up file changes.
   - Never tell the user to run commands, install packages or open the preview themselves.
   - For a follow-up change, modify only the files that need to change. Do not recreate the project.
+
+  WHEN THE REQUEST IS TOO BIG FOR ONE RESPONSE:
+  A response has a hard output limit. A request with many distinct sections will not fit, and a
+  truncated response leaves a broken project. When that is the case, open your answer with a plan
+  and then build only its first phase:
+
+  <cresovaPlan>
+  FASE 1: package.json, configuracion, sistema de diseno, navbar y footer
+  FASE 2: hero y las dos secciones siguientes
+  FASE 3: ...
+  </cresovaPlan>
+
+  Rules for the plan:
+  - Between 2 and 6 phases. Only write a plan when the work genuinely does not fit in one response;
+    an ordinary site is one response and needs no plan.
+  - FASE 1 must leave the project runnable: package.json, dependencies, entry point and the start
+    command. Later phases add sections to something that already runs and shows a preview.
+  - Order the phases so the page looks intentional at every step, never half built.
+  - Build FASE 1 in this same response. You will be asked for the next phase automatically, so do
+    not ask the user to continue and do not stop to check in.
 </cresova_execution_contract>
 `;
