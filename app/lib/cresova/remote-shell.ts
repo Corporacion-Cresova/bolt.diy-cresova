@@ -1,5 +1,5 @@
 import { WORK_DIR_NAME } from '~/utils/constants';
-import { runCommand, type RunnerConnection } from './remote-container';
+import { runCommand, type RunnerConnection } from './runner-connection';
 
 /**
  * WebContainer ships jsh, a shell that announces what it is doing through OSC 654 escape codes.
