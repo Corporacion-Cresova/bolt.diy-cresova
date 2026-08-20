@@ -237,6 +237,24 @@ Costó una depuración larga porque una prueba se envenenaba a sí misma: pasaba
 y fallaba en todas las corridas siguientes. Las pruebas paran el runner con `SIGTERM` y esperan a
 que salga.
 
+### El portero que decidía si había diseño e imágenes
+
+`detectBuildIntent` no sirve sólo para el reintento automático: **decide si el kit de diseño y el
+catálogo de fotos llegan al modelo**. Si no reconoce la petición, sale una página genérica y sin
+imágenes.
+
+Tenía dos fallos, y con peticiones reales fallaba **5 de cada 10**:
+
+1. Exigía el compuesto (`página web`, `sitio web`), pero la gente escribe *"una web para mi
+   taller"* o *"Página para una barbería"*. Ahora también acepta los sustantivos sueltos.
+2. El patrón de preguntas no reconocía ninguna pregunta bien escrita en español. Anclaba en la
+   palabra sin admitir el `¿` inicial, y —más sutil— usaba `\b`, que **en JavaScript sólo conoce
+   letras ASCII**: después de la `é` de *"qué"* no hay frontera de palabra, así que esa palabra
+   nunca casaba. *"Cómo"* sí funcionaba, por terminar en `o`. Ahora usa una anticipación Unicode.
+
+El segundo estaba tapado por el primero: al ser la lista de sustantivos tan estrecha, las preguntas
+casi nunca llegaban a evaluarse.
+
 ### La causa raíz de casi todos los fallos de generación
 
 El modelo tiene que escribir un sitio web entero con **8192 tokens de salida**. Eso fuerza
@@ -318,7 +336,7 @@ Ninguno impide generar y ver un sitio.
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 116 pruebas en 13 archivos
+npx vitest run        # 139 pruebas en 15 archivos
 pnpm build            # remix vite build
 ```
 
