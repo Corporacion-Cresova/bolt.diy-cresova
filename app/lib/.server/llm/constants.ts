@@ -21,13 +21,7 @@ export const PROVIDER_COMPLETION_LIMITS: Record<string, number> = {
   Mistral: 8192,
   Ollama: 8192,
 
-  /*
-   * OpenRouter fronts models with wildly different output limits and the 8192 default made every
-   * website generation hit the cap and need continuations. Raise it per install with
-   * MAX_COMPLETION_TOKENS once you know your models accept more; too high a value is rejected by
-   * some upstreams, so the safe default stays.
-   */
-  OpenRouter: Number(process.env.MAX_COMPLETION_TOKENS) || 8192,
+  OpenRouter: 8192,
   Perplexity: 8192,
   Together: 8192,
   xAI: 8192,
@@ -94,3 +88,25 @@ export const IGNORE_PATTERNS = [
   '**/*lock.json',
   '**/*lock.yml',
 ];
+
+/**
+ * The output token ceiling for a provider, honouring a per install override.
+ *
+ * OpenRouter fronts models with wildly different output limits, and the 8192 default is what makes
+ * a long page get written in continuations — which is where truncated files and duplicated
+ * artifacts come from. Raise it with MAX_COMPLETION_TOKENS once the models in use are known to
+ * accept more; too high a value is rejected by some upstreams, so the safe default stays.
+ *
+ * Read from the request environment rather than process.env: under workerd only the bindings
+ * declared in worker-configuration.d.ts exist, and a value read at module load would be fixed for
+ * the life of the isolate.
+ */
+export function providerCompletionLimit(provider: string, override?: string | number): number | undefined {
+  const requested = Number(override);
+
+  if (Number.isFinite(requested) && requested > 0) {
+    return Math.floor(requested);
+  }
+
+  return PROVIDER_COMPLETION_LIMITS[provider];
+}

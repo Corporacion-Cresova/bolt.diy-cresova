@@ -23,6 +23,12 @@ interface Env {
   /** Optional. Enables the verified stock photo catalog for generated sites. */
   PEXELS_API_KEY: string;
 
+  /**
+   * Optional. Raises the output token ceiling for models that accept more than the provider
+   * default. The default of 8192 is what forces long pages to be written in continuations.
+   */
+  MAX_COMPLETION_TOKENS: string;
+
   /** Optional. Secret shared with the Cresova Runner; signs the tickets the browser presents. */
   RUNNER_TOKEN: string;
 
