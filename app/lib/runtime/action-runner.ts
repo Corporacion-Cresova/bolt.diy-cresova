@@ -69,6 +69,25 @@ class ActionCommandError extends Error {
   }
 }
 
+/**
+ * The path a file action should be written to, relative to the working directory.
+ *
+ * `path.relative` only means anything when both sides are absolute: given a relative path like
+ * "package.json" it resolves against the process working directory first and returns something that
+ * climbs out of the project ("../../package.json"). Models emit both forms, so the absolute case is
+ * converted and the relative case is left alone.
+ */
+export function toWorkdirRelative(workdir: string, filePath: string): string {
+  const trimmed = filePath.trim();
+
+  if (trimmed.startsWith('/')) {
+    return nodePath.relative(workdir, trimmed);
+  }
+
+  // already relative to the working directory, which is what the writer expects
+  return trimmed.replace(/^\.\//, '');
+}
+
 export class ActionRunner {
   #webcontainer: Promise<WebContainer>;
   #currentExecutionPromise: Promise<void> = Promise.resolve();
@@ -391,7 +410,7 @@ export class ActionRunner {
     }
 
     const webcontainer = await this.#webcontainer;
-    const relativePath = nodePath.relative(webcontainer.workdir, action.filePath);
+    const relativePath = toWorkdirRelative(webcontainer.workdir, action.filePath);
 
     let folder = nodePath.dirname(relativePath);
 
@@ -411,7 +430,16 @@ export class ActionRunner {
       await webcontainer.fs.writeFile(relativePath, action.content);
       logger.debug(`File written ${relativePath}`);
     } catch (error) {
+      /*
+       * Rethrown, not just logged. A write that fails and stays quiet is the worst outcome: the
+       * action shows as done, the build carries on, and the failure only surfaces much later as a
+       * missing package.json when the dev server will not start.
+       */
       logger.error('Failed to write file\n\n', error);
+      throw new ActionCommandError(
+        `No se pudo escribir ${relativePath}`,
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
