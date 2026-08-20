@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 147 · rama `claude/bolt-cresova-evolution-isgupq` · todo fusionado
+**Última actualización:** build 148 · rama `claude/bolt-cresova-evolution-isgupq` · todo fusionado
 en `main`.
 
 ---
@@ -115,6 +115,7 @@ Todo lo añadido por Cresova vive en carpetas identificables.
 | `src/projects.mjs` | Un directorio y un puerto por proyecto. Puertos 41000–41999. Entorno con lista blanca. |
 | `src/paths.mjs` | Confina toda ruta dentro del proyecto. |
 | `src/tickets.mjs` | Firma y verificación HMAC-SHA256. |
+| `src/ports.mjs` | Descubre por `/proc` qué puerto abrió de verdad el proyecto. |
 
 ### Otros
 
@@ -164,6 +165,36 @@ entorno de EasyPanel.
 La aplicación firma con WebCrypto bajo `workerd`; el runner verifica con `node:crypto`.
 `tickets-crossruntime.spec.mjs` existe para que esas dos firmas nunca se separen.
 
+### Vite ignora `PORT`
+
+**Verificado, no supuesto:** con `PORT=41500`, Vite 5.4.21 escucha en **5173**. `PORT` es una
+convención de Create React App y Next.js, no de Vite — y Vite es lo que los modelos generan por
+defecto.
+
+WebContainer nunca tuvo este problema porque **observa** la llamada a `listen()`. El runner dictaba
+un puerto. Ahora observa: `runner/src/ports.mjs` pregunta al kernel, vía `/proc`, qué puertos
+abrieron los procesos del propio proyecto. Nada se deduce de la salida de los comandos, cuyo
+formato cambia entre frameworks y versiones.
+
+### Vite bloquea nombres de host desconocidos
+
+Desde 5.4.12, Vite responde *"Blocked request. This host is not allowed"* a cualquier `Host` que no
+reconozca. El proxy de vistas previas ya reescribe la cabecera a `127.0.0.1:<puerto>` al reenviar,
+que es lo que hace cualquier proxy inverso hacia un servidor de desarrollo. No tocar eso.
+
+### Los procesos huérfanos sirven el proyecto equivocado
+
+Los comandos corren en su propio grupo de procesos —necesario para poder matar al nieto que es el
+servidor— y esa misma separación hacía que **sobrevivieran a la muerte del runner**. Un servidor
+huérfano conserva su puerto; el siguiente runner reparte ese puerto a otro proyecto, y el proxy
+sirve el sitio de un proyecto bajo el nombre de otro. Con los reinicios de EasyPanel eso es
+rutinario, no raro.
+
+Dos defensas, ambas necesarias: el runner mata todos los grupos al recibir `SIGTERM`/`SIGINT`, y la
+asignación de puertos comprueba que el puerto esté realmente libre intentando enlazarlo.
+
+Esto apareció al probar con Vite real: el proxy devolvió el contenido de una prueba anterior.
+
 ### La causa raíz de casi todos los fallos de generación
 
 El modelo tiene que escribir un sitio web entero con **8192 tokens de salida**. Eso fuerza
@@ -208,7 +239,7 @@ Ninguno impide generar y ver un sitio.
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 104 pruebas en 9 archivos
+npx vitest run        # 108 pruebas en 11 archivos
 pnpm build            # remix vite build
 ```
 
@@ -219,6 +250,11 @@ Las pruebas de integración levantan un **runner real** y hablan con él. Se sal
 cd runner && npm install
 ```
 
-Las más valiosas son `app/lib/cresova/remote-shell.spec.ts`: usan el `BoltShell` **real, sin
-modificar**, contra el runner. Si el protocolo se rompe, ahí se cuelga — igual que se colgaría en
-la aplicación.
+Las más valiosas:
+
+- `remote-shell.spec.ts` — usa el `BoltShell` **real, sin modificar**, contra el runner. Si el
+  protocolo se rompe, ahí se cuelga, igual que se colgaría en la aplicación.
+- `remote-preview.spec.ts` — la cadena completa: escribir archivos, arrancar el servidor, detectar
+  el puerto, servirlo por el proxy. Incluye el caso de un servidor que elige su propio puerto.
+- `runner-shutdown.spec.ts` — que apagar el runner no deje servidores huérfanos ocupando puertos.
+  Comprobado que falla si se quita el arreglo.

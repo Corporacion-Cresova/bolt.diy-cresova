@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { createConnection } from 'node:net';
+import { createConnection, createServer } from 'node:net';
+import { existsSync } from 'node:fs';
 import { isValidProjectId, resolveInsideProject } from './paths.mjs';
+import { findServingPort } from './ports.mjs';
 
 const PORT_RANGE_START = 41000;
 const PORT_RANGE_END = 41999;
@@ -28,6 +30,22 @@ function projectEnv(port) {
   };
 }
 
+/**
+ * Whether nothing is listening on a port.
+ *
+ * Binding is the authoritative test, and it is worth doing: a dev server orphaned by a previous
+ * runner keeps its port, and handing that port to a new project would make the preview proxy serve
+ * one project's site under another project's name.
+ */
+function isPortFree(port) {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(port, '127.0.0.1');
+  });
+}
+
 function canConnect(port) {
   return new Promise((resolve) => {
     const socket = createConnection({ host: '127.0.0.1', port });
@@ -51,14 +69,14 @@ export class ProjectManager {
     this.onEvent = onEvent;
   }
 
-  #allocatePort() {
+  async #allocatePort() {
     const taken = new Set([...this.#projects.values()].map((project) => project.port));
 
     for (let attempt = 0; attempt <= PORT_RANGE_END - PORT_RANGE_START; attempt++) {
       const port = this.#nextPort;
       this.#nextPort = this.#nextPort >= PORT_RANGE_END ? PORT_RANGE_START : this.#nextPort + 1;
 
-      if (!taken.has(port)) {
+      if (!taken.has(port) && (await isPortFree(port))) {
         return port;
       }
     }
@@ -81,10 +99,11 @@ export class ProjectManager {
     const project = {
       id: projectId,
       dir: `${this.root}/${projectId}`,
-      port: this.#allocatePort(),
+      port: await this.#allocatePort(),
       processes: new Map(),
       lastSeen: Date.now(),
       ready: false,
+      servingPort: undefined,
     };
 
     await mkdir(project.dir, { recursive: true });
@@ -201,6 +220,31 @@ export class ProjectManager {
    * command output. Output formats differ per framework and change between versions; a successful
    * TCP connection does not.
    */
+  /**
+   * Which port the project is serving on, if any.
+   *
+   * Asking the kernel which port the project's own processes opened, rather than assuming it obeyed
+   * PORT. On a system without /proc there is nothing to ask, so the assigned port is probed
+   * directly — the same behaviour as before, and enough for the frameworks that do respect PORT.
+   */
+  async #findServingPort(project) {
+    const groups = [...project.processes.values()].map((child) => child.pid).filter(Boolean);
+
+    if (groups.length > 0) {
+      const observed = await findServingPort(groups, project.port);
+
+      if (observed !== undefined) {
+        return observed;
+      }
+    }
+
+    if (existsSync('/proc/net/tcp')) {
+      return undefined;
+    }
+
+    return (await canConnect(project.port)) ? project.port : undefined;
+  }
+
   #watchForServer(project) {
     if (project.readyWatcher) {
       return;
@@ -216,17 +260,20 @@ export class ProjectManager {
         return;
       }
 
-      if (!(await canConnect(project.port))) {
+      const servingPort = await this.#findServingPort(project);
+
+      if (servingPort === undefined) {
         return;
       }
 
       clearInterval(project.readyWatcher);
       project.readyWatcher = undefined;
       project.ready = true;
+      project.servingPort = servingPort;
 
       this.onEvent(project.id, {
         type: 'server-ready',
-        port: project.port,
+        port: servingPort,
         url: this.previewUrl(project.id),
       });
     }, READY_POLL_MS);
@@ -259,6 +306,17 @@ export class ProjectManager {
     if (deleteFiles) {
       await rm(project.dir, { recursive: true, force: true });
     }
+  }
+
+  /**
+   * Stops every project. Called when the runner itself is shutting down.
+   *
+   * Commands run in their own process group so a dev server can be signalled together with the
+   * shell that started it, and that same detachment means they would otherwise survive the runner
+   * and keep holding ports. Files are kept: the browser can push them again.
+   */
+  async closeAll() {
+    await Promise.all([...this.#projects.keys()].map((projectId) => this.close(projectId)));
   }
 
   async reapIdle(maxIdleMs) {
