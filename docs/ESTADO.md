@@ -272,6 +272,20 @@ El `/health` de ese nombre devolverá 404 porque por HTTP sí se enruta por host
 Por eso la insignia ahora dice **«Navegador · VPS falló»** con el motivo en el tooltip: un
 fallo silencioso es indistinguible de no haberlo configurado.
 
+### Dónde se escribe cada archivo, y por qué se escribía fuera
+
+`#runFileAction` calculaba la ruta con `path.relative(workdir, filePath)`. Eso **sólo significa algo
+si `filePath` es absoluta**: con una ruta ya relativa —`package.json`, que es como la escriben los
+modelos y como vienen las plantillas— `relative` la resuelve primero contra el directorio de
+trabajo del proceso y devuelve algo que **se sale del proyecto** (`../../package.json`).
+
+El runner rechaza esas rutas, que es lo correcto. Lo grave era lo otro: **el error se registraba y
+se seguía adelante**. Los 25 archivos aparecían como creados, ninguno existía, y el síntoma llegaba
+mucho después como `npm error enoent ... package.json`.
+
+Ahora `toWorkdirRelative` convierte sólo las absolutas y deja las relativas en paz, y un fallo de
+escritura **corta la acción** en vez de callarse.
+
 ### La causa raíz de casi todos los fallos de generación
 
 El modelo tiene que escribir un sitio web entero con **8192 tokens de salida**. Eso fuerza
@@ -353,7 +367,7 @@ Ninguno impide generar y ver un sitio.
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 139 pruebas en 15 archivos
+npx vitest run        # 144 pruebas en 16 archivos
 pnpm build            # remix vite build
 ```
 
