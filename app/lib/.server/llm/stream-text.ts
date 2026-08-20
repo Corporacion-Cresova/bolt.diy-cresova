@@ -1,5 +1,5 @@
 import { convertToCoreMessages, streamText as _streamText, type Message } from 'ai';
-import { MAX_TOKENS, PROVIDER_COMPLETION_LIMITS, isReasoningModel, type FileMap } from './constants';
+import { MAX_TOKENS, providerCompletionLimit, isReasoningModel, type FileMap } from './constants';
 import { getSystemPrompt } from '~/lib/common/prompts/prompts';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODIFICATIONS_TAG_NAME, PROVIDER_LIST, WORK_DIR } from '~/utils/constants';
 import type { IProviderSetting } from '~/types/model';
@@ -30,14 +30,14 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 
 const logger = createScopedLogger('stream-text');
 
-function getCompletionTokenLimit(modelDetails: any): number {
-  // 1. If model specifies completion tokens, use that
+function getCompletionTokenLimit(modelDetails: any, override?: string | number): number {
+  // 1. If model specifies completion tokens, use that: it is more precise than any default
   if (modelDetails.maxCompletionTokens && modelDetails.maxCompletionTokens > 0) {
     return modelDetails.maxCompletionTokens;
   }
 
-  // 2. Use provider-specific default
-  const providerDefault = PROVIDER_COMPLETION_LIMITS[modelDetails.provider];
+  // 2. Provider default, which MAX_COMPLETION_TOKENS can raise
+  const providerDefault = providerCompletionLimit(modelDetails.provider, override);
 
   if (providerDefault) {
     return providerDefault;
@@ -198,7 +198,10 @@ export async function streamText(props: {
     }
   }
 
-  const dynamicMaxTokens = modelDetails ? getCompletionTokenLimit(modelDetails) : Math.min(MAX_TOKENS, 16384);
+  const completionOverride = serverEnv?.MAX_COMPLETION_TOKENS || process.env.MAX_COMPLETION_TOKENS;
+  const dynamicMaxTokens = modelDetails
+    ? getCompletionTokenLimit(modelDetails, completionOverride)
+    : Math.min(MAX_TOKENS, 16384);
 
   // Use model-specific limits directly - no artificial cap needed
   const safeMaxTokens = dynamicMaxTokens;

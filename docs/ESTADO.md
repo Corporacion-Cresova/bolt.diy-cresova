@@ -210,6 +210,24 @@ arreglo endureció la maquinaria; lo que quita la presión de verdad es el Creso
 - El estrangulamiento de pestañas en segundo plano es real: temporizadores limitados,
   `requestAnimationFrame` detenido.
 
+## 5 bis. Variables de entorno
+
+Sólo `OPEN_ROUTER_API_KEY` es imprescindible. Todo lo demás es opcional y desactiva una función
+concreta si falta.
+
+| Variable | Para qué | Sin ella |
+|---|---|---|
+| `OPEN_ROUTER_API_KEY` | Los modelos. **Imprescindible.** | No genera nada. |
+| `PEXELS_API_KEY` | Catálogo de fotos verificadas por sector. | Los sitios salen sin imágenes reales. |
+| `MAX_COMPLETION_TOKENS` | Techo de tokens de salida. | Se queda en 8192, que es lo que obliga a escribir por continuaciones. |
+| `GITHUB_ACCESS_TOKEN` | Sube el límite de peticiones a GitHub. | Sólo importa si fallan las plantillas alojadas por nosotros. |
+| `RUNNER_TOKEN` + `RUNNER_URL` | Ejecución en el VPS. | Se ejecuta en el navegador, como siempre. |
+
+**Cuidado:** `bindings.sh` sólo reenvía al worker las variables **declaradas en
+`worker-configuration.d.ts`**. Una variable puesta en EasyPanel pero no declarada ahí no llega
+nunca, y falla en silencio. Le pasó a `MAX_COMPLETION_TOKENS`, que estuvo muerto desde que lo
+añadí hasta el build 151.
+
 ## 6. Límites conocidos del camino en servidor
 
 Ninguno impide generar y ver un sitio.
@@ -239,7 +257,7 @@ Ninguno impide generar y ver un sitio.
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 108 pruebas en 11 archivos
+npx vitest run        # 114 pruebas en 12 archivos
 pnpm build            # remix vite build
 ```
 
