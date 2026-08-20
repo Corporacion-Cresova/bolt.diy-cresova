@@ -255,6 +255,23 @@ Tenía dos fallos, y con peticiones reales fallaba **5 de cada 10**:
 El segundo estaba tapado por el primero: al ser la lista de sustantivos tan estrecha, las preguntas
 casi nunca llegaban a evaluarse.
 
+### El runner necesita su propio dominio, aparte del comodín
+
+`*.preview.<dominio>` sirve las **vistas previas**. La aplicación se conecta a otra cosa: la API del
+runner, en `RUNNER_URL`. Son dos entradas distintas al mismo servicio y hacen falta las dos.
+
+Configurar sólo el comodín deja `RUNNER_URL` apuntando a un dominio inexistente: la aplicación no
+conecta, cae al navegador **en silencio** —que es el comportamiento correcto— y desde fuera parece
+que todo va bien. Pasó exactamente así, y se diagnosticó comparando cuatro destinos: el comodín
+respondía 404 (mensaje del propio runner) mientras `runner.<dominio>` no resolvía.
+
+Detalle útil: el runner enruta los **upgrades de WebSocket por ruta, no por host**, así que
+cualquier nombre bajo el comodín sirve como `RUNNER_URL` en un apuro (`https://conexion.preview.…`).
+El `/health` de ese nombre devolverá 404 porque por HTTP sí se enruta por host.
+
+Por eso la insignia ahora dice **«Navegador · VPS falló»** con el motivo en el tooltip: un
+fallo silencioso es indistinguible de no haberlo configurado.
+
 ### La causa raíz de casi todos los fallos de generación
 
 El modelo tiene que escribir un sitio web entero con **8192 tokens de salida**. Eso fuerza
