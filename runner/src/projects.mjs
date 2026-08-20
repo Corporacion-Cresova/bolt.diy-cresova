@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createConnection, createServer } from 'node:net';
+import { request as httpRequest } from 'node:http';
 import { existsSync } from 'node:fs';
 import { isValidProjectId, resolveInsideProject } from './paths.mjs';
 import { findServingPort } from './ports.mjs';
@@ -16,6 +17,9 @@ const KILL_GRACE_MS = 4000;
  */
 const SERVER_MEMO = '.cresova-runner.json';
 const READY_POLL_MS = 500;
+
+/** Generous: a cold dev server can spend a while on the first request before it answers. */
+const HTTP_PROBE_TIMEOUT_MS = 30_000;
 const READY_TIMEOUT_MS = 180_000;
 
 /**
@@ -49,6 +53,31 @@ function isPortFree(port) {
     probe.once('error', () => resolve(false));
     probe.once('listening', () => probe.close(() => resolve(true)));
     probe.listen(port, '127.0.0.1');
+  });
+}
+
+/**
+ * Whether the dev server on a port actually serves a page.
+ *
+ * An open port is not a working preview. Vite binds its port and only then resolves dependencies,
+ * so the first request can arrive before there is anything to answer with — which is exactly the
+ * blank preview that only a manual reload fixed. Waiting for a real response before announcing the
+ * server costs nothing and warms the dev server up, so the browser's first load is the second
+ * request rather than the first.
+ */
+function answersHttp(port) {
+  return new Promise((resolve) => {
+    const probe = httpRequest({ host: '127.0.0.1', port, path: '/', method: 'GET' }, (response) => {
+      response.resume();
+      resolve(true);
+    });
+
+    probe.setTimeout(HTTP_PROBE_TIMEOUT_MS, () => {
+      probe.destroy();
+      resolve(false);
+    });
+    probe.once('error', () => resolve(false));
+    probe.end();
   });
 }
 
@@ -273,11 +302,6 @@ export class ProjectManager {
   }
 
   /**
-   * Detects the dev server by connecting to the port we assigned, rather than by reading the
-   * command output. Output formats differ per framework and change between versions; a successful
-   * TCP connection does not.
-   */
-  /**
    * Which port the project is serving on, if any.
    *
    * Asking the kernel which port the project's own processes opened, rather than assuming it obeyed
@@ -317,9 +341,30 @@ export class ProjectManager {
         return;
       }
 
-      const servingPort = await this.#findServingPort(project);
+      // the HTTP probe can outlast the poll interval, and two of them would race each other
+      if (project.probing) {
+        return;
+      }
+
+      project.probing = true;
+
+      let servingPort;
+
+      try {
+        servingPort = await this.#findServingPort(project);
+
+        if (servingPort !== undefined && !(await answersHttp(servingPort))) {
+          servingPort = undefined;
+        }
+      } finally {
+        project.probing = false;
+      }
 
       if (servingPort === undefined) {
+        return;
+      }
+
+      if (!project.readyWatcher) {
         return;
       }
 
