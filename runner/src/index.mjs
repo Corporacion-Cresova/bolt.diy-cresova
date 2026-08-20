@@ -66,10 +66,10 @@ const server = createServer(async (request, response) => {
     const forward = upstream.request(
       {
         host: '127.0.0.1',
-        port: project.port,
+        port: project.servingPort ?? project.port,
         method: request.method,
         path: request.url,
-        headers: { ...request.headers, host: `127.0.0.1:${project.port}` },
+        headers: { ...request.headers, host: `127.0.0.1:${project.servingPort ?? project.port}` },
       },
       (upstreamResponse) => {
         response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
@@ -114,9 +114,9 @@ const previewUpgrade = async (request, socket, head) => {
   const { request: httpRequest } = await import('node:http');
   const forward = httpRequest({
     host: '127.0.0.1',
-    port: project.port,
+    port: project.servingPort ?? project.port,
     path: request.url,
-    headers: { ...request.headers, host: `127.0.0.1:${project.port}` },
+    headers: { ...request.headers, host: `127.0.0.1:${project.servingPort ?? project.port}` },
     method: request.method,
   });
 
@@ -228,3 +228,28 @@ setInterval(() => {
 server.listen(PORT, () => {
   console.log(`Cresova Runner listening on ${PORT}, previews at *.${PREVIEW_DOMAIN}`);
 });
+
+/*
+ * Project commands run detached, so nothing else would stop them if this process goes away: they
+ * would keep running and keep their ports, and the next runner would hand one of those ports to a
+ * different project. EasyPanel restarts and redeploys make that a routine event, not a rare one.
+ */
+let shuttingDown = false;
+
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+    console.log(`Cresova Runner stopping on ${signal}, closing every project`);
+
+    void projects.closeAll().finally(() => {
+      server.close(() => process.exit(0));
+
+      // do not wait forever on a connection that will not close
+      setTimeout(() => process.exit(0), 5000).unref();
+    });
+  });
+}
