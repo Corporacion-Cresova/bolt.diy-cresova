@@ -8,6 +8,9 @@ const CALL_TIMEOUT_MS = 60_000;
 const RECONNECT_GRACE_MS = 30_000;
 const RECONNECT_ATTEMPTS = 5;
 
+/** A socket that opens but never announces the project would otherwise wait forever. */
+const HANDSHAKE_TIMEOUT_MS = 20_000;
+
 export type ConnectionState = 'open' | 'reconnecting' | 'closed';
 
 export type RunnerEvent =
@@ -78,8 +81,27 @@ export class RunnerConnection {
       const socket = new WebSocket(address);
       this.#socket = socket;
 
+      /*
+       * The handshake is bounded on its own. A socket that opens but never announces the project —
+       * a runner still starting up, or one that failed to open the directory — would otherwise
+       * leave every caller waiting with nothing to time it out.
+       */
+      const handshake = setTimeout(() => {
+        socket.close();
+        reject(new Error('The runner accepted the connection but never announced the project'));
+      }, HANDSHAKE_TIMEOUT_MS);
+
+      const settle = <T>(finish: (value: T) => void) => {
+        return (value: T) => {
+          clearTimeout(handshake);
+          finish(value);
+        };
+      };
+
+      const fail = settle(reject);
+
       socket.addEventListener('message', (message) => this.#dispatch(String(message.data)));
-      socket.addEventListener('error', () => reject(new Error('Could not reach the Cresova Runner')));
+      socket.addEventListener('error', () => fail(new Error('Could not reach the Cresova Runner')));
       socket.addEventListener('close', () => this.#handleClose());
 
       const unsubscribe = this.on('ready', (event) => {
@@ -88,6 +110,7 @@ export class RunnerConnection {
         if (event.type === 'ready') {
           logger.info(`Project ${event.projectId} ready, preview at ${event.previewUrl}`);
           this.#setState('open');
+          clearTimeout(handshake);
           resolve({ previewUrl: event.previewUrl, port: event.port });
         }
       });
