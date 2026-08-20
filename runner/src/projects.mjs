@@ -9,6 +9,12 @@ import { findServingPort } from './ports.mjs';
 const PORT_RANGE_START = 41000;
 const PORT_RANGE_END = 41999;
 const KILL_GRACE_MS = 4000;
+
+/*
+ * Where a project remembers how its server was started. It has to live on disk: the point is to
+ * survive the runner process being replaced, which is what a redeploy does.
+ */
+const SERVER_MEMO = '.cresova-runner.json';
 const READY_POLL_MS = 500;
 const READY_TIMEOUT_MS = 180_000;
 
@@ -109,7 +115,57 @@ export class ProjectManager {
     await mkdir(project.dir, { recursive: true });
     this.#projects.set(projectId, project);
 
+    /*
+     * Deliberately not awaited: bringing the previous server back is a nicety, and the browser must
+     * not wait on it. If it were part of opening the project, a slow or failing restore would hold
+     * up the handshake and the client would hang with no way to tell why.
+     */
+    void this.#restoreServer(project).catch((error) => {
+      console.log(`Could not restore the server for ${project.id}: ${error?.message ?? error}`);
+    });
+
     return project;
+  }
+
+  /**
+   * Writes down the command that brought a server up.
+   *
+   * The files survive a restart because they are on a volume, but the running server does not, and
+   * nothing else knows how to bring it back: the browser only sends a start command while it is
+   * generating. Without this, a redeploy leaves the project with all its files and a dead preview.
+   */
+  async #rememberServerCommand(project) {
+    if (!project.lastCommand) {
+      return;
+    }
+
+    try {
+      await writeFile(
+        `${project.dir}/${SERVER_MEMO}`,
+        JSON.stringify({ command: project.lastCommand, rememberedAt: Date.now() }),
+      );
+    } catch {
+      // losing the memo only costs an automatic restart, never correctness
+    }
+  }
+
+  /** Brings the server back after the runner itself was restarted. */
+  async #restoreServer(project) {
+    let memo;
+
+    try {
+      memo = JSON.parse(await readFile(`${project.dir}/${SERVER_MEMO}`, 'utf8'));
+    } catch {
+      // nothing was ever started here
+      return;
+    }
+
+    if (!memo?.command) {
+      return;
+    }
+
+    console.log(`Restoring the server for ${project.id}: ${memo.command}`);
+    await this.spawn(project.id, memo.command, []);
   }
 
   get(projectId) {
@@ -172,6 +228,7 @@ export class ProjectManager {
 
     const processId = String(child.pid ?? Math.random().toString(36).slice(2));
     project.processes.set(processId, child);
+    project.lastCommand = [command, ...args].join(' ').trim();
 
     const emit = (stream, chunk) =>
       this.onEvent(projectId, { type: 'output', processId, stream, data: chunk.toString() });
@@ -270,6 +327,7 @@ export class ProjectManager {
       project.readyWatcher = undefined;
       project.ready = true;
       project.servingPort = servingPort;
+      void this.#rememberServerCommand(project);
 
       this.onEvent(project.id, {
         type: 'server-ready',

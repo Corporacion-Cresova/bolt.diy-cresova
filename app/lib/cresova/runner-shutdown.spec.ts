@@ -69,8 +69,17 @@ describe.skipIf(!RUNNER_READY)('a runner that is shut down', () => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
   });
 
-  afterAll(() => {
-    runner?.kill('SIGKILL');
+  afterAll(async () => {
+    /*
+     * SIGTERM, not SIGKILL: the runner's own shutdown is what stops the project processes, and
+     * SIGKILL skips it, leaking a server that keeps its port for the next run.
+     */
+    if (runner.exitCode === null && runner.signalCode === null) {
+      const stopped = new Promise((resolve) => runner.once('exit', resolve));
+      runner.kill('SIGTERM');
+      await stopped;
+    }
+
     rmSync(projectRoot, { recursive: true, force: true });
   });
 

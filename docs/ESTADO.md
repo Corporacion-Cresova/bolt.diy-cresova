@@ -213,6 +213,30 @@ Dos consecuencias que costaron una sesión entera de depuración:
    conexiones nuevas; las abiertas siguen vivas. Sin cerrarlas, el navegador seguía hablándole a un
    servicio que se estaba yendo y perdía en silencio lo que enviara en esa ventana.
 
+### Los dos servicios se redespliegan juntos
+
+El runner y la aplicación se construyen del **mismo repositorio y la misma rama**, con Build Path
+`/` y Dockerfile `runner/Dockerfile`. Cualquier fusión a `main` redespliega **los dos**. Un SIGTERM
+en los logs del runner casi siempre es eso, no un fallo suyo.
+
+Por eso importa que la sesión sobreviva a un reinicio, y por eso el proyecto recuerda en disco
+(`.cresova-runner.json`) con qué comando se levantó su servidor: los archivos sobreviven en el
+volumen, pero el proceso no, y nadie más sabe cómo revivirlo — el navegador sólo envía un comando
+de arranque mientras está generando.
+
+Restaurarlo **no está en el camino crítico** de abrir el proyecto: si tardara o fallara, el
+`ready` no saldría y el navegador se quedaría colgado conectando.
+
+### Matar el runner con SIGKILL deja huérfanos
+
+Vale para las pruebas y para producción: el apagado ordenado del runner es lo que detiene los
+procesos de los proyectos, y `SIGKILL` se lo salta. Un servidor filtrado conserva su puerto, así
+que la siguiente ejecución falla sobre un puerto ya tomado.
+
+Costó una depuración larga porque una prueba se envenenaba a sí misma: pasaba, dejaba un huérfano,
+y fallaba en todas las corridas siguientes. Las pruebas paran el runner con `SIGTERM` y esperan a
+que salga.
+
 ### La causa raíz de casi todos los fallos de generación
 
 El modelo tiene que escribir un sitio web entero con **8192 tokens de salida**. Eso fuerza
@@ -275,7 +299,7 @@ Ninguno impide generar y ver un sitio.
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 115 pruebas en 13 archivos
+npx vitest run        # 116 pruebas en 13 archivos
 pnpm build            # remix vite build
 ```
 
