@@ -16,6 +16,19 @@ export function BackendBadge() {
   }
 
   const onServer = backend === 'runner';
+  const lost = backend === 'runner-lost';
+
+  if (lost) {
+    return (
+      <span
+        title="Se perdió la conexión con el VPS y se está reintentando. Los comandos esperan a que vuelva."
+        className="hidden md:flex items-center gap-1.5 rounded-full border border-bolt-elements-borderColor bg-bolt-elements-background-depth-2 px-2.5 py-1 text-xs text-bolt-elements-textSecondary select-none"
+      >
+        <span className="i-ph:warning-circle-duotone text-sm text-amber-500" />
+        <span className="font-medium text-bolt-elements-textPrimary">Reconectando</span>
+      </span>
+    );
+  }
 
   return (
     <span
