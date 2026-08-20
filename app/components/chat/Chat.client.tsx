@@ -275,6 +275,19 @@ export const ChatImpl = memo(
         appendAssistantMessage: (message) => {
           setMessages([...messagesRef.current, message]);
         },
+        messages,
+        requestNextPhase: (prompt) => {
+          /*
+           * Sent as a user turn because that is what asks the model for more work, and marked
+           * hidden so it does not displace the real request when the design kit and the photo
+           * catalog are chosen.
+           */
+          append({
+            role: 'user',
+            content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${prompt}`,
+            annotations: ['hidden'],
+          });
+        },
       }).catch((guardError) => {
         logger.error('Cresova execution guard failed', guardError);
       });

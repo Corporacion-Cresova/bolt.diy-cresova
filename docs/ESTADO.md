@@ -338,6 +338,28 @@ Arranca en **`readonly`** y con **`EASYPANEL_RAW_DISABLED=1`**, y eso es deliber
 Para diagnosticar —leer logs, ver estado, comprobar variables definidas— `readonly` basta. Subir a
 `full` es una decisión consciente, no el punto de partida.
 
+## 5 quater. Construcción por fases
+
+Un prompt enorme no cabe en una respuesta, y pedirle al usuario que lo trocee él anula el sentido
+del producto. Así que **trocea el modelo**: abre su respuesta con un plan, construye la fase 1, y el
+workbench le pide la siguiente por su cuenta.
+
+- `build-plan.ts` — analiza `<cresovaPlan>`, calcula qué fase toca y redacta la petición.
+- El contrato de ejecución le dice al modelo cuándo escribir un plan y qué debe contener la fase 1
+  (proyecto ejecutable: `package.json`, dependencias, arranque).
+- El guard avanza la fase **sólo después** de que la vista previa esté lista, así cada fase enriquece
+  algo que ya se ve funcionando.
+
+**Sin estado.** El progreso se deduce del historial contando los mensajes que lleva la marca
+`[Cresova · fase]`, así que recargar, reconectar o abrir otra pestaña reanudan bien.
+
+**Control de coste**, que es la restricción explícita del usuario:
+
+- `MAX_PHASES = 6`, absoluto. Un plan de veinte fases se corta ahí.
+- Una fase que **no escribe archivos no avanza**: algo salió mal y seguir sería gastar dinero
+  construyendo sobre un proyecto que no está.
+- Un plan de una sola fase se ignora: sería una llamada extra para nada.
+
 ## 6. Límites conocidos del camino en servidor
 
 Ninguno impide generar y ver un sitio.
@@ -367,7 +389,7 @@ Ninguno impide generar y ver un sitio.
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 144 pruebas en 16 archivos
+npx vitest run        # 156 pruebas en 17 archivos
 pnpm build            # remix vite build
 ```
 

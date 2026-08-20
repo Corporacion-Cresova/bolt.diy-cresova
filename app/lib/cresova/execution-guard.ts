@@ -1,4 +1,5 @@
 import type { Message } from 'ai';
+import { nextPhase, phasePrompt } from './build-plan';
 import type { ActionState } from '~/lib/runtime/action-runner';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { generateId } from '~/utils/fileUtils';
@@ -42,9 +43,16 @@ export interface ExecutionGuardContext {
 
   /** Injects a synthetic assistant message carrying the install/start artifact (start guard). */
   appendAssistantMessage: (message: Message) => void;
+
+  /** The conversation so far, used to work out which phase of a plan comes next. */
+  messages: Message[];
+
+  /** Asks the model for the next phase of its own plan. */
+  requestNextPhase: (prompt: string) => void;
 }
 
 export type ExecutionGuardOutcome =
+  | 'next-phase'
   | 'idle'
   | 'artifact-recovery'
   | 'no-artifact'
@@ -157,6 +165,13 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
 
   logger.info(`Artifact detected: ${fileActions.length} file action(s), ${startActions.length} start action(s)`);
 
+  /*
+   * A plan is only advanced after a turn that actually wrote files. A phase that produced nothing
+   * means something went wrong, and asking for the next one would spend money building on top of a
+   * project that is not there.
+   */
+  const pending = fileActions.length > 0 ? nextPhase(context.messages) : undefined;
+
   const files = workbenchStore.files.get();
   const hasProjectFiles = Object.values(files).some((dirent) => dirent?.type === 'file');
 
@@ -178,6 +193,17 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
 
     logger.info(`Server ready: ${workbenchStore.previews.get()[0]?.baseUrl}`);
     showPreview();
+
+    /*
+     * Asked for after the preview, not before: phase one leaves the site running, and every later
+     * phase enriches something the user can already watch changing.
+     */
+    if (pending) {
+      logger.info(`Advancing to phase ${pending.number}/${pending.total}`);
+      context.requestNextPhase(phasePrompt(pending));
+
+      return 'next-phase';
+    }
 
     return 'preview-ready';
   }
@@ -223,6 +249,13 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
 
   logger.info(`Server ready: ${workbenchStore.previews.get()[0]?.baseUrl}`);
   showPreview();
+
+  if (pending) {
+    logger.info(`Advancing to phase ${pending.number}/${pending.total}`);
+    context.requestNextPhase(phasePrompt(pending));
+
+    return 'next-phase';
+  }
 
   return 'auto-start';
 }

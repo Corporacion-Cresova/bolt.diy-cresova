@@ -17,6 +17,7 @@ import type {
 } from '@ai-sdk/ui-utils';
 import { ToolInvocations } from './ToolInvocations';
 import type { ToolCallAnnotation } from '~/types/context';
+import { renderPlanForDisplay } from '~/lib/cresova/build-plan';
 
 interface AssistantMessageProps {
   content: string;
@@ -177,7 +178,7 @@ export const AssistantMessage = memo(
           </div>
         </>
         <Markdown append={append} chatMode={chatMode} setChatMode={setChatMode} model={model} provider={provider} html>
-          {content}
+          {renderPlanForDisplay(content)}
         </Markdown>
         {toolInvocations && toolInvocations.length > 0 && (
           <ToolInvocations
