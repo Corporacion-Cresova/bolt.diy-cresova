@@ -27,6 +27,19 @@ export const CRESOVA_DESIGN_KIT = `
   - Elevation: at most two shadows in the whole page, both soft and low-opacity. No glow.
   - Container: 1200px max, 24px gutter mobile, 40px desktop.
 
+  TYPE SCALE (the single biggest tell of a generated page is timid type):
+  - Hero headline: clamp(2.5rem, 5vw, 4.5rem), line-height 1.05, tracking -0.02em, weight 600-700.
+  - Section heading: clamp(1.75rem, 3vw, 2.5rem), line-height 1.15.
+  - Body: 1.0625rem, line-height 1.6. Small print: 0.875rem.
+  - Never more than two weights of the display face on one page.
+  - Body text gets a measure of 60-75 characters (max-w-[65ch]). Full-width paragraphs read as
+    unfinished no matter how good the rest is.
+
+  VERTICAL RHYTHM:
+  - Sections breathe: 96px of padding on mobile, 128-160px on desktop. Cramped, evenly padded
+    sections are what make a page look like a template.
+  - Vary it: the hero and the closing call to action get more room than a trust strip.
+
   PALETTE RECIPE:
   - One accent chosen for the sector (cleaning: deep teal or fresh blue-green; legal: navy or
     burgundy; food: warm terracotta or olive; trades: safety orange or slate blue).
@@ -57,6 +70,16 @@ export const CRESOVA_DESIGN_KIT = `
   Droplets, Zap, Users, ThumbsUp, Calendar, CreditCard, Quote, Instagram, Facebook, Send, Home,
   Building2, Car, Heart, Leaf, Lock, Search, Settings, Trash2, Timer, TrendingUp.
   If none fits, use a plain shape or text instead of guessing a name.
+
+  NEVER (these are the tells, each one alone gives the page away):
+  - Emoji standing in for icons.
+  - Gradient text, or the purple-to-blue gradient of every AI landing page.
+  - Everything centered. Centre the hero or the headings, not both and not the whole page.
+  - Three equal cards in a row as the answer to every section.
+  - Placeholder copy. Write real, specific Spanish copy for this business and this sector, with
+    concrete numbers, real service names and a real service area. "Lorem ipsum", "Your Company"
+    or "Servicio 1" are worse than an empty section.
+  - The same radius, the same shadow and the same padding on every single element.
 
   FLOATING WHATSAPP: fixed bottom-right, 56px, accent background, lucide MessageCircle icon,
   aria-label in the page language, href https://wa.me/NUMERO.
