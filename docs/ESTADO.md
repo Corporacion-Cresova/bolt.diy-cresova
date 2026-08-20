@@ -270,6 +270,25 @@ concreta si falta.
 nunca, y falla en silencio. Le pasó a `MAX_COMPLETION_TOKENS`, que estuvo muerto desde que lo
 añadí hasta el build 151.
 
+## 5 ter. El MCP de EasyPanel
+
+`.mcp.json` en la raíz declara el servidor `easypanel-mcp-server`, **sin el token dentro**: sólo
+referencias a `${EASYPANEL_URL}` y `${EASYPANEL_TOKEN}`, que tienen que existir en el entorno de
+quien lanza Claude Code.
+
+Arranca en **`readonly`** y con **`EASYPANEL_RAW_DISABLED=1`**, y eso es deliberado:
+
+- La documentación del propio MCP avisa de que las lecturas de `easypanel_raw` **no** están
+  cubiertas por el modo de sólo lectura y pueden devolver secretos.
+- Las claves de este proyecto —`OPEN_ROUTER_API_KEY`, `RUNNER_TOKEN`— viven justamente en las
+  variables de entorno de EasyPanel. Una lectura cruda las traería a la conversación, que es
+  exactamente lo que la regla de seguridad prohíbe.
+- Este producto procesa contenido no fiable todo el rato (salida de modelos, logs, comentarios),
+  que es el escenario de inyección de prompts contra el que avisa esa documentación.
+
+Para diagnosticar —leer logs, ver estado, comprobar variables definidas— `readonly` basta. Subir a
+`full` es una decisión consciente, no el punto de partida.
+
 ## 6. Límites conocidos del camino en servidor
 
 Ninguno impide generar y ver un sitio.
