@@ -2,7 +2,7 @@ import { atom } from 'nanostores';
 import { createScopedLogger } from '~/utils/logger';
 import { RemoteContainer, RunnerConnection } from './remote-container';
 
-export type ExecutionBackend = 'starting' | 'webcontainer' | 'runner';
+export type ExecutionBackend = 'starting' | 'webcontainer' | 'runner' | 'runner-lost';
 
 /**
  * Where the project is running, for the header to show.
@@ -60,9 +60,8 @@ function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<
  * here — no runner, an expired ticket, a network that will not reach it — is answered the same
  * way: fall back rather than leave the workbench with nothing to run on.
  */
-export async function connectToRunner(): Promise<RemoteContainer | undefined> {
-  const projectId = getProjectId();
-
+/** Asks the server for a ticket. Returns undefined when server side execution is not configured. */
+async function requestTicket(projectId: string) {
   const giveUp = new AbortController();
   const ticketDeadline = setTimeout(() => giveUp.abort(), TICKET_TIMEOUT_MS);
 
@@ -87,7 +86,45 @@ export async function connectToRunner(): Promise<RemoteContainer | undefined> {
     return undefined;
   }
 
-  const connection = new RunnerConnection(toWebSocketUrl(payload.runnerUrl), payload.ticket, projectId);
+  return { runnerUrl: payload.runnerUrl, ticket: payload.ticket };
+}
+
+/**
+ * Connects to the Cresova Runner, or returns undefined so the caller keeps using WebContainer.
+ *
+ * Server side execution is off until RUNNER_URL and RUNNER_TOKEN are configured, and any failure
+ * here — no runner, an expired ticket, a network that will not reach it — is answered the same
+ * way: fall back rather than leave the workbench with nothing to run on.
+ */
+export async function connectToRunner(): Promise<RemoteContainer | undefined> {
+  const projectId = getProjectId();
+  const issued = await requestTicket(projectId);
+
+  if (!issued) {
+    return undefined;
+  }
+
+  /*
+   * A function, not the ticket itself: tickets last five minutes, so reconnecting after the runner
+   * restarts needs a fresh one rather than a replay of this one.
+   */
+  const connection = new RunnerConnection(
+    toWebSocketUrl(issued.runnerUrl),
+    async () => {
+      const renewed = await requestTicket(projectId);
+
+      if (!renewed) {
+        throw new Error('The server no longer issues runner tickets');
+      }
+
+      return renewed.ticket;
+    },
+    projectId,
+  );
+
+  connection.onStateChange = (state) => {
+    executionBackendStore.set(state === 'open' ? 'runner' : 'runner-lost');
+  };
 
   try {
     await withTimeout(connection.connect(), CONNECT_TIMEOUT_MS, 'The runner did not answer in time');

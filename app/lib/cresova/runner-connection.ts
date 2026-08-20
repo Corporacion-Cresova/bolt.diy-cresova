@@ -4,6 +4,12 @@ const logger = createScopedLogger('CresovaRunner');
 
 const CALL_TIMEOUT_MS = 60_000;
 
+/** How long a call waits for a dropped connection to come back before giving up. */
+const RECONNECT_GRACE_MS = 30_000;
+const RECONNECT_ATTEMPTS = 5;
+
+export type ConnectionState = 'open' | 'reconnecting' | 'closed';
+
 export type RunnerEvent =
   | { type: 'ready'; projectId: string; previewUrl: string; port: number }
   | { type: 'output'; processId: string; stream: 'stdout' | 'stderr'; data: string }
@@ -26,18 +32,47 @@ export class RunnerConnection {
   #listeners = new Map<EventName, Set<Listener>>();
   #nextId = 1;
 
+  #state: ConnectionState = 'closed';
+  #reconnected?: Promise<void>;
+  #deliberatelyClosed = false;
+  #requestTicket: () => Promise<string>;
+
+  onStateChange?: (state: ConnectionState) => void;
+
+  /**
+   * `ticket` may be a string or a function that produces one.
+   *
+   * Reconnecting needs a *fresh* ticket — they last five minutes — so the connection has to be able
+   * to ask for one rather than replay the one it was handed.
+   */
   constructor(
     private _url: string,
-    private _ticket: string,
+    ticket: string | (() => Promise<string>),
     private _projectId: string,
-  ) {}
+  ) {
+    this.#requestTicket = typeof ticket === 'function' ? ticket : async () => ticket;
+  }
+
+  get state(): ConnectionState {
+    return this.#state;
+  }
+
+  #setState(state: ConnectionState) {
+    if (this.#state === state) {
+      return;
+    }
+
+    this.#state = state;
+    this.onStateChange?.(state);
+  }
 
   async connect(): Promise<{ previewUrl: string; port: number }> {
     /*
      * A ticket, not the shared secret: it is scoped to this project, expires in minutes, and is
      * issued by the app server through /api/runner-ticket.
      */
-    const address = `${this._url}/connect?projectId=${encodeURIComponent(this._projectId)}&ticket=${encodeURIComponent(this._ticket)}`;
+    const ticket = await this.#requestTicket();
+    const address = `${this._url}/connect?projectId=${encodeURIComponent(this._projectId)}&ticket=${encodeURIComponent(ticket)}`;
 
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(address);
@@ -45,17 +80,91 @@ export class RunnerConnection {
 
       socket.addEventListener('message', (message) => this.#dispatch(String(message.data)));
       socket.addEventListener('error', () => reject(new Error('Could not reach the Cresova Runner')));
-      socket.addEventListener('close', () => this.#failAllPending('The connection to the runner closed'));
+      socket.addEventListener('close', () => this.#handleClose());
 
       const unsubscribe = this.on('ready', (event) => {
         unsubscribe();
 
         if (event.type === 'ready') {
           logger.info(`Project ${event.projectId} ready, preview at ${event.previewUrl}`);
+          this.#setState('open');
           resolve({ previewUrl: event.previewUrl, port: event.port });
         }
       });
     });
+  }
+
+  /**
+   * A dropped socket used to be permanent: every later call failed, the workbench went quiet, and
+   * nothing said why. The runner restarting is routine — a redeploy is enough — so the connection
+   * comes back on its own and calls made meanwhile wait for it instead of failing.
+   */
+  #handleClose() {
+    /*
+     * Calls that were in flight cannot be replayed safely: the runner may have already run the
+     * command. They fail; the reconnection is for what comes after.
+     */
+    this.#failAllPending('The connection to the runner closed');
+
+    if (this.#deliberatelyClosed || this.#state === 'reconnecting') {
+      return;
+    }
+
+    this.#setState('reconnecting');
+    logger.warn('The runner connection dropped, reconnecting');
+
+    this.#reconnected = this.#reconnect();
+  }
+
+  async #reconnect(): Promise<void> {
+    for (let attempt = 1; attempt <= RECONNECT_ATTEMPTS; attempt++) {
+      // a restarting runner needs a moment before it accepts sockets again
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** (attempt - 1), 8000)));
+
+      if (this.#deliberatelyClosed) {
+        return;
+      }
+
+      try {
+        await this.connect();
+        logger.info('The runner connection is back');
+
+        return;
+      } catch {
+        // keep trying until the attempts run out
+      }
+    }
+
+    this.#setState('closed');
+    throw new Error('The Cresova Runner did not come back');
+  }
+
+  /** Resolves once the connection is usable, or throws if it will not come back. */
+  async #whenOpen(): Promise<WebSocket> {
+    const socket = this.#socket;
+
+    if (socket && socket.readyState === socket.OPEN) {
+      return socket;
+    }
+
+    if (this.#state !== 'reconnecting' || !this.#reconnected) {
+      throw new Error('The runner connection is not open');
+    }
+
+    await Promise.race([
+      this.#reconnected,
+      new Promise<never>((_resolve, reject) =>
+        setTimeout(() => reject(new Error('The runner did not come back in time')), RECONNECT_GRACE_MS),
+      ),
+    ]);
+
+    const reopened = this.#socket;
+
+    if (!reopened || reopened.readyState !== reopened.OPEN) {
+      throw new Error('The runner connection is not open');
+    }
+
+    return reopened;
   }
 
   #dispatch(raw: string) {
@@ -103,13 +212,8 @@ export class RunnerConnection {
     return () => this.#listeners.get(event)?.delete(listener);
   }
 
-  call<T>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
-    const socket = this.#socket;
-
-    if (!socket || socket.readyState !== socket.OPEN) {
-      return Promise.reject(new Error('The runner connection is not open'));
-    }
-
+  async call<T>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
+    const socket = await this.#whenOpen();
     const id = this.#nextId++;
 
     return new Promise<T>((resolve, reject) => {
@@ -138,6 +242,8 @@ export class RunnerConnection {
   }
 
   close() {
+    this.#deliberatelyClosed = true;
+    this.#setState('closed');
     this.#socket?.close();
   }
 }

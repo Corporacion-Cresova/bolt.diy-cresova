@@ -87,7 +87,15 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (request.url === '/health') {
+  /*
+   * Anything addressed to the service itself rather than to a preview is a health check. It answers
+   * on '/' as well as '/health' because an orchestrator that probes '/' and gets a 404 concludes
+   * the service is down and restarts it — which shows up as a SIGTERM here and, in the browser, as
+   * a session that silently stops responding.
+   */
+  const path = (request.url ?? '/').split('?')[0];
+
+  if (path === '/' || path === '/health') {
     response.writeHead(200, { 'content-type': 'application/json' });
     response.end(JSON.stringify({ ok: true, ...projects.stats() }));
 
@@ -244,6 +252,15 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
 
     shuttingDown = true;
     console.log(`Cresova Runner stopping on ${signal}, closing every project`);
+
+    /*
+     * The sockets have to be closed explicitly. server.close() only stops new connections, so an
+     * open browser would keep talking to a service that is on its way out and lose whatever it sent
+     * in that window, with nothing to tell it to reconnect.
+     */
+    for (const socket of [...sockets.values()].flatMap((set) => [...set])) {
+      socket.close(1012, 'The runner is restarting');
+    }
 
     void projects.closeAll().finally(() => {
       server.close(() => process.exit(0));

@@ -195,6 +195,24 @@ asignación de puertos comprueba que el puerto esté realmente libre intentando 
 
 Esto apareció al probar con Vite real: el proxy devolvió el contenido de una prueba anterior.
 
+### El runner se reinicia y eso es normal
+
+`SIGTERM` en los logs del runner no es un fallo suyo: es algo externo ordenándole parar. En
+EasyPanel eso es un redespliegue, un reinicio manual, o **un health check que falla**. El runner
+responde 200 en `/` y en `/health`; si alguna vez se cambia eso, un orquestador que sondee `/` verá
+un 404, concluirá que el servicio está caído y lo reiniciará en bucle.
+
+Dos consecuencias que costaron una sesión entera de depuración:
+
+1. **La conexión tenía que sobrevivir al reinicio.** Antes, un socket caído era definitivo: toda
+   llamada posterior fallaba con *"The runner connection is not open"*, el workbench se quedaba
+   mudo y nada decía por qué. Ahora reconecta sola pidiendo un ticket nuevo —los tickets caducan a
+   los cinco minutos, así que no vale reusar el anterior— y las llamadas hechas mientras tanto
+   esperan en vez de fallar.
+2. **Al apagarse hay que cerrar los WebSockets a mano.** `server.close()` sólo deja de aceptar
+   conexiones nuevas; las abiertas siguen vivas. Sin cerrarlas, el navegador seguía hablándole a un
+   servicio que se estaba yendo y perdía en silencio lo que enviara en esa ventana.
+
 ### La causa raíz de casi todos los fallos de generación
 
 El modelo tiene que escribir un sitio web entero con **8192 tokens de salida**. Eso fuerza
@@ -257,7 +275,7 @@ Ninguno impide generar y ver un sitio.
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 114 pruebas en 12 archivos
+npx vitest run        # 115 pruebas en 13 archivos
 pnpm build            # remix vite build
 ```
 
