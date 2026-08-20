@@ -7,8 +7,13 @@ import { ScreenshotSelector } from './ScreenshotSelector';
 import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import type { ElementInfo } from './Inspector';
+import { executionBackendStore } from '~/lib/cresova/execution-backend';
 
 type ResizeSide = 'left' | 'right' | null;
+
+/** How long to give the dev server to answer before assuming the first load missed it. */
+const PREVIEW_LOAD_RETRY_MS = 3000;
+const PREVIEW_LOAD_ATTEMPTS = 3;
 
 interface PreviewProps {
   setSelectedElement?: (element: ElementInfo | null) => void;
@@ -88,6 +93,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const [showDeviceFrame, setShowDeviceFrame] = useState(true);
   const [showDeviceFrameInPreview, setShowDeviceFrameInPreview] = useState(false);
   const expoUrl = useStore(expoUrlAtom);
+  const executionBackend = useStore(executionBackendStore);
   const [isExpoQrModalOpen, setIsExpoQrModalOpen] = useState(false);
 
   useEffect(() => {
@@ -122,6 +128,50 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       iframeRef.current.src = iframeRef.current.src;
     }
   };
+
+  /*
+   * The port opens a moment before the dev server actually answers on it, so the first load of the
+   * preview can land on nothing and the page stays blank until someone presses reload by hand.
+   *
+   * The injected inspector script announces itself once the page has really rendered, and it can
+   * only do that if the page loaded, so its silence is the signal to try again. A couple of
+   * attempts, then stop: a page that never announces itself is not going to start now.
+   */
+  useEffect(() => {
+    if (!iframeUrl || executionBackend === 'runner') {
+      /*
+       * Server side previews are proxied pages with no script injected, so there would be no
+       * announcement to wait for and every reload would be pointless.
+       */
+      return undefined;
+    }
+
+    let rendered = false;
+    let attempts = 0;
+
+    const noteRendered = (event: MessageEvent) => {
+      if (event.data?.type === 'INSPECTOR_READY') {
+        rendered = true;
+      }
+    };
+
+    window.addEventListener('message', noteRendered);
+
+    const retry = setInterval(() => {
+      if (rendered || attempts >= PREVIEW_LOAD_ATTEMPTS) {
+        clearInterval(retry);
+        return;
+      }
+
+      attempts++;
+      reloadPreview();
+    }, PREVIEW_LOAD_RETRY_MS);
+
+    return () => {
+      window.removeEventListener('message', noteRendered);
+      clearInterval(retry);
+    };
+  }, [iframeUrl, executionBackend]);
 
   const toggleFullscreen = async () => {
     if (!isFullscreen && containerRef.current) {
