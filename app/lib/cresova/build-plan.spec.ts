@@ -111,3 +111,51 @@ describe('renderPlanForDisplay', () => {
     expect(renderPlanForDisplay('Listo, ya tienes tu web.')).toBe('Listo, ya tienes tu web.');
   });
 });
+
+/*
+ * Taken from a real run: DeepSeek announced `**FASE 1**: ...` as a heading and never wrote the
+ * tag, so the plan read as decoration and nothing ever asked for the second phase.
+ */
+describe('a plan the model announced in prose instead of in the tag', () => {
+  const prose = [
+    'Voy a construirlo por partes.',
+    '',
+    '**FASE 1**: Configuración completa + sistema de diseño + navbar + hero + footer',
+    '**FASE 2**: Secciones de servicios y galería',
+    '**FASE 3**: Formulario de contacto y pulido final',
+  ].join('\n');
+
+  it('reads the phases', () => {
+    expect(parsePlan(prose)?.phases).toEqual([
+      'Configuración completa + sistema de diseño + navbar + hero + footer',
+      'Secciones de servicios y galería',
+      'Formulario de contacto y pulido final',
+    ]);
+  });
+
+  it('asks for the second phase, the same as it would with the tag', () => {
+    expect(nextPhase([{ id: '1', role: 'assistant', content: prose }])).toEqual({
+      number: 2,
+      total: 3,
+      description: 'Secciones de servicios y galería',
+    });
+  });
+
+  it('leaves the message alone when it is shown, because prose already reads as prose', () => {
+    expect(renderPlanForDisplay(prose)).toBe(prose);
+  });
+
+  it('ignores a single phase, which is a model narrating rather than planning', () => {
+    expect(parsePlan('**FASE 1**: Configuración y navbar\n\nYa lo tienes.')).toBeUndefined();
+  });
+
+  it('ignores phases that are out of order, repeated or skipped', () => {
+    expect(parsePlan('FASE 1: uno\nFASE 3: tres')).toBeUndefined();
+    expect(parsePlan('FASE 2: dos\nFASE 3: tres')).toBeUndefined();
+    expect(parsePlan('FASE 1: uno\nFASE 1: otra vez')).toBeUndefined();
+  });
+
+  it('ignores a mention of a phase inside a sentence', () => {
+    expect(parsePlan('Terminé la FASE 1: quedó bien. Ahora la FASE 2: sigo.')).toBeUndefined();
+  });
+});
