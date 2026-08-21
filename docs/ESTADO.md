@@ -286,6 +286,25 @@ mucho después como `npm error enoent ... package.json`.
 Ahora `toWorkdirRelative` convierte sólo las absolutas y deja las relativas en paz, y un fallo de
 escritura **corta la acción** en vez de callarse.
 
+### Una acción que falla cancelaba todas las siguientes
+
+`addToExecutionQueue` encadenaba con `chain.then(() => callback())`. Encadenar así encadena también
+el **fallo**: una acción rechazada deja la cadena rechazada, y todo lo que se añada después se salta
+sin ejecutarse, sin registrarse y sin nada en pantalla. Una construcción que muere en su tercer
+archivo se ve exactamente igual que un modelo que deja de escribir — el tipo de fallo más caro,
+porque manda la investigación hacia el modelo en vez de hacia nosotros.
+
+El disparador estaba en `FilesStore.saveFile`: trataba «el archivo no está todavía en el almacén»
+como `unreachable`. Pero un archivo que el modelo acaba de crear **no está** en el almacén; no hay
+versión anterior que recordar para el reset, y eso no es un estado roto. Los dos se arreglaron:
+`queueTask` reporta el fallo y devuelve la cadena sana, y `saveFile` acepta un archivo nuevo.
+
+Detalle que costó entender el orden de los hechos: el eco de escrituras del navegador (§ árbol de
+archivos) **tapó este fallo sin querer**, porque al llenar el almacén durante el streaming hacía que
+`saveFile` encontrara contenido previo. Por eso la generación empezó a funcionar mejor justo después
+de aquel arreglo, y por eso saltarse las escrituras parciales en el runner —que parecía una
+optimización obvia— habría reintroducido el fallo entero.
+
 ### Un fallo del modelo se cerraba como si el modelo hubiera terminado
 
 Tres sitios de `api.chat.ts` registraban un fallo del stream y luego cerraban la respuesta
@@ -427,6 +446,10 @@ Ninguno impide generar y ver un sitio.
   página con proxy, no un iframe que controlemos.
 - Cosmético: la lista de artefactos todavía muestra filas de archivo duplicadas. La ejecución sí se
   omite correctamente.
+- Cosmético: el editor parpadea mientras se escribe un archivo. Cada muestra del streaming reescribe
+  el archivo entero (cada 100 ms), y en el runner eso es un viaje por el socket que además vuelve
+  como evento y repinta el editor. Saltarse las escrituras parciales parece la solución y **no lo
+  es**: ver arriba.
 
 ## 7. Pendientes
 
@@ -467,7 +490,7 @@ correcta:
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 169 pruebas en 17 archivos
+npx vitest run        # 172 pruebas en 18 archivos
 pnpm build            # remix vite build
 ```
 
