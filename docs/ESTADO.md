@@ -414,7 +414,31 @@ Ninguno impide generar y ver un sitio.
 | Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
-| Calidad visual | Prioridad 2, después de la base. |
+| Calidad visual | **Prioridad 2**, después de la base. |
+| Interfaz al estilo Lovable | **Prioridad 3**, lo último. Ver abajo. |
+
+### Interfaz al estilo Lovable (prioridad 3)
+
+El usuario pidió una barra superior como la de Lovable. El hallazgo importante es que **casi todo
+ya existe**, repartido entre tres sitios, y tres de esas cosas sólo se ven si estás en la pestaña
+correcta:
+
+| Botón de Lovable | Qué hay hoy | Dónde vive |
+|---|---|---|
+| Vista previa / código / capas | Slider Code · Diff · Preview | `Workbench.client.tsx` |
+| Modo dispositivo, refrescar, abrir fuera | Sí, con marcos de iPhone/iPad/laptop | Dentro de `Preview.tsx` |
+| `Publish` | Botón Deploy (Netlify, Vercel, GitHub, GitLab) | Cabecera |
+| Base de datos | Integración Supabase completa | Ajustes → pestaña Supabase |
+| `Share` | Export/Import de chat + Sync | Sólo en la vista de código |
+
+- **Barato** (una tarde, riesgo cero): unificar todo en una sola barra y restilarla como píldora
+  segmentada. Sólo se mueven componentes que ya funcionan.
+- **Feature de verdad**: el selector de páginas (`Homepage ▾`) necesita leer las rutas del proyecto
+  generado. Versión a mitad de camino: `displayPath` ya existe en el preview, convertirlo en campo
+  editable con desplegable de rutas visitadas.
+- **No es interfaz**: `Publish` de verdad manda al VPS, no a Netlify. Eso es trabajo de servidor.
+- El panel de base de datos es re-superficie, no construcción, pero la integración de Supabase **no
+  está verificada contra el camino del VPS**. Comprobarlo antes de darle un botón prominente.
 
 ## 8. Cómo verificar
 
