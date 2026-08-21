@@ -1,3 +1,4 @@
+import { WORK_DIR } from '~/utils/constants';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('CresovaRunner');
@@ -283,6 +284,22 @@ export interface CommandResult {
  * on the server, so completion is taken from the process exit event instead, which is both simpler
  * and not tied to a shell's output format.
  */
+/**
+ * The whole app — and the model with it — is written against WebContainer's workdir, so commands
+ * arrive as `cd /home/project && npm install`. On the runner the project lives somewhere else
+ * entirely and every command already starts there, so the path is rewritten to `.` instead of
+ * being translated: the runner never needs to know what the browser calls its own directory, and
+ * a command that would otherwise die on `cd: can't cd to /home/project` simply runs.
+ *
+ * The lookahead keeps a directory that merely starts with the same letters (`/home/projects`) out
+ * of it.
+ */
+const WORKDIR_REFERENCE = new RegExp(`${WORK_DIR}(?![\\w-])`, 'g');
+
+export function toRunnerPaths(command: string): string {
+  return command.replace(WORKDIR_REFERENCE, '.');
+}
+
 export function runCommand(
   connection: RunnerConnection,
   command: string,
@@ -325,7 +342,7 @@ export function runCommand(
     const stopExit = connection.on('exit', handle);
 
     connection
-      .call<string>('spawn', { command, args })
+      .call<string>('spawn', { command: toRunnerPaths(command), args: args.map(toRunnerPaths) })
       .then((id) => {
         processId = id;
         onStart?.(id);
