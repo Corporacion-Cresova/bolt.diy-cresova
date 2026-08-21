@@ -105,6 +105,19 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
     let lastChunk: string | undefined = undefined;
 
+    /*
+     * Why a variable instead of a throw at the point of failure: every one of these failures
+     * happens inside a detached loop reading `fullStream`, where a throw is an unhandled rejection
+     * that reaches nobody. They used to be logged and then the response was closed as if the model
+     * had finished, so a build that died mid-sentence looked to the user exactly like a build that
+     * had chosen to stop — no error, no toast, nothing to act on. The failure is carried out to
+     * where the response is assembled and thrown there, so it reaches onError and the browser.
+     */
+    let streamFailure: Error | undefined;
+
+    const asError = (value: unknown): Error =>
+      value instanceof Error ? value : new Error(typeof value === 'string' ? value : JSON.stringify(value));
+
     const dataStream = createDataStream({
       async execute(dataStream) {
         streamRecovery.startMonitoring();
@@ -339,6 +352,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             } catch (error) {
               // never leave execute waiting on a chain that will not continue
               logger.error('Continuation failed', error);
+              streamFailure = asError(error);
               markAllSegmentsDone();
 
               return;
@@ -351,6 +365,8 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
                 for await (const part of result.fullStream) {
                   if (part.type === 'error') {
                     logger.error(`${(part.error as Error) ?? 'stream error'}`);
+                    streamFailure = asError(part.error ?? 'The model stopped mid-response');
+
                     return;
                   }
                 }
@@ -402,6 +418,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             if (part.type === 'error') {
               const error: any = part.error;
               logger.error('Streaming error:', error);
+              streamFailure = asError(error ?? 'The model stopped mid-response');
               streamRecovery.stop();
 
               // Enhanced error handling for common streaming issues
@@ -446,6 +463,14 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         ]);
 
         clearTimeout(releaseTimer);
+
+        /*
+         * Thrown after the partial answer has been merged, so whatever the model did manage to say
+         * stays on screen and the error arrives alongside it rather than replacing it.
+         */
+        if (streamFailure) {
+          throw streamFailure;
+        }
       },
       onError: (error: any) => {
         // Provide more specific error messages for common issues

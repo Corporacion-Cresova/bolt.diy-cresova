@@ -286,6 +286,28 @@ mucho después como `npm error enoent ... package.json`.
 Ahora `toWorkdirRelative` convierte sólo las absolutas y deja las relativas en paz, y un fallo de
 escritura **corta la acción** en vez de callarse.
 
+### Un fallo del modelo se cerraba como si el modelo hubiera terminado
+
+Tres sitios de `api.chat.ts` registraban un fallo del stream y luego cerraban la respuesta
+limpiamente: el error del primer segmento, el `streamText` de una continuación que lanza, y el
+error de una continuación en curso. Los tres viven dentro de un bucle desacoplado sobre
+`fullStream`, donde un `throw` es un rechazo sin dueño que no llega a nadie.
+
+El resultado para el usuario era peor que un error: la generación se cortaba a mitad de frase, sin
+aviso, indistinguible de un modelo que decide parar. El fallo se lleva ahora hasta donde se arma la
+respuesta y se lanza allí, después de haber fusionado lo que sí llegó — así el texto parcial se
+queda en pantalla y el error aparece al lado, no en su lugar.
+
+### Los modelos no siempre usan la etiqueta del plan
+
+DeepSeek V4 anunció `**FASE 1**: ...` como encabezado y nunca escribió `<cresovaPlan>`. Sin la
+etiqueta, `findPlan` no encuentra nada y el avance automático no dispara: las fases se leen como
+decoración, la construcción para tras la primera y nadie pide la segunda.
+
+`parsePlan` acepta ahora las dos formas. La versión en prosa exige **dos fases numeradas desde uno
+y en orden**: un `FASE 1` suelto es un modelo narrando lo que hace, y actuar sobre él mandaría una
+petición de pago por una fase que nadie describió.
+
 ### `cd /home/project` no existe en el VPS
 
 El modelo escribe `cd /home/project && npm install` porque es lo que se le dice que es el directorio
@@ -445,7 +467,7 @@ correcta:
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 163 pruebas en 17 archivos
+npx vitest run        # 169 pruebas en 17 archivos
 pnpm build            # remix vite build
 ```
 

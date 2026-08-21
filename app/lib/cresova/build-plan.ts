@@ -29,8 +29,8 @@ export interface BuildPlan {
   phases: string[];
 }
 
-/** Reads a plan out of one message. */
-export function parsePlan(content: string): BuildPlan | undefined {
+/** Reads a plan out of the tag block the contract asks for. */
+function parsePlanBlock(content: string): BuildPlan | undefined {
   const start = content.indexOf(PLAN_OPEN);
   const end = content.indexOf(PLAN_CLOSE);
 
@@ -45,6 +45,43 @@ export function parsePlan(content: string): BuildPlan | undefined {
     .filter((line) => line.length > 0);
 
   return phases.length > 1 ? { phases: phases.slice(0, MAX_PHASES) } : undefined;
+}
+
+/** `FASE 2` written as a heading, with or without the markdown bold the models like to add. */
+const PROSE_PHASE = /^[\s>*_-]*(?:\*\*|__)?\s*FASE\s*(\d+)\s*(?:\*\*|__)?\s*[:.)-]\s*(.+)$/gim;
+
+/**
+ * Reads a plan the model announced in prose instead of in the tag.
+ *
+ * Not every model follows a custom tag reliably — some write `**FASE 1**: navbar y hero` as a
+ * heading and get on with it. Without this the phases read as decoration: the build stops after
+ * the first one and nothing asks for the second, which looks exactly like the model giving up.
+ *
+ * Two separate phases are required, numbered from one and in order. A single `FASE 1` is a model
+ * narrating what it is doing, not a plan, and acting on it would send a paid request for a phase
+ * nobody described.
+ */
+function parseProsePlan(content: string): BuildPlan | undefined {
+  const phases: string[] = [];
+
+  for (const match of content.matchAll(PROSE_PHASE)) {
+    const number = Number(match[1]);
+    const description = match[2].replace(/\*\*/g, '').trim();
+
+    // out of order, repeated or skipped: not a plan, whatever it is
+    if (number !== phases.length + 1 || description.length === 0) {
+      return undefined;
+    }
+
+    phases.push(description);
+  }
+
+  return phases.length > 1 ? { phases: phases.slice(0, MAX_PHASES) } : undefined;
+}
+
+/** Reads a plan out of one message, however the model chose to write it. */
+export function parsePlan(content: string): BuildPlan | undefined {
+  return parsePlanBlock(content) ?? parseProsePlan(content);
 }
 
 /** Strips the plan block entirely, for the places that only want the prose. */
@@ -66,7 +103,8 @@ export function stripPlan(content: string): string {
  * is the difference between waiting and wondering whether it broke. Only the tags go.
  */
 export function renderPlanForDisplay(content: string): string {
-  const plan = parsePlan(content);
+  // only the tag needs replacing; a plan written in prose already reads as prose
+  const plan = parsePlanBlock(content);
 
   if (!plan) {
     return content;
