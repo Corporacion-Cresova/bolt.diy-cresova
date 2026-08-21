@@ -18,8 +18,12 @@ import { description } from '~/lib/persistence';
 import Cookies from 'js-cookie';
 import { createSampler } from '~/utils/sampler';
 import type { ActionAlert, DeployAlert, SupabaseAlert } from '~/types/actions';
+import { createScopedLogger } from '~/utils/logger';
+import { queueTask } from './execution-queue';
 
 const { saveAs } = fileSaver;
+
+const logger = createScopedLogger('Workbench');
 
 export interface ArtifactState {
   id: string;
@@ -80,7 +84,9 @@ export class WorkbenchStore {
   }
 
   addToExecutionQueue(callback: () => Promise<void>) {
-    this.#globalExecutionQueue = this.#globalExecutionQueue.then(() => callback());
+    this.#globalExecutionQueue = queueTask(this.#globalExecutionQueue, callback, (error) => {
+      logger.error('An action failed; the queue continues with the next one', error);
+    });
   }
 
   /**

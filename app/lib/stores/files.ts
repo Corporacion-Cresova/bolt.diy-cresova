@@ -7,7 +7,6 @@ import { bufferWatchEvents } from '~/utils/buffer';
 import { WORK_DIR } from '~/utils/constants';
 import { computeFileModifications } from '~/utils/diff';
 import { createScopedLogger } from '~/utils/logger';
-import { unreachable } from '~/utils/unreachable';
 import {
   addLockedFile,
   removeLockedFile,
@@ -557,15 +556,17 @@ export class FilesStore {
         throw new Error(`EINVAL: invalid file path, write '${relativePath}'`);
       }
 
+      /*
+       * A file the model has just created is not in the store yet, and that is not a broken state:
+       * there is simply no earlier version to remember for the reset. It used to be treated as
+       * unreachable, which threw from inside the action queue — and a throw there cancelled every
+       * action still to come, so the build stopped at that file with nothing on screen to say why.
+       */
       const oldContent = this.getFile(filePath)?.content;
-
-      if (!oldContent && oldContent !== '') {
-        unreachable('Expected content to be defined');
-      }
 
       await webcontainer.fs.writeFile(relativePath, content);
 
-      if (!this.#modifiedFiles.has(filePath)) {
+      if (oldContent !== undefined && !this.#modifiedFiles.has(filePath)) {
         this.#modifiedFiles.set(filePath, oldContent);
       }
 
