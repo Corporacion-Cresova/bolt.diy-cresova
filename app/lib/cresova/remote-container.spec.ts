@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RemoteContainer, RunnerConnection, runCommand } from './remote-container';
+import { toRunnerPaths } from './runner-connection';
 
 /*
  * Exercises the adapter against a real runner rather than a mock: what is worth protecting here is
@@ -140,6 +141,25 @@ describe.skipIf(!RUNNER_READY)('RemoteContainer against a live runner', () => {
     connection.close();
   });
 
+  /*
+   * The model is told the project lives in `/home/project`, so it writes `cd /home/project && npm
+   * install`. That directory does not exist on the VPS, and the `&&` turns a failed `cd` into a
+   * failed build: every command in the artifact dies before it starts.
+   */
+  it('runs a command that cds into the workdir the browser believes in', async () => {
+    const { connection } = await connect('workdir-demo');
+    const container = new RemoteContainer(connection);
+
+    await container.fs.writeFile('marker.txt', 'hola');
+
+    const result = await runCommand(connection, 'cd /home/project && ls', []);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.output).toContain('marker.txt');
+
+    connection.close();
+  });
+
   it('captures the result of a command that exits before spawn is acknowledged', async () => {
     const { connection } = await connect('fast-demo');
     const result = await runCommand(connection, 'echo', ['listo']);
@@ -184,4 +204,21 @@ describe.skipIf(!RUNNER_READY)('RemoteContainer against a live runner', () => {
 
     connection.close();
   }, 15000);
+});
+
+describe('rewriting the workdir out of a command', () => {
+  it("turns the browser's workdir into the directory the command already starts in", () => {
+    expect(toRunnerPaths('cd /home/project && npm install')).toBe('cd . && npm install');
+    expect(toRunnerPaths('node /home/project/server.js')).toBe('node ./server.js');
+    expect(toRunnerPaths('cd /home/project')).toBe('cd .');
+  });
+
+  it('leaves a directory that merely starts the same way alone', () => {
+    expect(toRunnerPaths('ls /home/projects')).toBe('ls /home/projects');
+    expect(toRunnerPaths('ls /home/project-old')).toBe('ls /home/project-old');
+  });
+
+  it('leaves a command with nothing to rewrite untouched', () => {
+    expect(toRunnerPaths('npm run dev')).toBe('npm run dev');
+  });
 });

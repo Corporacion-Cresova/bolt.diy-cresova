@@ -286,6 +286,18 @@ mucho después como `npm error enoent ... package.json`.
 Ahora `toWorkdirRelative` convierte sólo las absolutas y deja las relativas en paz, y un fallo de
 escritura **corta la acción** en vez de callarse.
 
+### `cd /home/project` no existe en el VPS
+
+El modelo escribe `cd /home/project && npm install` porque es lo que se le dice que es el directorio
+de trabajo, y en WebContainer lo es. En el runner el proyecto vive en `/data/projects/<id>`, así que
+el `cd` fallaba (`/bin/sh: 1: cd: can't cd to /home/project`, salida 2) y el `&&` convertía un `cd`
+fallido en una compilación fallida: **todos** los comandos del artefacto morían antes de empezar. Se
+veía como *Failed To Start Application* sin más explicación.
+
+La ruta se reescribe a `.` en vez de traducirse (`toRunnerPaths`, en `runner-connection.ts`): el
+comando ya arranca en el directorio del proyecto, así que el runner nunca tiene que saber cómo llama
+el navegador a su propio directorio.
+
 ### El árbol de archivos vacío no era un problema estético
 
 En el camino del VPS, `internal.watchPaths` era un no-op, así que el árbol quedaba vacío. Eso no
@@ -409,7 +421,7 @@ Ninguno impide generar y ver un sitio.
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 159 pruebas en 17 archivos
+npx vitest run        # 163 pruebas en 17 archivos
 pnpm build            # remix vite build
 ```
 
