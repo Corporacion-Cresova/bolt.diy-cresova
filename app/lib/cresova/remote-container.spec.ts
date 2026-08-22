@@ -251,6 +251,19 @@ describe.skipIf(!RUNNER_READY)('RemoteContainer against a live runner', () => {
     connection.close();
   });
 
+  /*
+   * An out of date runner does not know a method the browser has learned to send. Dropping the
+   * message leaves the browser waiting for a reply that is never coming, until its own timeout
+   * accuses a healthy runner of being hung — with nothing in the runner's log to contradict it.
+   */
+  it('answers a method it does not know instead of leaving the caller waiting', async () => {
+    const { connection } = await connect('unknown-method-demo');
+
+    await expect(connection.call('quePasaAqui')).rejects.toThrow(/Unknown method: quePasaAqui/);
+
+    connection.close();
+  });
+
   it('captures the result of a command that exits before spawn is acknowledged', async () => {
     const { connection } = await connect('fast-demo');
     const result = await runCommand(connection, 'echo', ['listo']);

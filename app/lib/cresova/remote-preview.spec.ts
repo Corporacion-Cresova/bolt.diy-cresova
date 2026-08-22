@@ -42,17 +42,21 @@ async function issueTicket(secret: string, projectId: string) {
  * would always land on the 404 branch and prove nothing.
  */
 function getThroughProxy(host: string, path = '/') {
-  return new Promise<{ status: number; body: string }>((resolve, reject) => {
-    const call = request({ host: '127.0.0.1', port: PORT, path, headers: { host } }, (response) => {
-      let body = '';
-      response.setEncoding('utf8');
-      response.on('data', (chunk) => (body += chunk));
-      response.on('end', () => resolve({ status: response.statusCode ?? 0, body }));
-    });
+  return new Promise<{ status: number; body: string; headers: Record<string, string | string[] | undefined> }>(
+    (resolve, reject) => {
+      const call = request({ host: '127.0.0.1', port: PORT, path, headers: { host } }, (response) => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => (body += chunk));
+        response.on('end', () =>
+          resolve({ status: response.statusCode ?? 0, body, headers: response.headers as never }),
+        );
+      });
 
-    call.on('error', reject);
-    call.end();
-  });
+      call.on('error', reject);
+      call.end();
+    },
+  );
 }
 
 function fakeTerminal(): ITerminal {
@@ -258,6 +262,23 @@ describe.skipIf(!RUNNER_READY)('a project running end to end on the runner', () 
 
     connection.close();
   }, 60_000);
+
+  /*
+   * The builder is served with `Cross-Origin-Embedder-Policy: require-corp`, which WebContainer
+   * needs. Under it, a cross-origin iframe without this header is blocked before it renders, and
+   * the browser reports it as "refused to connect" — a working preview that reads as a dead server.
+   */
+  it('lets the builder embed the preview in its iframe', async () => {
+    const live = await getThroughProxy(`e2e-demo.${PREVIEW_DOMAIN}`);
+
+    expect(live.status).toBe(200);
+    expect(live.headers['cross-origin-resource-policy']).toBe('cross-origin');
+
+    // the same goes for the page that says a project is gone: unreadable in a frame is unhelpful
+    const gone = await getThroughProxy(`nunca-existio.${PREVIEW_DOMAIN}`);
+
+    expect(gone.headers['cross-origin-resource-policy']).toBe('cross-origin');
+  });
 
   it('does not serve a project to a host that names a different one', async () => {
     const page = await getThroughProxy(`someone-elses-project.${PREVIEW_DOMAIN}`);

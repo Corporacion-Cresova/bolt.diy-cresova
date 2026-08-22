@@ -51,6 +51,20 @@ function projectIdFromHost(host = '') {
   return isValidProjectId(id) ? id : undefined;
 }
 
+/**
+ * Lets the builder put a preview inside its iframe.
+ *
+ * `app/entry.server.tsx` serves the builder with `Cross-Origin-Embedder-Policy: require-corp`,
+ * which WebContainer needs. Under that policy every cross-origin subresource the page loads —
+ * an iframe included — has to opt in with this header, and a preview served without it is blocked
+ * before a single byte is rendered. The browser reports that as "refused to connect", which reads
+ * like the server is down when in fact it answered perfectly.
+ *
+ * Opting in is the runner saying its own previews may be embedded. It carries no credentials and
+ * exposes nothing that the preview URL did not already expose to anyone who has it.
+ */
+const EMBEDDABLE = { 'cross-origin-resource-policy': 'cross-origin' };
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -92,13 +106,16 @@ function servePublished(dir, request, response) {
   }
 
   if (!existsSync(filePath)) {
-    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', ...EMBEDDABLE });
     response.end('Este sitio publicado no tiene index.html.');
 
     return;
   }
 
-  response.writeHead(200, { 'content-type': MIME_TYPES[extname(filePath)] ?? 'application/octet-stream' });
+  response.writeHead(200, {
+    'content-type': MIME_TYPES[extname(filePath)] ?? 'application/octet-stream',
+    ...EMBEDDABLE,
+  });
   createReadStream(filePath).pipe(response);
 }
 
@@ -116,7 +133,7 @@ const server = createServer(async (request, response) => {
         return;
       }
 
-      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', ...EMBEDDABLE });
       response.end('Este proyecto ya no está activo. Vuelve a abrirlo en Cresova Builder.');
 
       return;
@@ -134,7 +151,7 @@ const server = createServer(async (request, response) => {
         headers: { ...request.headers, host: `127.0.0.1:${project.servingPort ?? project.port}` },
       },
       (upstreamResponse) => {
-        response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
+        response.writeHead(upstreamResponse.statusCode ?? 502, { ...upstreamResponse.headers, ...EMBEDDABLE });
         upstreamResponse.pipe(response);
       },
     );
@@ -276,7 +293,14 @@ wss.on('connection', async (ws) => {
 
     const handler = handlers[message.type];
 
+    /*
+     * Answering matters: a dropped message leaves the browser waiting for a reply that is never
+     * coming, until its own timeout calls the runner unresponsive. That is what an out of date
+     * runner looked like from the other side — a working service accused of being hung, with
+     * nothing in its log to contradict it.
+     */
     if (!handler) {
+      ws.send(JSON.stringify({ type: 'result', id: message.id, error: `Unknown method: ${message.type}` }));
       return;
     }
 

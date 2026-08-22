@@ -5,6 +5,16 @@ const logger = createScopedLogger('CresovaRunner');
 
 const CALL_TIMEOUT_MS = 60_000;
 
+/**
+ * What a call gets when it is the kind that runs a build.
+ *
+ * A minute is right for a filesystem call, and wrong for anything that shells out to a bundler: a
+ * real site takes longer than that to build, so publishing gave up on a runner that was working
+ * perfectly and still building. The runner keeps going either way — the timeout only decides how
+ * long the browser is willing to wait for the answer.
+ */
+export const BUILD_TIMEOUT_MS = 10 * 60_000;
+
 /** How long a call waits for a dropped connection to come back before giving up. */
 const RECONNECT_GRACE_MS = 30_000;
 const RECONNECT_ATTEMPTS = 5;
@@ -236,7 +246,7 @@ export class RunnerConnection {
     return () => this.#listeners.get(event)?.delete(listener);
   }
 
-  async call<T>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
+  async call<T>(type: string, payload: Record<string, unknown> = {}, timeoutMs = CALL_TIMEOUT_MS): Promise<T> {
     const socket = await this.#whenOpen();
     const id = this.#nextId++;
 
@@ -244,7 +254,7 @@ export class RunnerConnection {
       const timeout = setTimeout(() => {
         this.#pending.delete(id);
         reject(new Error(`The runner did not answer ${type} in time`));
-      }, CALL_TIMEOUT_MS);
+      }, timeoutMs);
 
       this.#pending.set(id, {
         resolve: ((value: T) => {
