@@ -1,5 +1,5 @@
 import { WORK_DIR } from '~/utils/constants';
-import { RunnerConnection } from './runner-connection';
+import { BUILD_TIMEOUT_MS, RunnerConnection } from './runner-connection';
 import { RemoteShellProcess, spawnRemoteProcess, type RemoteProcess } from './remote-shell';
 
 /*
@@ -62,7 +62,8 @@ export class RemoteContainer {
    * what you published before, not a way to end up with two.
    */
   publish(name: string): Promise<{ url: string }> {
-    return this._connection.call<{ url: string }>('publish', { name });
+    // runs the project's build on the server, which takes longer than an ordinary call is given
+    return this._connection.call<{ url: string }>('publish', { name }, BUILD_TIMEOUT_MS);
   }
 
   /**

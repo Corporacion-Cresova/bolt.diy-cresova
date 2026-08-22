@@ -291,6 +291,36 @@ mucho después como `npm error enoent ... package.json`.
 Ahora `toWorkdirRelative` convierte sólo las absolutas y deja las relativas en paz, y un fallo de
 escritura **corta la acción** en vez de callarse.
 
+### «Refused to connect» en la vista previa era COEP, no una conexión rechazada
+
+`app/entry.server.tsx` sirve el builder con `Cross-Origin-Embedder-Policy: require-corp`, que hace
+falta para WebContainer. Bajo esa política **todo subrecurso de otro origen que carga la página —un
+iframe incluido— tiene que dar permiso** con `Cross-Origin-Resource-Policy: cross-origin`. El runner
+no lo mandaba, así que el navegador bloqueaba el marco antes de pintar un byte y lo reportaba como
+«refused to connect»: una vista previa que respondía perfectamente, leída como un servidor caído.
+
+Verificado desde fuera antes de tocar nada: `cresova-000000.preview.cresova.com` devolvía 404 con el
+texto correcto, o sea que DNS, Traefik, TLS y el runner estaban bien. El problema estaba en el
+navegador, no en la red.
+
+La cabecera va en las tres ramas del enrutado por Host, la del proyecto muerto incluida: un mensaje
+que no se puede leer dentro del marco no sirve de nada.
+
+### Publicar caducaba a los 60 segundos con el runner trabajando
+
+`CALL_TIMEOUT_MS` era un minuto para toda llamada, y `publish` corre `npm run build` entero dentro de
+la llamada. Un sitio real tarda más que eso, así que el navegador declaraba al runner sin respuesta
+mientras seguía compilando tan tranquilo — y como el build no imprime nada, en los logs tampoco se
+veía actividad que lo desmintiera. `call` acepta ahora un plazo por llamada, publicar usa diez
+minutos, y el runner registra una línea al empezar y otra al terminar.
+
+### Un método desconocido se descartaba en silencio
+
+`handlers[message.type]` devolvía `return` a secas si no conocía el método. El navegador se quedaba
+esperando una respuesta que no iba a llegar hasta agotar su propio plazo. Es exactamente cómo se ve
+un runner desactualizado desde el otro lado: un servicio sano acusado de estar colgado. Ahora
+contesta `Unknown method: <tipo>`, que además dice al instante que hay que redesplegarlo.
+
 ### Una acción que falla cancelaba todas las siguientes
 
 `addToExecutionQueue` encadenaba con `chain.then(() => callback())`. Encadenar así encadena también

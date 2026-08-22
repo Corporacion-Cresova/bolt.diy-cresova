@@ -266,6 +266,10 @@ export class ProjectManager {
     }
 
     const project = await this.open(projectId);
+
+    // a build takes minutes and prints nothing, so without this the log looks like a hung runner
+    console.log(`Building ${projectId} to publish as ${name}`);
+
     const { exitCode, output } = await runToCompletion(project.dir, 'npm', ['run', 'build'], projectEnv(project.port));
 
     if (exitCode !== 0) {
@@ -287,6 +291,7 @@ export class ProjectManager {
     await cp(sourceDir, tempDir, { recursive: true });
     await rm(finalDir, { recursive: true, force: true });
     await rename(tempDir, finalDir);
+    console.log(`Published ${projectId} as ${name}`);
 
     return { url: this.publishedUrl(name) };
   }
