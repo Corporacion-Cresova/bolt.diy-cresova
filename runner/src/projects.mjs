@@ -1,11 +1,17 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { createConnection, createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { existsSync } from 'node:fs';
-import { isValidProjectId, resolveInsideProject } from './paths.mjs';
+import { isValidProjectId, isValidPublishName, resolveInsideProject } from './paths.mjs';
 import { findServingPort } from './ports.mjs';
+
+/*
+ * The same order `#runBuildAction` in the app tries them in — kept in sync by hand, since the two
+ * run in different processes with no module to share. Whichever exists first wins.
+ */
+const BUILD_OUTPUT_DIRS = ['dist', 'build', 'out', 'output', '.next', 'public'];
 
 const PORT_RANGE_START = 41000;
 const PORT_RANGE_END = 41999;
@@ -81,6 +87,25 @@ function answersHttp(port) {
   });
 }
 
+/**
+ * Runs a command in a directory and waits for it to exit.
+ *
+ * Unlike `ProjectManager.spawn` below, which starts a dev server expected to keep running and
+ * streams its output to the browser, this is for a one-shot command with a result the caller needs
+ * before it can do anything else — publishing has nothing to copy until the build finishes.
+ */
+function runToCompletion(cwd, command, args, env) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { cwd, env, shell: true });
+    let output = '';
+
+    child.stdout?.on('data', (chunk) => (output += chunk));
+    child.stderr?.on('data', (chunk) => (output += chunk));
+    child.on('exit', (code) => resolve({ exitCode: code ?? 1, output }));
+    child.on('error', (error) => resolve({ exitCode: 1, output: `${output}${error.message}` }));
+  });
+}
+
 function canConnect(port) {
   return new Promise((resolve) => {
     const socket = createConnection({ host: '127.0.0.1', port });
@@ -98,8 +123,9 @@ export class ProjectManager {
   #projects = new Map();
   #nextPort = PORT_RANGE_START;
 
-  constructor({ root, previewDomain, onEvent }) {
+  constructor({ root, publishedRoot, previewDomain, onEvent }) {
     this.root = root;
+    this.publishedRoot = publishedRoot;
     this.previewDomain = previewDomain;
     this.onEvent = onEvent;
   }
@@ -203,6 +229,66 @@ export class ProjectManager {
 
   previewUrl(projectId) {
     return `https://${projectId}.${this.previewDomain}`;
+  }
+
+  publishedUrl(name) {
+    return `https://${name}.${this.previewDomain}`;
+  }
+
+  /** Where a published site's files live, or undefined if that name has never been published. */
+  publishedDir(name) {
+    if (!isValidPublishName(name)) {
+      return undefined;
+    }
+
+    const dir = join(this.publishedRoot, name);
+
+    return existsSync(dir) ? dir : undefined;
+  }
+
+  /**
+   * Builds the project and serves the result under its own name, replacing whatever was published
+   * there before.
+   *
+   * The directory this writes to is the whole record of what is published: nothing else remembers
+   * it, so a publish survives the runner restarting and the live project being closed or reaped —
+   * on purpose, since a published site and the dev project that built it have different lifetimes.
+   *
+   * Copied to `<name>.tmp` and swapped into place by rename rather than written straight into
+   * `<name>`, so a request arriving mid-copy finds the previous, complete version — never a
+   * half-written one. The rename itself is not instantaneous the way a rename usually is, since the
+   * old directory has to be removed first to make room for it; a request in that narrow gap gets a
+   * 404 rather than a half-copied site, which is the failure mode this is actually guarding against.
+   */
+  async publish(projectId, name) {
+    if (!isValidPublishName(name)) {
+      throw new Error(`Invalid publish name: ${name}`);
+    }
+
+    const project = await this.open(projectId);
+    const { exitCode, output } = await runToCompletion(project.dir, 'npm', ['run', 'build'], projectEnv(project.port));
+
+    if (exitCode !== 0) {
+      throw new Error(`Build failed (exit ${exitCode}):\n${output}`);
+    }
+
+    const sourceDir = BUILD_OUTPUT_DIRS.map((dir) => join(project.dir, dir)).find((dir) => existsSync(dir));
+
+    if (!sourceDir) {
+      throw new Error(`No build output found. Looked in: ${BUILD_OUTPUT_DIRS.join(', ')}`);
+    }
+
+    await mkdir(this.publishedRoot, { recursive: true });
+
+    const finalDir = join(this.publishedRoot, name);
+    const tempDir = join(this.publishedRoot, `${name}.tmp`);
+
+    await rm(tempDir, { recursive: true, force: true });
+    await cp(sourceDir, tempDir, { recursive: true });
+    await rm(finalDir, { recursive: true, force: true });
+    await rename(tempDir, finalDir);
+
+    return { url: this.publishedUrl(name) };
   }
 
   async writeFile(projectId, path, content) {

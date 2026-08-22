@@ -81,15 +81,20 @@ siempre. Una insignia en la cabecera dice cuál está en uso: **VPS** o **Navega
 
 Los pasos de despliegue del runner están en `runner/README.md`.
 
-### Lo que falta del lado de la infraestructura
+### Lo que faltaba del lado de la infraestructura (ya resuelto)
 
-El **certificado comodín** para `*.preview.<dominio>`. Un certificado comodín **siempre** requiere
-validación DNS-01, sin importar la profundidad del subdominio, así que el proveedor de DNS necesita
-un token de API.
+El **certificado comodín** para `*.preview.<dominio>` ya está configurado y funcionando (el usuario
+lo confirmó: un subdominio cualquiera bajo el comodín responde). La alternativa sin Cloudflare que
+se había ofrecido — un conjunto fijo de nombres con certificados HTTP-01 normales — no hizo falta.
 
-Alternativa sin Cloudflare, ya ofrecida al usuario: un **conjunto fijo de nombres**
-(`p1.preview…` a `p20.preview…`) con certificados HTTP-01 normales. Sólo cambia cómo se reparten
-los nombres de vista previa, no el protocolo — se selecciona cambiando `PREVIEW_DOMAIN`.
+### Publicar un sitio terminado
+
+Distinto de correr el servidor de desarrollo: `container.publish(name)` compila el proyecto en el
+VPS (`npm run build`), copia la salida a `/data/published/<name>` y la sirve bajo el mismo comodín,
+en `<name>.preview.<dominio>` — un host aparte del `cresova-<id>.preview.<dominio>` del proyecto en
+desarrollo, para que uno no choque con el otro. El directorio **es** el registro: sobrevive a que el
+runner se reinicie y a que el proyecto se cierre, sin guardar nada aparte. Botón junto al Deploy
+existente, sólo visible con el backend en `runner`.
 
 ## 4. Mapa del código propio
 
@@ -359,6 +364,20 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### Publicar reutiliza el mismo comodín, con un espacio de nombres aparte
+
+Los sitios publicados viven bajo el mismo `*.preview.<dominio>` que los proyectos en desarrollo, así
+que el enrutado por `Host` en `index.mjs` tenía que distinguir uno de otro sin un segundo dominio. La
+regla es simple porque los ids de proyecto tienen una forma reservada: cualquier nombre publicado que
+empezara por `cresova-` podría chocar con un id de proyecto real, así que `isValidPublishName`
+rechaza ese prefijo — el mismo motivo por el que un usuario nunca podría publicar accidentalmente
+encima del proyecto de otro.
+
+El directorio publicado es intencionalmente ajeno al ciclo de vida del proyecto: `ProjectManager` no
+guarda en memoria qué está publicado, sólo mira si `/data/published/<nombre>` existe. Eso es lo que
+hace que sobreviva a un reinicio del runner sin ningún trabajo extra — se verificó arrancando un
+runner, publicando, matándolo, y sirviendo el sitio desde uno nuevo que nunca abrió ese proyecto.
+
 ### Dos chats distintos compartían el mismo proyecto del VPS
 
 El id del proyecto se guardaba bajo **una sola clave global** de `localStorage`
@@ -479,6 +498,7 @@ Ninguno impide generar y ver un sitio.
 | Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
+| Unificar la barra de botones | Ver la tabla de abajo — ya no incluye `Publish`, resuelto. |
 | Calidad visual | **Prioridad 2**, después de la base. |
 | Interfaz al estilo Lovable | **Prioridad 3**, lo último. Ver abajo. |
 
@@ -492,7 +512,7 @@ correcta:
 |---|---|---|
 | Vista previa / código / capas | Slider Code · Diff · Preview | `Workbench.client.tsx` |
 | Modo dispositivo, refrescar, abrir fuera | Sí, con marcos de iPhone/iPad/laptop | Dentro de `Preview.tsx` |
-| `Publish` | Botón Deploy (Netlify, Vercel, GitHub, GitLab) | Cabecera |
+| `Publish` | Botón Deploy a Netlify/Vercel/GitHub/GitLab, **y ahora también** un botón Publicar al VPS | Cabecera |
 | Base de datos | Integración Supabase completa | Ajustes → pestaña Supabase |
 | `Share` | Export/Import de chat + Sync | Sólo en la vista de código |
 
@@ -501,7 +521,6 @@ correcta:
 - **Feature de verdad**: el selector de páginas (`Homepage ▾`) necesita leer las rutas del proyecto
   generado. Versión a mitad de camino: `displayPath` ya existe en el preview, convertirlo en campo
   editable con desplegable de rutas visitadas.
-- **No es interfaz**: `Publish` de verdad manda al VPS, no a Netlify. Eso es trabajo de servidor.
 - El panel de base de datos es re-superficie, no construcción, pero la integración de Supabase **no
   está verificada contra el camino del VPS**. Comprobarlo antes de darle un botón prominente.
 
@@ -510,7 +529,7 @@ correcta:
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 194 pruebas en 22 archivos
+npx vitest run        # 203 pruebas en 23 archivos
 pnpm build            # remix vite build
 ```
 

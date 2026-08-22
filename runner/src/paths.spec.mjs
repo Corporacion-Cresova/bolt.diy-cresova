@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isValidProjectId, resolveInsideProject } from './paths.mjs';
+import { isValidProjectId, isValidPublishName, resolveInsideProject } from './paths.mjs';
 
 const ROOT = '/data/projects/demo';
 
@@ -34,5 +34,23 @@ describe('isValidProjectId', () => {
     expect(isValidProjectId('Proj')).toBe(false);
     expect(isValidProjectId('ab')).toBe(false);
     expect(isValidProjectId('')).toBe(false);
+  });
+});
+
+describe('isValidPublishName', () => {
+  it('accepts an ordinary site name', () => {
+    expect(isValidPublishName('soltecsa')).toBe(true);
+    expect(isValidPublishName('tela-divers-2026')).toBe(true);
+  });
+
+  it('rejects the cresova- prefix, reserved for project ids', () => {
+    expect(isValidPublishName('cresova-65852feb893920c2')).toBe(false);
+    expect(isValidPublishName('cresova-anything')).toBe(false);
+  });
+
+  it('rejects the same shapes isValidProjectId does', () => {
+    expect(isValidPublishName('../evil')).toBe(false);
+    expect(isValidPublishName('Soltecsa')).toBe(false);
+    expect(isValidPublishName('')).toBe(false);
   });
 });

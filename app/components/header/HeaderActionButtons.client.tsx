@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { DeployButton } from '~/components/deploy/DeployButton';
+import { PublishButton } from '~/components/deploy/PublishButton';
 
 interface HeaderActionButtonsProps {
   chatStarted: boolean;
@@ -18,6 +19,9 @@ export function HeaderActionButtons({ chatStarted: _chatStarted }: HeaderActionB
     <div className="flex items-center gap-1">
       {/* Deploy Button */}
       {shouldShowButtons && <DeployButton />}
+
+      {/* Publish to the Cresova VPS — hidden on its own when the runner is not in use */}
+      {shouldShowButtons && <PublishButton />}
 
       {/* Debug Tools */}
       {shouldShowButtons && (
