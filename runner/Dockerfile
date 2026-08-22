@@ -13,13 +13,13 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 COPY runner/src ./src
 
-# projects are written here; mount a volume so they survive a restart
-RUN mkdir -p /data/projects && chown -R node:node /data /app
+# projects are written here, and published sites copied here; mount a volume so both survive a restart
+RUN mkdir -p /data/projects /data/published && chown -R node:node /data /app
 
 # never run model written code as root
 USER node
 
-ENV PORT=3001 PROJECT_ROOT=/data/projects
+ENV PORT=3001 PROJECT_ROOT=/data/projects PUBLISHED_ROOT=/data/published
 EXPOSE 3001
 
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=5 \

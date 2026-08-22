@@ -53,6 +53,19 @@ export class RemoteContainer {
   };
 
   /**
+   * Builds the project and serves the result under its own name — `soltecsa.preview.cresova.com`
+   * rather than the project's own `cresova-<id>.preview.cresova.com`. Not a WebContainer concept;
+   * there is nothing to fall back to in the tab, which is why the button this backs only shows up
+   * once the runner is actually in use.
+   *
+   * Publishing over a name that already has a site replaces it — the same name is how you update
+   * what you published before, not a way to end up with two.
+   */
+  publish(name: string): Promise<{ url: string }> {
+    return this._connection.call<{ url: string }>('publish', { name });
+  }
+
+  /**
    * Mirrors `WebContainer.spawn`.
    *
    * `/bin/jsh` is how the app opens a shell session, so it gets one that speaks the same OSC

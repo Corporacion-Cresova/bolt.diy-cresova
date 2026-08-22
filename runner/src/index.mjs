@@ -1,11 +1,14 @@
 import { createServer } from 'node:http';
+import { createReadStream, existsSync, statSync } from 'node:fs';
+import { extname } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { verifyTicket } from './tickets.mjs';
 import { ProjectManager } from './projects.mjs';
-import { isValidProjectId } from './paths.mjs';
+import { isValidProjectId, resolveInsideProject } from './paths.mjs';
 
 const PORT = Number(process.env.PORT) || 3001;
 const PROJECT_ROOT = process.env.PROJECT_ROOT || '/data/projects';
+const PUBLISHED_ROOT = process.env.PUBLISHED_ROOT || '/data/published';
 const PREVIEW_DOMAIN = process.env.PREVIEW_DOMAIN || 'preview.cresova.com';
 const TOKEN = process.env.RUNNER_TOKEN || '';
 const IDLE_TIMEOUT_MS = Number(process.env.IDLE_TIMEOUT_MS) || 30 * 60 * 1000;
@@ -24,6 +27,7 @@ const sockets = new Map();
 
 const projects = new ProjectManager({
   root: PROJECT_ROOT,
+  publishedRoot: PUBLISHED_ROOT,
   previewDomain: PREVIEW_DOMAIN,
   onEvent(projectId, event) {
     for (const socket of sockets.get(projectId) ?? []) {
@@ -34,7 +38,7 @@ const projects = new ProjectManager({
   },
 });
 
-/** Reads the project id from a preview hostname: abc123.preview.cresova.com -> abc123 */
+/** Reads the label from a preview hostname: abc123.preview.cresova.com -> abc123 */
 function projectIdFromHost(host = '') {
   const name = host.split(':')[0];
 
@@ -47,20 +51,78 @@ function projectIdFromHost(host = '') {
   return isValidProjectId(id) ? id : undefined;
 }
 
-const server = createServer(async (request, response) => {
-  const projectId = projectIdFromHost(request.headers.host);
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
+  '.wasm': 'application/wasm',
+};
 
-  if (projectId) {
-    const project = projects.get(projectId);
+/**
+ * Serves a published site as static files.
+ *
+ * Anything that is not a real file on disk falls back to index.html, rather than 404ing — a
+ * client-side route belongs to the SPA's own router, which this has no way to understand and no
+ * business trying to.
+ */
+function servePublished(dir, request, response) {
+  const requestedPath = (request.url ?? '/').split('?')[0];
+
+  let filePath;
+
+  try {
+    const candidate = resolveInsideProject(dir, requestedPath === '/' ? 'index.html' : requestedPath);
+    filePath = existsSync(candidate) && statSync(candidate).isFile() ? candidate : `${dir}/index.html`;
+  } catch {
+    // a path trying to escape the published directory gets the same fallback as any unknown route
+    filePath = `${dir}/index.html`;
+  }
+
+  if (!existsSync(filePath)) {
+    response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    response.end('Este sitio publicado no tiene index.html.');
+
+    return;
+  }
+
+  response.writeHead(200, { 'content-type': MIME_TYPES[extname(filePath)] ?? 'application/octet-stream' });
+  createReadStream(filePath).pipe(response);
+}
+
+const server = createServer(async (request, response) => {
+  const label = projectIdFromHost(request.headers.host);
+
+  if (label) {
+    const project = projects.get(label);
 
     if (!project) {
+      const publishedDir = projects.publishedDir(label);
+
+      if (publishedDir) {
+        servePublished(publishedDir, request, response);
+        return;
+      }
+
       response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
       response.end('Este proyecto ya no está activo. Vuelve a abrirlo en Cresova Builder.');
 
       return;
     }
 
-    projects.touch(projectId);
+    projects.touch(label);
 
     const upstream = await import('node:http');
     const forward = upstream.request(
@@ -186,6 +248,7 @@ const handlers = {
   spawn: (id, message) => projects.spawn(id, message.command, message.args),
   stdin: (id, message) => projects.write(id, message.processId, message.data),
   kill: (id, message) => projects.kill(id, message.processId),
+  publish: (id, message) => projects.publish(id, message.name),
 };
 
 wss.on('connection', async (ws) => {
