@@ -4,6 +4,7 @@ import { useStore } from '@nanostores/react';
 import { toast } from 'react-toastify';
 import { classNames } from '~/utils/classNames';
 import { executionBackendStore } from '~/lib/cresova/execution-backend';
+import { workbenchStore } from '~/lib/stores/workbench';
 import { webcontainer } from '~/lib/webcontainer';
 import type { RemoteContainer } from '~/lib/cresova/remote-container';
 
@@ -27,12 +28,21 @@ function sanitizePublishName(input: string): string {
  */
 export function PublishButton() {
   const backend = useStore(executionBackendStore);
+  const files = useStore(workbenchStore.files);
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | undefined>(undefined);
 
-  if (backend !== 'runner') {
+  /*
+   * Files, not a running preview, are what publishing needs: the build happens on the server, over
+   * whatever is on disk. Gating this on the preview instead — as the header used to — meant that the
+   * moment the dev server failed to come up, the button that could still have produced a working
+   * site was the one thing taken away.
+   */
+  const hasProjectFiles = Object.values(files).some((dirent) => dirent?.type === 'file');
+
+  if (backend !== 'runner' || !hasProjectFiles) {
     return null;
   }
 

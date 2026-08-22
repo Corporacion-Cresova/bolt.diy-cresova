@@ -192,6 +192,18 @@ export async function connectToRunner(): Promise<RemoteContainer | undefined> {
     executionBackendStore.set(state === 'open' ? 'runner' : 'runner-lost');
   };
 
+  /*
+   * The runner gives up looking for a project's dev server eventually, and when it does this is the
+   * only word of it that reaches the browser. Worth a line of its own: without it the workbench
+   * simply waits out its own budget, and a server that never came up looks exactly like one that is
+   * merely slow.
+   */
+  connection.on('server-timeout', (event) => {
+    if (event.type === 'server-timeout') {
+      logger.warn(`The runner stopped waiting for the dev server: ${event.reason}`);
+    }
+  });
+
   try {
     await withTimeout(connection.connect(), CONNECT_TIMEOUT_MS, 'The runner did not answer in time');
   } catch (error) {

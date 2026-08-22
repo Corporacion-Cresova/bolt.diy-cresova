@@ -13,8 +13,26 @@ const logger = createScopedLogger('CresovaBuilder');
 /** Never more than this, no matter what: every retry costs OpenRouter tokens. */
 export const MAX_RECOVERY_ATTEMPTS = 1;
 
-/** How long we wait for WebContainer to report a preview URL after starting the app. */
-const PREVIEW_TIMEOUT_MS = 120_000;
+/**
+ * How long we wait for a preview URL after starting the app.
+ *
+ * Long on purpose, and it costs nothing when things go well: the wait ends the moment the preview
+ * arrives, and ends early through `giveUp` when the command that was supposed to serve the site has
+ * already failed. What it buys is the slow case — the first `npm install` of a project on a busy
+ * runner, which routinely outlasts the two minutes this used to allow. Giving up there declared a
+ * build dead while it was still installing, and left the user with no preview and no publish button
+ * in front of a project that was about to work.
+ */
+const PREVIEW_TIMEOUT_MS = 10 * 60_000;
+
+/** Shown when the wait above runs out, because a guard that gives up in silence teaches nothing. */
+const PREVIEW_TIMEOUT_ALERT = {
+  type: 'error',
+  title: 'La vista previa no llegó a estar lista',
+  description: 'El servidor del proyecto no respondió a tiempo',
+  content:
+    'El proyecto se creó, pero su servidor no llegó a responder. Revisa la terminal: si la instalación de dependencias falló, el error está ahí. Puedes volver a intentarlo pidiendo que se arranque de nuevo.',
+} as const;
 
 /** Marks the assistant message the guard injects, so the guard never re-enters on its own output. */
 export const AUTO_START_ANNOTATION = 'cresova-auto-start';
@@ -206,7 +224,9 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
     );
 
     if (!ready) {
-      logger.warn('No preview URL was reported by WebContainer');
+      logger.warn('No preview URL was reported by the execution backend');
+      workbenchStore.actionAlert.set({ ...PREVIEW_TIMEOUT_ALERT });
+
       return 'preview-timeout';
     }
 
@@ -263,6 +283,8 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
 
   if (!ready) {
     logger.warn('Auto start did not produce a preview URL');
+    workbenchStore.actionAlert.set({ ...PREVIEW_TIMEOUT_ALERT });
+
     return 'preview-timeout';
   }
 

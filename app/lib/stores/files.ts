@@ -25,6 +25,39 @@ const logger = createScopedLogger('FilesStore');
 
 const utf8TextDecoder = new TextDecoder('utf8', { fatal: true });
 
+/** Fired after a `pushState` or `replaceState`, which the history API itself stays silent about. */
+const CHAT_NAVIGATION_EVENT = 'cresova:history-navigation';
+
+/**
+ * Makes in-app navigation observable.
+ *
+ * `popstate` only fires for back and forward; a router moving between chats calls `pushState` or
+ * `replaceState`, and those announce nothing. Wrapping them once turns navigation into an event
+ * anyone can listen for, which is what lets the alternative — watching the whole DOM for a sign
+ * that the address bar moved — be deleted.
+ */
+let historyAnnounced = false;
+
+function announceHistoryNavigation(): void {
+  // the store is rebuilt on hot reload, and wrapping the wrapper would stack a new layer each time
+  if (historyAnnounced || typeof history === 'undefined') {
+    return;
+  }
+
+  historyAnnounced = true;
+
+  for (const method of ['pushState', 'replaceState'] as const) {
+    const original = history[method];
+
+    history[method] = function patched(this: History, ...args: Parameters<History['pushState']>) {
+      const result = original.apply(this, args);
+      window.dispatchEvent(new Event(CHAT_NAVIGATION_EVENT));
+
+      return result;
+    };
+  }
+}
+
 export interface File {
   type: 'file';
   content: string;
@@ -102,12 +135,25 @@ export class FilesStore {
       import.meta.hot.data.deletedPaths = this.#deletedPaths;
     }
 
-    // Listen for URL changes to detect chat ID changes
+    /*
+     * Notice when the chat in the URL changes, so this chat's locks replace the previous one's.
+     *
+     * This used to be a MutationObserver over `document` with `subtree: true` — every node added or
+     * removed anywhere in the application, read only to compare a path. Generation is exactly the
+     * workload that makes that ruinous: the streaming message re-renders, the editor re-renders the
+     * file being written, the tree updates and the terminal appends, and each of those mutations
+     * allocates a record for an observer that only ever wanted to know whether the address bar had
+     * changed. The main thread pays for all of it, which is what the browser reports as an
+     * unresponsive page.
+     *
+     * Navigation is a thing the application does, not a thing that has to be discovered by watching
+     * the DOM: `popstate` covers back and forward, and the two history methods are wrapped because
+     * they deliberately fire no event of their own.
+     */
     if (typeof window !== 'undefined') {
       let lastChatId = getCurrentChatId();
 
-      // Use MutationObserver to detect URL changes (for SPA navigation)
-      const observer = new MutationObserver(() => {
+      const reloadLocksIfChatChanged = () => {
         const currentChatId = getCurrentChatId();
 
         if (currentChatId !== lastChatId) {
@@ -115,9 +161,12 @@ export class FilesStore {
           lastChatId = currentChatId;
           this.#loadLockedFiles(currentChatId);
         }
-      });
+      };
 
-      observer.observe(document, { subtree: true, childList: true });
+      window.addEventListener('popstate', reloadLocksIfChatChanged);
+      window.addEventListener(CHAT_NAVIGATION_EVENT, reloadLocksIfChatChanged);
+
+      announceHistoryNavigation();
     }
 
     this.#init();
