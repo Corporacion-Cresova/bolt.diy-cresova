@@ -394,6 +394,49 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### El reloj que esperaba el servidor corría sobre `npm install`
+
+El navegador se entera de que existe una vista previa por **un solo mensaje**: el `server-ready` del
+runner. `remote-container.ts` deriva de él tanto el evento `server-ready` como el `port`, y sin ese
+mensaje no hay vista previa en la lista, no se dispara el refresco y **no aparece el botón
+Publicar**. Un mensaje que falta apaga tres cosas a la vez.
+
+El vigilante del runner se rendía a los **3 minutos contados desde el spawn**. Pero el servidor se
+lanza como `npm install && npm run dev` en un único comando —a propósito, para que no puedan
+separarse—, así que esos 3 minutos eran en realidad el presupuesto del `npm install`. En un host
+ocupado ese install solo ya lo supera. Cuando eso pasaba, el vigilante moría antes de que Vite
+abriera su puerto: el servidor arrancaba, servía perfectamente, y nadie se enteraba nunca.
+
+Y se rendía **en silencio** —un `return` pelado, sin log ni evento—, que es la forma más cara que
+puede tomar un fallo aquí: un servicio sano indistinguible de uno colgado.
+
+Peor todavía, como el vigilante nunca llegó a fijar `servingPort`, el proxy reenviaba al puerto
+*asignado* (41xxx) y Vite ignora `PORT` (ver arriba). Así que abrir la URL de la vista previa a mano
+daba **502** con el servidor vivo y sirviendo.
+
+La regla correcta no es un número más grande, es **medir contra otra cosa**: se sigue esperando
+mientras el comando siga vivo, porque un proceso vivo es la señal honesta de que el servidor todavía
+viene en camino. Cuando ya no queda nada corriendo, el comando falló o terminó sin servir, y una
+gracia corta cubre el hueco entre un proceso que sale y su sucesor. Queda un techo absoluto para que
+un vigilante no sobreviva al proyecto que lo creó.
+
+Las dos duraciones se pueden inyectar por el constructor de `ProjectManager` **sólo para poder
+probarlo**: `ready-watcher.spec.mjs` ejercita los dos finales en milisegundos en vez de en minutos.
+Producción no pasa ninguna de las dos y se queda con las constantes.
+
+Del lado del navegador, el guardián esperaba 2 minutos —menos todavía que el runner— y también se
+rendía callado. Ahora espera diez minutos, que no cuestan nada cuando todo va bien (la espera
+termina en cuanto llega la vista previa, y termina antes por `giveUp` si el comando ya falló), y
+cuando se acaba **lo dice** con una alerta.
+
+### Publicar no depende de que la vista previa esté viva
+
+`HeaderActionButtons` escondía los tres botones detrás de `previews[0]`, Publicar incluido. Pero
+`publish` compila los archivos **del disco** en el servidor y sirve la salida: no toca el servidor de
+desarrollo ni su puerto. Un proyecto cuyo dev server no levantó es perfectamente publicable — y
+esconder el botón ahí quitaba justamente la única salida de esa situación. Ahora Publicar decide por
+su cuenta: backend en `runner` y que haya archivos.
+
 ### Publicar reutiliza el mismo comodín, con un espacio de nombres aparte
 
 Los sitios publicados viven bajo el mismo `*.preview.<dominio>` que los proyectos en desarrollo, así
@@ -528,6 +571,7 @@ Ninguno impide generar y ver un sitio.
 | Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
+| `/data/published` no está en un volumen | En EasyPanel el runner sólo monta `runner-data` en `/data/projects`. `PUBLISHED_ROOT` cae en su valor por defecto, `/data/published`, que vive en la capa de escritura del contenedor: **cada redespliegue borra los sitios publicados**. Hace falta un segundo volumen, o mover `PUBLISHED_ROOT` dentro del que ya existe. |
 | Unificar la barra de botones | Ver la tabla de abajo — ya no incluye `Publish`, resuelto. |
 | Calidad visual | **Prioridad 2**, después de la base. |
 | Interfaz al estilo Lovable | **Prioridad 3**, lo último. Ver abajo. |
@@ -578,3 +622,6 @@ Las más valiosas:
   el puerto, servirlo por el proxy. Incluye el caso de un servidor que elige su propio puerto.
 - `runner-shutdown.spec.ts` — que apagar el runner no deje servidores huérfanos ocupando puertos.
   Comprobado que falla si se quita el arreglo.
+- `runner/src/ready-watcher.spec.mjs` — contra qué reloj se mide la espera del servidor. Fija las dos
+  salidas: un servidor que tarda mucho **sí** se anuncia, y un comando que sale sin servir se anuncia
+  también en vez de callarse.

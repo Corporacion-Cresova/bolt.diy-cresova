@@ -26,7 +26,26 @@ const READY_POLL_MS = 500;
 
 /** Generous: a cold dev server can spend a while on the first request before it answers. */
 const HTTP_PROBE_TIMEOUT_MS = 30_000;
-const READY_TIMEOUT_MS = 180_000;
+
+/**
+ * How long to keep looking for the server after the last process of the project exited.
+ *
+ * This, and not a fixed budget from the spawn, is what bounds the search. A dev server is started
+ * as `npm install && npm run dev` in a single command, so a fixed budget is really a budget for
+ * `npm install` — and on a busy host that install alone can outlast any number worth picking. The
+ * watcher used to give up after three minutes measured from the spawn, which meant a project whose
+ * install ran long never got its `server-ready`: the server came up, served correctly, and nobody
+ * was told. The browser learns of a preview from that one event, so the preview, the refresh and
+ * the publish button all stayed missing behind a server that was working.
+ *
+ * A live process is the honest signal that the server is still on its way. Once nothing is running
+ * any more, the command either failed or finished without serving, and a short grace covers the gap
+ * between one process exiting and its successor appearing.
+ */
+const READY_GRACE_AFTER_EXIT_MS = 30_000;
+
+/** Absolute ceiling, so a watcher can never outlive the project that owns it. */
+const READY_CEILING_MS = 30 * 60_000;
 
 /**
  * Environment handed to project processes.
@@ -123,11 +142,25 @@ export class ProjectManager {
   #projects = new Map();
   #nextPort = PORT_RANGE_START;
 
-  constructor({ root, publishedRoot, previewDomain, onEvent }) {
+  /*
+   * The two readiness budgets are settable so a test can exercise both endings in milliseconds
+   * rather than minutes. Production passes neither and gets the constants above; nothing else in
+   * the service knows they exist.
+   */
+  constructor({
+    root,
+    publishedRoot,
+    previewDomain,
+    onEvent,
+    readyGraceAfterExitMs = READY_GRACE_AFTER_EXIT_MS,
+    readyCeilingMs = READY_CEILING_MS,
+  }) {
     this.root = root;
     this.publishedRoot = publishedRoot;
     this.previewDomain = previewDomain;
     this.onEvent = onEvent;
+    this.readyGraceAfterExitMs = readyGraceAfterExitMs;
+    this.readyCeilingMs = readyCeilingMs;
   }
 
   async #allocatePort() {
@@ -470,6 +503,22 @@ export class ProjectManager {
     return (await canConnect(project.port)) ? project.port : undefined;
   }
 
+  /**
+   * Stops looking for the server and says so.
+   *
+   * Saying so is the point. This used to be a bare `return`, which meant the one signal the browser
+   * has that a preview exists simply never arrived: no preview, no refresh, no publish button, and
+   * nothing anywhere to say why. A service that is working is then indistinguishable from one that
+   * is hung, which is the most expensive shape a failure can take here.
+   */
+  #stopWatching(project, reason) {
+    clearInterval(project.readyWatcher);
+    project.readyWatcher = undefined;
+
+    console.log(`Stopped waiting for the server of ${project.id}: ${reason}`);
+    this.onEvent(project.id, { type: 'server-timeout', reason });
+  }
+
   #watchForServer(project) {
     if (project.readyWatcher) {
       return;
@@ -477,10 +526,24 @@ export class ProjectManager {
 
     const startedAt = Date.now();
 
+    // a project whose command has not been seen running yet is given the same grace as one that just exited
+    let lastAliveAt = Date.now();
+
     project.readyWatcher = setInterval(async () => {
-      if (Date.now() - startedAt > READY_TIMEOUT_MS) {
-        clearInterval(project.readyWatcher);
-        project.readyWatcher = undefined;
+      const now = Date.now();
+
+      if (project.processes.size > 0) {
+        lastAliveAt = now;
+      }
+
+      if (now - startedAt > this.readyCeilingMs) {
+        this.#stopWatching(project, 'it did not start within the time a project is given');
+
+        return;
+      }
+
+      if (now - lastAliveAt > this.readyGraceAfterExitMs) {
+        this.#stopWatching(project, 'the command that starts it exited without serving anything');
 
         return;
       }

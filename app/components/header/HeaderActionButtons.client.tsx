@@ -20,8 +20,14 @@ export function HeaderActionButtons({ chatStarted: _chatStarted }: HeaderActionB
       {/* Deploy Button */}
       {shouldShowButtons && <DeployButton />}
 
-      {/* Publish to the Cresova VPS — hidden on its own when the runner is not in use */}
-      {shouldShowButtons && <PublishButton />}
+      {/*
+       * Publishing to the Cresova VPS deliberately does not wait for a preview the way the buttons
+       * around it do. It compiles the files on disk and serves the output; it never touches the dev
+       * server, so a project whose dev server did not come up is still perfectly publishable — and
+       * hiding the button there took away the one way out of exactly that situation. It decides on
+       * its own whether it has anything to publish.
+       */}
+      <PublishButton />
 
       {/* Debug Tools */}
       {shouldShowButtons && (

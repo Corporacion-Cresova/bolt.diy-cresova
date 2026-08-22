@@ -29,6 +29,7 @@ export type RunnerEvent =
   | { type: 'output'; processId: string; stream: 'stdout' | 'stderr'; data: string }
   | { type: 'exit'; processId: string; code: number }
   | { type: 'server-ready'; port: number; url: string }
+  | { type: 'server-timeout'; reason: string }
   | { type: 'result'; id: number; result?: unknown; error?: string };
 
 type EventName = RunnerEvent['type'];
