@@ -6,6 +6,7 @@ import { generateId } from '~/utils/fileUtils';
 import { createScopedLogger } from '~/utils/logger';
 import { detectBuildIntent } from './build-intent';
 import { detectWorkspaceCommands, hasInstalledDependencies } from './dev-server';
+import { describeActionFailures } from './action-failures';
 
 const logger = createScopedLogger('CresovaBuilder');
 
@@ -56,6 +57,7 @@ export type ExecutionGuardOutcome =
   | 'idle'
   | 'artifact-recovery'
   | 'no-artifact'
+  | 'actions-failed'
   | 'preview-ready'
   | 'auto-start'
   | 'no-start-command'
@@ -164,6 +166,23 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
   }
 
   logger.info(`Artifact detected: ${fileActions.length} file action(s), ${startActions.length} start action(s)`);
+
+  /*
+   * The queue keeps going after one action fails (Cresova Builder) rather than stopping the whole
+   * turn, which is the right call for the actions that follow — but left unchecked here it also
+   * means a turn with three missing files sails on to 'preview-ready' exactly like a turn that
+   * wrote everything. The failure lived in a console log and nowhere else. Surfaced and stopped
+   * here instead: building the next phase on a project that is missing files spends money making
+   * the result worse, not better.
+   */
+  const failureAlert = describeActionFailures(actions);
+
+  if (failureAlert) {
+    logger.warn(`${failureAlert.description} ${failureAlert.content}`);
+    workbenchStore.actionAlert.set({ type: 'error', ...failureAlert });
+
+    return 'actions-failed';
+  }
 
   /*
    * A plan is only advanced after a turn that actually wrote files. A phase that produced nothing

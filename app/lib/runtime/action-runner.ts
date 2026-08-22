@@ -12,6 +12,8 @@ import {
   makeCommandNonInteractive,
   MAX_COMMAND_INTERRUPTS,
 } from '~/lib/cresova/shell-watchdog';
+import type { RemoteContainer } from '~/lib/cresova/remote-container';
+import { webcontainerContext } from '~/lib/webcontainer';
 
 const logger = createScopedLogger('ActionRunner');
 
@@ -209,10 +211,11 @@ export class ActionRunner {
       switch (action.type) {
         case 'shell': {
           await this.#runShellAction(action);
+          await this.#reconcileServerFiles();
           break;
         }
         case 'file': {
-          await this.#runFileAction(action);
+          await this.#runFileAction(action, isStreaming);
           break;
         }
         case 'supabase': {
@@ -250,15 +253,16 @@ export class ActionRunner {
               this.#updateAction(actionId, { status: 'failed', error: 'Action failed' });
               logger.error(`[${action.type}]:Action failed\n\n`, err);
 
-              if (!(err instanceof ActionCommandError)) {
-                return;
-              }
-
+              /*
+               * An error that isn't ActionCommandError used to die right here: logged, never
+               * surfaced. That is how a failed action reached the execution guard silently and a
+               * build with a missing file still counted as done.
+               */
               this.onAlert?.({
                 type: 'error',
                 title: 'Dev Server Failed',
-                description: err.header,
-                content: err.output,
+                description: err instanceof ActionCommandError ? err.header : err.message || 'Action failed',
+                content: err instanceof ActionCommandError ? err.output : String(err),
               });
             });
 
@@ -267,6 +271,7 @@ export class ActionRunner {
            * i am up for a better approach
            */
           await new Promise((resolve) => setTimeout(resolve, 2000));
+          await this.#reconcileServerFiles();
 
           return;
         }
@@ -296,6 +301,25 @@ export class ActionRunner {
 
       // re-throw the error to be caught in the promise chain
       throw error;
+    }
+  }
+
+  /**
+   * Lets the file tree catch up after a shell or start action, the two ways a command can leave
+   * files the browser never wrote itself — a scaffolder's output, a generated lockfile. A no-op on
+   * WebContainer: its own watcher already sees everything a command does, which is exactly the gap
+   * this exists to close on the runner. Failure here costs a stale tree, never the action itself.
+   */
+  async #reconcileServerFiles() {
+    if (webcontainerContext.backend !== 'runner') {
+      return;
+    }
+
+    try {
+      const webcontainer = await this.#webcontainer;
+      await (webcontainer as unknown as RemoteContainer).reconcileTree();
+    } catch (error) {
+      logger.warn('Could not reconcile the file tree with the server', error);
     }
   }
 
@@ -404,12 +428,25 @@ export class ActionRunner {
     return resp;
   }
 
-  async #runFileAction(action: ActionState) {
+  async #runFileAction(action: ActionState, isStreaming: boolean = false) {
     if (action.type !== 'file') {
       unreachable('Expected file action');
     }
 
     const webcontainer = await this.#webcontainer;
+
+    /*
+     * A file still streaming is rewritten from the start roughly every 100ms, and most of those
+     * writes are superseded before anything reads them. In the tab that is a cheap in-memory write;
+     * on the runner it is a round trip carrying the whole partial file, ten times a second, per
+     * file — which is both needless socket traffic and what repaints the editor mid-keystroke. The
+     * editor already shows the live content from the stream itself, and this same action runs again
+     * with isStreaming false once it closes, which is the write that actually has to land.
+     */
+    if (isStreaming && webcontainerContext.backend === 'runner') {
+      return;
+    }
+
     const relativePath = toWorkdirRelative(webcontainer.workdir, action.filePath);
 
     let folder = nodePath.dirname(relativePath);

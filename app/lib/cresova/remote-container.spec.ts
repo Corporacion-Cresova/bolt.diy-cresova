@@ -142,6 +142,97 @@ describe.skipIf(!RUNNER_READY)('RemoteContainer against a live runner', () => {
   });
 
   /*
+   * The gap `watchPaths` leaves on purpose: a command's own output. Nothing here writes through
+   * `container.fs`, so nothing would be known to the browser without reconciling against the
+   * server afterwards.
+   */
+  it('picks up files a command created, that the browser never wrote itself', async () => {
+    const { connection } = await connect('reconcile-demo');
+    const container = new RemoteContainer(connection);
+
+    const seen: Array<{ type: string; path: string; content?: string }> = [];
+    container.internal.watchPaths({}, (events) => {
+      for (const event of events) {
+        seen.push({
+          type: event.type,
+          path: event.path,
+          content: event.buffer && new TextDecoder().decode(event.buffer),
+        });
+      }
+    });
+
+    await runCommand(connection, 'mkdir -p scaffold', []);
+    await runCommand(connection, 'echo "generated" > scaffold/lockfile.txt', []);
+
+    await container.reconcileTree();
+
+    expect(seen).toContainEqual({ type: 'add_dir', path: '/home/project/scaffold', content: undefined });
+    expect(seen).toContainEqual({
+      type: 'add_file',
+      path: '/home/project/scaffold/lockfile.txt',
+      content: 'generated\n',
+    });
+
+    connection.close();
+  });
+
+  it('does not repeat a path a second reconcile already reported', async () => {
+    const { connection } = await connect('reconcile-once-demo');
+    const container = new RemoteContainer(connection);
+
+    await runCommand(connection, 'echo "one" > generated.txt', []);
+    await container.reconcileTree();
+
+    const seen: string[] = [];
+    container.internal.watchPaths({}, (events) => seen.push(...events.map((event) => event.path)));
+
+    await container.reconcileTree();
+
+    expect(seen).toEqual([]);
+
+    connection.close();
+  });
+
+  it('does not repeat a path the browser already wrote itself', async () => {
+    const { connection } = await connect('reconcile-skips-browser-writes-demo');
+    const container = new RemoteContainer(connection);
+
+    await container.fs.writeFile('App.tsx', 'const a = 1;');
+
+    const seen: string[] = [];
+    container.internal.watchPaths({}, (events) => seen.push(...events.map((event) => event.path)));
+
+    await container.reconcileTree();
+
+    expect(seen).not.toContain('/home/project/App.tsx');
+
+    connection.close();
+  });
+
+  it('excludes node_modules, .git, dist and its own memo file', async () => {
+    const { connection } = await connect('reconcile-excludes-demo');
+    const container = new RemoteContainer(connection);
+
+    await runCommand(
+      connection,
+      'mkdir -p node_modules/pkg .git dist && echo x > node_modules/pkg/index.js && echo x > .git/HEAD && echo x > dist/index.html && echo x > .cresova-runner.json',
+      [],
+    );
+
+    const seen: string[] = [];
+    container.internal.watchPaths({}, (events) => seen.push(...events.map((event) => event.path)));
+
+    await container.reconcileTree();
+
+    expect(seen.some((path) => path.includes('node_modules'))).toBe(false);
+    expect(seen.some((path) => path.includes('/.git'))).toBe(false);
+    expect(seen.some((path) => path.includes('/dist'))).toBe(false);
+    expect(seen.some((path) => path.includes('.cresova-runner.json'))).toBe(false);
+
+    connection.close();
+  });
+
+  /*
    * The model is told the project lives in `/home/project`, so it writes `cd /home/project && npm
    * install`. That directory does not exist on the VPS, and the `&&` turns a failed `cd` into a
    * failed build: every command in the artifact dies before it starts.
