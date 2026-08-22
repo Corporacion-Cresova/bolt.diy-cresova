@@ -24,6 +24,14 @@ export const runnerFailureStore = atom<string | undefined>(undefined);
 const logger = createScopedLogger('CresovaRunner');
 
 const PROJECT_ID_KEY = 'cresova.projectId';
+
+/*
+ * A chat with no id yet (nothing sent, or not saved) has no permanent slot to be stored under.
+ * sessionStorage, not localStorage: it must not leak into a second tab that is drafting its own new
+ * chat at the same time, and it must not survive to be mistaken for a real chat's project later.
+ */
+const DRAFT_PROJECT_KEY = 'cresova.projectId.draft';
+
 const CONNECT_TIMEOUT_MS = 15_000;
 
 /*
@@ -33,14 +41,29 @@ const CONNECT_TIMEOUT_MS = 15_000;
  */
 const TICKET_TIMEOUT_MS = 5_000;
 
+/** `/chat/<id>` → `<id>`. A brand new, unsaved chat has no id yet and this is undefined. */
+function chatIdFromUrl(): string | undefined {
+  return typeof window === 'undefined' ? undefined : window.location.pathname.match(/^\/chat\/([^/]+)/)?.[1];
+}
+
+function projectIdSlot(chatId: string | undefined): { store: Storage; key: string } {
+  return chatId
+    ? { store: localStorage, key: `${PROJECT_ID_KEY}:${chatId}` }
+    : { store: sessionStorage, key: DRAFT_PROJECT_KEY };
+}
+
 /**
  * Identifies this browser's workspace on the runner.
  *
- * Kept in localStorage so a reload lands back in the same directory instead of starting from an
- * empty one. The shape has to match what the runner and the ticket endpoint accept.
+ * Scoped to the chat shown in the URL, one VPS project per chat: two unrelated chats in the same
+ * browser used to share the single global key this used to be, so opening one would write its
+ * package.json and components straight into the other's project directory. Kept in storage so a
+ * reload lands back in the same directory instead of starting from an empty one. The shape has to
+ * match what the runner and the ticket endpoint accept.
  */
 export function getProjectId(): string {
-  const existing = localStorage.getItem(PROJECT_ID_KEY);
+  const { store, key } = projectIdSlot(chatIdFromUrl());
+  const existing = store.getItem(key);
 
   if (existing && /^[a-z0-9][a-z0-9-]{2,62}$/.test(existing)) {
     return existing;
@@ -48,9 +71,41 @@ export function getProjectId(): string {
 
   const bytes = crypto.getRandomValues(new Uint8Array(8));
   const projectId = `cresova-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
-  localStorage.setItem(PROJECT_ID_KEY, projectId);
+  store.setItem(key, projectId);
 
   return projectId;
+}
+
+/**
+ * Called once a brand-new chat's URL has settled on its permanent id, so the VPS project this tab
+ * already connected to — picked before the chat had any id, and living in the draft slot — is
+ * remembered under that id. Skipped without it: reopening this same chat later would find nothing
+ * under its id, and silently start a second, empty project next to the one it actually built.
+ *
+ * Reads the id straight from the URL, the same way `getProjectId` does, rather than taking one as
+ * an argument: this chat's id gets rewritten into the URL by more than one code path, and the only
+ * value guaranteed to match what a future reload will see is whatever is live in the address bar
+ * once this is called, not whichever of those paths ran most recently.
+ */
+export function claimProjectForChat(): void {
+  const chatId = chatIdFromUrl();
+
+  if (!chatId) {
+    return;
+  }
+
+  const permanentKey = `${PROJECT_ID_KEY}:${chatId}`;
+
+  if (localStorage.getItem(permanentKey)) {
+    return;
+  }
+
+  const draft = sessionStorage.getItem(DRAFT_PROJECT_KEY);
+
+  if (draft) {
+    localStorage.setItem(permanentKey, draft);
+    sessionStorage.removeItem(DRAFT_PROJECT_KEY);
+  }
 }
 
 /** `https://runner.example.com` is configured for people; the browser needs the socket scheme. */

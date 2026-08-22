@@ -182,6 +182,7 @@ const handlers = {
   'fs.mkdir': (id, message) => projects.mkdir(id, message.path),
   'fs.rm': (id, message) => projects.rm(id, message.path, message.options),
   'fs.readdir': (id, message) => projects.readdir(id, message.path, message.options),
+  'fs.tree': (id) => projects.tree(id),
   spawn: (id, message) => projects.spawn(id, message.command, message.args),
   stdin: (id, message) => projects.write(id, message.processId, message.data),
   kill: (id, message) => projects.kill(id, message.processId),

@@ -20,6 +20,7 @@ import {
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
 import { webcontainer } from '~/lib/webcontainer';
+import { claimProjectForChat } from '~/lib/cresova/execution-backend';
 import { detectProjectCommands, createCommandActionsString } from '~/utils/projectCommands';
 import type { ContextAnnotation } from '~/types/context';
 
@@ -320,6 +321,15 @@ ${value.content}
         if (!urlId) {
           navigateChat(nextId);
         }
+
+        /*
+         * The VPS project for this tab was already picked before this chat had an id (Cresova
+         * Builder); claim it under whichever id the URL settled on above, or a later reload of
+         * this same chat would find nothing under it and quietly start a second, empty project
+         * next to the one it built. Called last, after every navigateChat in this function has
+         * already run, so it reads the URL this chat will actually be reopened from.
+         */
+        claimProjectForChat();
       }
 
       // Ensure chatId.get() is used for the final setMessages call

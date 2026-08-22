@@ -18,6 +18,13 @@ interface WatchEvent {
 
 type WatchCallback = (events: WatchEvent[]) => void;
 
+/** One entry from the runner's `fs.tree`, relative to the project root. */
+interface TreeEntry {
+  path: string;
+  type: 'file' | 'dir';
+  content?: string;
+}
+
 /**
  * Exposes the runner with the shape the app already uses for WebContainer, so the workbench, the
  * action runner and the file store keep working unchanged.
@@ -96,6 +103,42 @@ export class RemoteContainer {
        * iframe we control. Returning a function keeps the caller's cleanup code uniform.
        */
     };
+  }
+
+  /**
+   * Catches the file tree up on whatever a command changed underneath it.
+   *
+   * `watchPaths` only ever hears about the browser's own writes; this is the other half, for the
+   * files a command creates — a scaffolder's output, a generated lockfile. Not a live watch, for
+   * the same reason `watchPaths` isn't one: a one-shot read taken right after a command finishes,
+   * not a subscription streaming every path `npm install` touches.
+   *
+   * Only paths not already known are announced. A command rewriting a file the browser already
+   * wrote is a real gap this leaves — closing it would mean diffing content on every reconcile
+   * instead of just names, and the files that actually go missing without this are ones nothing
+   * upstream had ever seen at all.
+   */
+  async reconcileTree(): Promise<void> {
+    const entries = await this._connection.call<TreeEntry[]>('fs.tree', {});
+    const events: WatchEvent[] = [];
+
+    for (const entry of entries) {
+      const absolute = `${this.workdir}/${entry.path}`;
+
+      if (this.#reported.has(absolute)) {
+        continue;
+      }
+
+      this.#reported.add(absolute);
+
+      events.push(
+        entry.type === 'dir'
+          ? { type: 'add_dir', path: absolute }
+          : { type: 'add_file', path: absolute, buffer: new TextEncoder().encode(entry.content ?? '') },
+      );
+    }
+
+    this.#announce(events);
   }
 
   async setPreviewScript() {

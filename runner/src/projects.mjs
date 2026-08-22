@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { createConnection, createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { existsSync } from 'node:fs';
@@ -235,6 +235,59 @@ export class ProjectManager {
     return options.withFileTypes
       ? entries.map((entry) => ({ name: entry.name, isDirectory: entry.isDirectory() }))
       : entries.map((entry) => entry.name);
+  }
+
+  /**
+   * Every file in the project the browser has not written itself.
+   *
+   * The browser's file tree only ever hears about its own writes; a command that scaffolds files or
+   * generates a lockfile leaves the tree believing they do not exist. This is not a live watch —
+   * that would mean streaming every path `npm install` touches through the socket to say nothing
+   * useful — it is a one-shot read, taken right after a command finishes, so the tree can catch up
+   * on whatever changed underneath it.
+   */
+  async tree(projectId) {
+    const project = await this.open(projectId);
+    const files = [];
+
+    const walk = async (dir) => {
+      const entries = await readdir(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (
+          entry.name === 'node_modules' ||
+          entry.name === '.git' ||
+          entry.name === 'dist' ||
+          entry.name === SERVER_MEMO
+        ) {
+          continue;
+        }
+
+        const absolute = join(dir, entry.name);
+        const path = relative(project.dir, absolute);
+
+        if (entry.isDirectory()) {
+          files.push({ path, type: 'dir' });
+          await walk(absolute);
+          continue;
+        }
+
+        if (!entry.isFile()) {
+          continue;
+        }
+
+        try {
+          files.push({ path, type: 'file', content: await readFile(absolute, 'utf8') });
+        } catch {
+          // unreadable as text (binary, gone by the time we got to it) — still worth listing
+          files.push({ path, type: 'file' });
+        }
+      }
+    };
+
+    await walk(project.dir);
+
+    return files;
   }
 
   /** Runs a command in the project directory, streaming its output through onEvent. */

@@ -359,6 +359,32 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### Dos chats distintos compartían el mismo proyecto del VPS
+
+El id del proyecto se guardaba bajo **una sola clave global** de `localStorage`
+(`cresova.projectId`), sin relación con qué chat la pidiera. Cualquier chat nuevo en el mismo
+navegador reutilizaba el proyecto del anterior: el `package.json`, los componentes y las
+dependencias de un sitio se escribían encima de los de otro completamente distinto. Así fue como
+`cresova-65852feb893920c2` apareció primero en el fallo original de npm ENOENT y, días después, en
+un build de SOLTECSA Corporate Website que no tenía nada que ver — mismo id, mismo directorio,
+proyectos distintos peleándose por él.
+
+Arreglado leyendo el id del chat directamente de la URL (`/chat/<id>`) y guardando el proyecto bajo
+una clave por chat, no una global. El caso incómodo era el chat que todavía no tiene id (antes del
+primer mensaje): se guarda en `sessionStorage` bajo una clave de «borrador», propia de la pestaña, y
+se «reclama» bajo el id permanente en el mismo instante en que el chat lo recibe — leyendo la URL en
+ese momento, no el id que se le pasó, porque más de un camino del código la reescribe y sólo lo que
+esté ahí en ese instante es lo que una recarga futura va a encontrar.
+
+### Un turno con acciones fallidas ya no se contaba como si hubiera salido bien
+
+La cola de acciones sigue adelante tras un fallo desde que se arregló el envenenamiento (más abajo),
+que era lo correcto — pero el guardián de ejecución nunca miraba `action.status`. Un turno donde
+tres archivos no se escribieron llegaba igual a `preview-ready`, y la fase 2 se construía sobre un
+proyecto incompleto. Ahora el guardián revisa las acciones fallidas antes que nada, avisa con las
+rutas afectadas y no avanza de fase. La lógica de qué decir vive aparte en `action-failures.ts`,
+sin ninguna dependencia de `workbenchStore`, precisamente para poder probarla sin arrancar el runner.
+
 ### La causa raíz de casi todos los fallos de generación
 
 El modelo tiene que escribir un sitio web entero con **8192 tokens de salida**. Eso fuerza
@@ -437,19 +463,13 @@ workbench le pide la siguiente por su cuenta.
 
 Ninguno impide generar y ver un sitio.
 
-- Los archivos creados por **un comando** en el servidor no se reflejan en el árbol de archivos: lo
-  que escribe el navegador sí (el adaptador reporta sus propias escrituras), pero la salida de un
-  andamiaje o un lockfile generado siguen invisibles hasta que algo los lea de vuelta.
+- Los archivos creados por **un comando** en el servidor se reflejan en el árbol con un retraso: no
+  en vivo, sino reconciliados justo después de que el comando termina (`fs.tree` + `reconcileTree`).
+  Una acción `shell` o `start` en curso, mientras corre, sigue siendo invisible.
 - La búsqueda de texto del workbench es una función de WebContainer sin equivalente en el servidor
   (`internal.textSearch`). Degrada de forma limpia: devuelve vacío.
 - Los errores en tiempo de ejecución de la vista previa no se reenvían: la vista previa es una
   página con proxy, no un iframe que controlemos.
-- Cosmético: la lista de artefactos todavía muestra filas de archivo duplicadas. La ejecución sí se
-  omite correctamente.
-- Cosmético: el editor parpadea mientras se escribe un archivo. Cada muestra del streaming reescribe
-  el archivo entero (cada 100 ms), y en el runner eso es un viaje por el socket que además vuelve
-  como evento y repinta el editor. Saltarse las escrituras parciales parece la solución y **no lo
-  es**: ver arriba.
 
 ## 7. Pendientes
 
@@ -490,7 +510,7 @@ correcta:
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # eslint
-npx vitest run        # 172 pruebas en 18 archivos
+npx vitest run        # 194 pruebas en 22 archivos
 pnpm build            # remix vite build
 ```
 
