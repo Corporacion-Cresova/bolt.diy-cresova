@@ -394,6 +394,27 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### Un `MutationObserver` sobre todo el documento para leer la URL
+
+`FilesStore` quería enterarse de que el chat de la URL había cambiado, y lo hacía con un
+`MutationObserver` sobre **`document` con `subtree: true`**: cada nodo que entra o sale en cualquier
+parte de la aplicación, leído sólo para comparar una ruta.
+
+Generar es justo la carga que lo vuelve ruinoso. Mientras el modelo escribe, el mensaje se
+re-renderiza, el editor re-renderiza el archivo que se está escribiendo, el árbol se actualiza y la
+terminal escupe salida — y cada una de esas mutaciones reserva un registro para un observador al que
+sólo le importaba la barra de direcciones. Lo paga el hilo principal, que es lo que el navegador
+reporta como **«Page Unresponsive»**.
+
+Navegar es algo que la aplicación **hace**, no algo que haya que descubrir espiando el DOM.
+`popstate` cubre atrás y adelante; `pushState` y `replaceState` no emiten nada por diseño, así que se
+envuelven una vez —con guarda contra el recarga en caliente, que reconstruye el store y apilaría una
+capa nueva cada vez— y navegar pasa a ser un evento.
+
+**Ojo con el diagnóstico:** esto se encontró leyendo la consola del navegador, donde lo revelador fue
+lo que *no* había — ni un error en rojo. Un cuelgue sin excepción es el hilo principal bloqueado, no
+código que falla, y eso manda a buscar trabajo caro, no errores.
+
 ### El reloj que esperaba el servidor corría sobre `npm install`
 
 El navegador se entera de que existe una vista previa por **un solo mensaje**: el `server-ready` del
