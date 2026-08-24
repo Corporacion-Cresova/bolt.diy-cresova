@@ -394,6 +394,30 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### El contador de compilación llevaba días parado
+
+La insignia del header es **cómo se comprueba que un despliegue llegó**. Estuvo clavada en 197
+mientras se fusionaban cuatro PR, y eso hizo perder tiempo real: no había forma de distinguir «se
+desplegó y no arregló nada» de «no se desplegó».
+
+Dos causas, las dos hay que tenerlas presentes:
+
+1. **El hook no corre en todas partes.** El número lo escribe `.husky/pre-commit`, y un commit hecho
+   donde husky no está instalado —CI, otra máquina, un agente— se lo salta **en silencio**. Un hook
+   de git no se puede imponer desde el repositorio.
+2. **El número no era monótono.** Salía de `git rev-list --count HEAD`, que cuenta el HEAD de quien
+   commitea; los PR entran aquí aplastados, así que una rama tiene más commits que la historia en la
+   que colapsan. Tomado al pie de la letra iba **hacia atrás**: 197 en el archivo, 88 en `main`. Un
+   contador que retrocede es peor que uno parado, porque quien mira la insignia concluye que está
+   viendo una versión vieja.
+
+`update-version.mjs` toma ahora `max(cuenta de git, valor anterior + 1)`: sube siempre, venga de
+donde venga, y funciona incluso sin repositorio que consultar.
+
+**Y la parte de proceso, que es la que falla sola:** si commiteas donde husky no está instalado,
+corre `node scripts/update-version.mjs` a mano antes de commitear. No hay forma de que el repositorio
+lo garantice por ti.
+
 ### El runner ahora dice qué vio, no sólo que se rindió
 
 «No llegó a estar listo» deja indistinguibles los dos fallos posibles, y piden investigaciones
