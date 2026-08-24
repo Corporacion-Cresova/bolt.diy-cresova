@@ -394,6 +394,27 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### Un redespliegue borraba los sitios publicados
+
+`PUBLISHED_ROOT` caía por defecto en `/data/published`. Se lee como «al lado de los proyectos», y es
+justo lo que no es: el volumen está montado en `/data/projects` y en ningún otro sitio, así que ese
+directorio vivía en la capa de escritura del contenedor. **Cada redespliegue del runner borraba todo
+lo publicado**, sin nada que pudiera devolverlo — los archivos compilados son el registro entero de
+una publicación.
+
+Pasó de verdad: un sitio publicado desde el builder desapareció en el siguiente despliegue del
+servicio.
+
+El default ahora cae **dentro** de `PROJECT_ROOT`, que es la parte que sí está en el volumen. El
+punto inicial lo mantiene fuera del espacio de nombres de los proyectos: `isValidProjectId` rechaza
+cualquier nombre que empiece por punto, así que ningún proyecto puede recibir esa ruta.
+`PUBLISHED_ROOT` sigue mandando si alguien monta su propio volumen.
+
+**La lección, que es la parte reusable:** esto se había detectado horas antes y se anotó como
+pendiente de configuración en vez de arreglarse. Era un default peligroso del código, no un descuido
+del panel. Un valor por defecto que sólo es correcto si alguien recuerda montar un segundo volumen
+no es un pendiente: es un fallo esperando su turno.
+
 ### Republicar parecía imposible, y eran dos cosas distintas
 
 Del lado del runner republicar siempre funcionó — se comprobó publicando dos veces con el mismo
@@ -668,7 +689,6 @@ Ninguno impide generar y ver un sitio.
 | Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
-| `/data/published` no está en un volumen | En EasyPanel el runner sólo monta `runner-data` en `/data/projects`. `PUBLISHED_ROOT` cae en su valor por defecto, `/data/published`, que vive en la capa de escritura del contenedor: **cada redespliegue borra los sitios publicados**. Hace falta un segundo volumen, o mover `PUBLISHED_ROOT` dentro del que ya existe. |
 | Unificar la barra de botones | Ver la tabla de abajo — ya no incluye `Publish`, resuelto. |
 | Calidad visual | **Prioridad 2**, después de la base. |
 | Interfaz al estilo Lovable | **Prioridad 3**, lo último. Ver abajo. |
