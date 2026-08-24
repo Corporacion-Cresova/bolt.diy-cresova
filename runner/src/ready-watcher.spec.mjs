@@ -1,8 +1,18 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ProjectManager } from './projects.mjs';
+import { createTicket } from './tickets.mjs';
+
+/*
+ * Both halves of this file drive real servers on the runner's own port range (41000-41999), so they
+ * live together on purpose: vitest runs files in parallel but a single file in sequence, and split
+ * apart they raced for those ports — one suite's readiness probe would reach the other suite's
+ * deliberately silent server and wait for an answer that was never coming.
+ */
 
 /*
  * How the runner decides a project's dev server is never coming.
@@ -93,4 +103,112 @@ describe('waiting for a project server', () => {
     expect(timedOut.reason).toMatch(/without serving/);
     expect(events.some((event) => event.type === 'server-ready')).toBe(false);
   }, 15_000);
+});
+
+/*
+ * What a preview request does when the project's own server never answers.
+ *
+ * A dev server wedged mid-compile accepts the connection and then goes quiet, and the proxy used to
+ * wait on it with nothing to cut the wait short. The request stayed open until the gateway in front
+ * of the runner gave up minutes later and served its own error page — so the user got a generic 502
+ * from a service that had never been consulted, while the runner's own explanation never ran.
+ *
+ * The header matters as much as the timeout: the builder is served under COEP, so a reply without
+ * `Cross-Origin-Resource-Policy` is blocked before it renders. An explanation that cannot be read
+ * inside the frame is worth exactly as much as no explanation.
+ */
+const PORT = 3987;
+const TOKEN = 'runner-token-for-tests-'.padEnd(40, 'x');
+const PROJECT_ID = 'cresova-silentserver';
+const PREVIEW_DOMAIN = 'preview.test';
+
+let runner;
+let root;
+
+const get = (host, timeoutMs) =>
+  new Promise((resolve) => {
+    const probe = httpRequest(
+      { host: '127.0.0.1', port: PORT, path: '/', method: 'GET', headers: { host } },
+      (response) => {
+        let body = '';
+        response.on('data', (chunk) => (body += chunk));
+        response.on('end', () => resolve({ status: response.statusCode, headers: response.headers, body }));
+      },
+    );
+
+    probe.setTimeout(timeoutMs, () => {
+      probe.destroy();
+      resolve({ timedOut: true });
+    });
+    probe.on('error', (error) => resolve({ error: error.message }));
+    probe.end();
+  });
+
+beforeAll(async () => {
+  root = await mkdtemp(join(tmpdir(), 'cresova-proxy-'));
+  await mkdir(join(root, PROJECT_ID), { recursive: true });
+
+  // accepts the connection and never replies: the shape of a dev server stuck on its first compile
+  await writeFile(
+    join(root, PROJECT_ID, 'silent.mjs'),
+    `import { createServer } from 'node:http';
+     createServer(() => {}).listen(Number(process.env.PORT));`,
+  );
+
+  // the memo is what makes opening the project bring that server back up
+  await writeFile(
+    join(root, PROJECT_ID, '.cresova-runner.json'),
+    JSON.stringify({ command: 'node silent.mjs', rememberedAt: Date.now() }),
+  );
+
+  runner = spawn('node', [join(import.meta.dirname, 'index.mjs')], {
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      RUNNER_TOKEN: TOKEN,
+      PROJECT_ROOT: root,
+      PUBLISHED_ROOT: join(root, 'published'),
+      PREVIEW_DOMAIN,
+    },
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  // opening over the socket is what restores the remembered server
+  const { default: WebSocket } = await import('ws');
+  const socket = new WebSocket(
+    `ws://127.0.0.1:${PORT}/connect?projectId=${PROJECT_ID}&ticket=${createTicket(TOKEN, PROJECT_ID)}`,
+  );
+
+  await new Promise((resolve, reject) => {
+    socket.on('message', (raw) => JSON.parse(raw.toString()).type === 'ready' && resolve());
+    socket.on('error', reject);
+  });
+
+  // let the silent server bind its port before anything asks the proxy for a page
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+  socket.close();
+}, 40_000);
+
+afterAll(async () => {
+  // SIGTERM, never SIGKILL: the orderly shutdown is what stops the project's own processes
+  runner?.kill('SIGTERM');
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await rm(root, { recursive: true, force: true });
+});
+
+describe('a preview whose server never answers', () => {
+  it('gives up on its own instead of leaving the request for the gateway to kill', async () => {
+    const answer = await get(`${PROJECT_ID}.${PREVIEW_DOMAIN}`, 40_000);
+
+    expect(answer.timedOut).toBeUndefined();
+    expect(answer.status).toBe(502);
+    expect(answer.body).toMatch(/no responde/);
+  }, 60_000);
+
+  it('sends an answer the builder is allowed to render inside its frame', async () => {
+    const answer = await get(`${PROJECT_ID}.${PREVIEW_DOMAIN}`, 40_000);
+
+    expect(answer.headers['cross-origin-resource-policy']).toBe('cross-origin');
+  }, 60_000);
 });

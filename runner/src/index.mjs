@@ -65,6 +65,14 @@ function projectIdFromHost(host = '') {
  */
 const EMBEDDABLE = { 'cross-origin-resource-policy': 'cross-origin' };
 
+/**
+ * How long a preview request waits on the project's own server before giving up on it.
+ *
+ * Long enough for a dev server busy with its first compile, short enough to answer before the
+ * gateway in front of this service decides the runner itself is the thing that is broken.
+ */
+const FORWARD_TIMEOUT_MS = 15_000;
+
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -142,13 +150,39 @@ const server = createServer(async (request, response) => {
     projects.touch(label);
 
     const upstream = await import('node:http');
+    const port = project.servingPort ?? project.port;
+
+    /*
+     * Answering badly beats not answering.
+     *
+     * A dev server that accepts the connection and then says nothing used to leave this request
+     * open with nothing to close it: no timeout here, so the runner held it until the gateway in
+     * front gave up minutes later and served its own error page. The user never saw the message
+     * below — they saw a generic 502 that says nothing about what went wrong, from a service that
+     * was not even consulted.
+     */
+    const giveUp = (reason) => {
+      if (response.headersSent) {
+        return;
+      }
+
+      /*
+       * The header belongs here too. It is on the other three branches of the Host routing for the
+       * same reason it is needed on this one: under the builder's COEP policy a reply without it is
+       * blocked before it renders, so an explanation the user cannot read inside the frame is worth
+       * exactly as much as no explanation at all.
+       */
+      response.writeHead(502, { 'content-type': 'text/plain; charset=utf-8', ...EMBEDDABLE });
+      response.end(`El servidor del proyecto todavía no responde (${reason}).`);
+    };
+
     const forward = upstream.request(
       {
         host: '127.0.0.1',
-        port: project.servingPort ?? project.port,
+        port,
         method: request.method,
         path: request.url,
-        headers: { ...request.headers, host: `127.0.0.1:${project.servingPort ?? project.port}` },
+        headers: { ...request.headers, host: `127.0.0.1:${port}` },
       },
       (upstreamResponse) => {
         response.writeHead(upstreamResponse.statusCode ?? 502, { ...upstreamResponse.headers, ...EMBEDDABLE });
@@ -156,10 +190,12 @@ const server = createServer(async (request, response) => {
       },
     );
 
-    forward.on('error', () => {
-      response.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' });
-      response.end('El servidor del proyecto todavía no responde.');
+    forward.setTimeout(FORWARD_TIMEOUT_MS, () => {
+      forward.destroy();
+      giveUp('no contestó a tiempo');
     });
+
+    forward.on('error', () => giveUp('no aceptó la conexión'));
 
     request.pipe(forward);
 

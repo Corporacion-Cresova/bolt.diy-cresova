@@ -394,6 +394,31 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### El 502 que no era del runner
+
+Diagnosticado desde fuera, y el método vale tanto como el hallazgo: se probaron cinco nombres bajo
+el comodín. Cuatro contestaron **con** `cross-origin-resource-policy` — o sea, los contestó el
+runner. El quinto, el del proyecto que sí existía, devolvió un 502 **sin** esa cabecera y con la
+página de error de EasyPanel. Esa cabecera es la firma del runner: si falta, la petición ni le
+llegó. DNS, TLS, el comodín y Traefik estaban perfectos; el problema estaba dentro.
+
+Lo que pasaba: el proxy reenvía al servidor del proyecto y **no tenía plazo**. Un servidor de
+desarrollo atascado en su primera compilación acepta la conexión y se queda callado, así que el
+runner sostenía la petición abierta sin nada que la cortara, hasta que la pasarela de delante se
+cansaba y servía su propio error. El usuario veía un 502 genérico de un servicio que ni siquiera
+había opinado, y el mensaje del runner —que existe y explica el problema— no llegaba a ejecutarse.
+
+Y la rama del 502 **no llevaba `EMBEDDABLE`**. Las otras tres del enrutado por Host sí; a esta se le
+pasó. Bajo la política COEP del builder, una respuesta sin esa cabecera se bloquea antes de
+pintarse: una explicación que no se puede leer dentro del marco vale lo mismo que ninguna. Es
+exactamente el fallo que ya estaba documentado más arriba, sobreviviendo en la cuarta rama.
+
+`ready-watcher.spec.mjs` lo fija con un servidor que acepta y nunca contesta: la respuesta llega en
+15 s, con el mensaje del runner y con la cabecera. Las dos mitades de ese archivo viven juntas a
+propósito — vitest paraleliza archivos pero serializa dentro de uno, y separadas competían por el
+rango de puertos 41000-41999: el sondeo de una alcanzaba el servidor deliberadamente mudo de la
+otra.
+
 ### El «StreamRecoveryManager» que no recuperaba nada
 
 Cuando OpenRouter enruta a un proveedor que se cuelga, el modelo deja de mandar tokens y no avisa.
