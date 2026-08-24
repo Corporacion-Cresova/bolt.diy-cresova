@@ -197,6 +197,35 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+/*
+ * A published site is served straight off disk, and nothing here used to say anything about
+ * freshness — so the browser cached by heuristic, and the page someone republished to show what
+ * changed was the very page it then served unchanged from cache. Reported, reasonably, as not being
+ * able to publish again.
+ */
+describe('a published site', () => {
+  const NAME = 'cafeteria';
+
+  beforeAll(async () => {
+    await mkdir(join(root, 'published', NAME), { recursive: true });
+    await writeFile(join(root, 'published', NAME, 'index.html'), '<h1>publicado</h1>');
+  });
+
+  it('is served, and never from a stale copy the browser kept', async () => {
+    const answer = await get(`${NAME}.${PREVIEW_DOMAIN}`, 20_000);
+
+    expect(answer.status).toBe(200);
+    expect(answer.body).toContain('publicado');
+    expect(answer.headers['cache-control']).toBe('no-cache');
+  }, 30_000);
+
+  it('is readable inside the builder frame', async () => {
+    const answer = await get(`${NAME}.${PREVIEW_DOMAIN}`, 20_000);
+
+    expect(answer.headers['cross-origin-resource-policy']).toBe('cross-origin');
+  }, 30_000);
+});
+
 describe('a preview whose server never answers', () => {
   it('gives up on its own instead of leaving the request for the gateway to kill', async () => {
     const answer = await get(`${PROJECT_ID}.${PREVIEW_DOMAIN}`, 40_000);

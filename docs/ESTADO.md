@@ -394,6 +394,23 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### Republicar parecía imposible, y eran dos cosas distintas
+
+Del lado del runner republicar siempre funcionó — se comprobó publicando dos veces con el mismo
+nombre y verificando que el sitio servido cambiaba. Lo que fallaba estaba a los lados.
+
+**La caché.** `servePublished` no mandaba nada sobre frescura, así que el navegador cacheaba por
+heurística. La página que alguien vuelve a publicar para enseñar lo que cambió es justo la que el
+navegador le devuelve **sin cambiar**, desde caché. Visto desde fuera es idéntico a que publicar no
+haya funcionado, y así se reportó. Ahora va `cache-control: no-cache`, y a todo, no sólo al HTML:
+Vite pone huella a lo que compila en `assets/`, pero lo que el proyecto guarde en `public/` se copia
+con su propio nombre y cachearlo fuerte devolvería el mismo problema por otra puerta.
+
+**El diálogo.** Tras publicar, la vista de éxito terminaba en «Cerrar»: para volver al formulario
+había que cerrar y reabrir. Volver a publicar es lo normal —se construye el sitio, se enseña, piden
+un cambio, se quiere el mismo enlace— así que ahora hay un botón «Publicar de nuevo con los
+cambios» ahí mismo.
+
 ### El 502 que no era del runner
 
 Diagnosticado desde fuera, y el método vale tanto como el hallazgo: se probaron cinco nombres bajo
