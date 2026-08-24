@@ -394,6 +394,20 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### El arreglo del volumen estaba inerte porque la imagen fijaba la variable
+
+Cambiar el **default** de `PUBLISHED_ROOT` no sirvió de nada: `runner/Dockerfile` traía
+`ENV ... PUBLISHED_ROOT=/data/published`, y una variable puesta en la imagen gana siempre sobre un
+valor por defecto del código. El arreglo se fusionó, se desplegó, y los sitios publicados **seguían
+en la capa efímera del contenedor**.
+
+La lección es general y vale para cualquier `X = process.env.X || <default>`: el default sólo manda
+si nadie puso la variable, y aquí hay **tres sitios** donde puede aparecer —el Dockerfile, el
+entorno del servicio en EasyPanel, y `docker-compose.yaml`—. Arreglar el default sin mirar los tres
+es arreglar la mitad que no se estaba usando.
+
+Ahora el Dockerfile **no** la fija, con un comentario que explica por qué no volver a ponerla.
+
 ### El contador de compilación llevaba días parado
 
 La insignia del header es **cómo se comprueba que un despliegue llegó**. Estuvo clavada en 197
