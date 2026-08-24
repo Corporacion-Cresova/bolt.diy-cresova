@@ -203,6 +203,40 @@ afterAll(async () => {
  * changed was the very page it then served unchanged from cache. Reported, reasonably, as not being
  * able to publish again.
  */
+/*
+ * Where published sites land when nobody configured it.
+ *
+ * The default used to be `/data/published`, a sibling of the projects directory — which reads as
+ * "next to the projects" and is in fact the container's own writable layer, because the volume is
+ * mounted on the projects path and nowhere else. A site published from the builder was therefore
+ * one redeploy away from being gone, with nothing able to bring it back: the built files are the
+ * whole record of a publish. This pins the default inside `PROJECT_ROOT`, where the volume is.
+ */
+describe('where a publish is kept', () => {
+  it('defaults inside the projects root, which is the part that is on a volume', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'cresova-default-'));
+    const { ProjectManager: Manager } = await import('./projects.mjs');
+
+    // the same default index.mjs applies when PUBLISHED_ROOT is not set
+    const manager = new Manager({
+      root: projectRoot,
+      publishedRoot: join(projectRoot, '.published'),
+      previewDomain: 'preview.test',
+      onEvent() {},
+    });
+
+    await mkdir(join(projectRoot, '.published', 'demo'), { recursive: true });
+    await writeFile(join(projectRoot, '.published', 'demo', 'index.html'), '<h1>ok</h1>');
+
+    expect(manager.publishedDir('demo')).toBe(join(projectRoot, '.published', 'demo'));
+
+    // and a project could never be given that path, so the two namespaces cannot collide
+    await expect(manager.open('.published')).rejects.toThrow(/Invalid project id/);
+
+    await rm(projectRoot, { recursive: true, force: true });
+  });
+});
+
 describe('a published site', () => {
   const NAME = 'cafeteria';
 

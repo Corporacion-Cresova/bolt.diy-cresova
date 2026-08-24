@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { extname } from 'node:path';
+import { extname, join } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { verifyTicket } from './tickets.mjs';
 import { ProjectManager } from './projects.mjs';
@@ -8,7 +8,24 @@ import { isValidProjectId, resolveInsideProject } from './paths.mjs';
 
 const PORT = Number(process.env.PORT) || 3001;
 const PROJECT_ROOT = process.env.PROJECT_ROOT || '/data/projects';
-const PUBLISHED_ROOT = process.env.PUBLISHED_ROOT || '/data/published';
+
+/**
+ * Where published sites live, and why the default sits inside the projects directory.
+ *
+ * A published site is the one thing here meant to outlive everything else: the project that built
+ * it, the runner process, a redeploy. That only holds if the files are on the volume, and the
+ * volume is whatever `PROJECT_ROOT` points at — a sibling path like `/data/published` looks like it
+ * belongs next to it but lands in the container's own writable layer, which a redeploy discards.
+ *
+ * That is not a hypothetical: a site published from the builder disappeared on the next deploy of
+ * this service, with nothing to bring it back, because the built files were the whole record of it.
+ * Defaulting inside `PROJECT_ROOT` makes the safe arrangement the one you get without configuring
+ * anything; `PUBLISHED_ROOT` still overrides it for a setup that mounts its own volume.
+ *
+ * The leading dot keeps it out of the namespace of project directories: `isValidProjectId` rejects
+ * any name starting with one, so no project can ever be given this path.
+ */
+const PUBLISHED_ROOT = process.env.PUBLISHED_ROOT || join(PROJECT_ROOT, '.published');
 const PREVIEW_DOMAIN = process.env.PREVIEW_DOMAIN || 'preview.cresova.com';
 const TOKEN = process.env.RUNNER_TOKEN || '';
 const IDLE_TIMEOUT_MS = Number(process.env.IDLE_TIMEOUT_MS) || 30 * 60 * 1000;
@@ -375,6 +392,9 @@ setInterval(() => {
 
 server.listen(PORT, () => {
   console.log(`Cresova Runner listening on ${PORT}, previews at *.${PREVIEW_DOMAIN}`);
+
+  // worth saying out loud: a published site that is not on the volume is one redeploy from gone
+  console.log(`Projects in ${PROJECT_ROOT}, published sites in ${PUBLISHED_ROOT}`);
 });
 
 /*
