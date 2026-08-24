@@ -515,8 +515,19 @@ export class ProjectManager {
     clearInterval(project.readyWatcher);
     project.readyWatcher = undefined;
 
-    console.log(`Stopped waiting for the server of ${project.id}: ${reason}`);
-    this.onEvent(project.id, { type: 'server-timeout', reason });
+    /*
+     * What was actually observed, not just that the wait ended.
+     *
+     * «It never became ready» leaves the two possible faults indistinguishable, and they call for
+     * opposite investigations: a server that never opened a port at all is a command that failed or
+     * a framework that never got going, while a server holding an open port without answering is
+     * one that started and then wedged. Saying which was seen is the difference between a log that
+     * closes the question and one that starts another round of guessing.
+     */
+    const observed = project.lastProbe ?? 'no llegó a observarse nada';
+
+    console.log(`Stopped waiting for the server of ${project.id}: ${reason} (${observed})`);
+    this.onEvent(project.id, { type: 'server-timeout', reason, observed });
   }
 
   #watchForServer(project) {
@@ -560,7 +571,12 @@ export class ProjectManager {
       try {
         servingPort = await this.#findServingPort(project);
 
-        if (servingPort !== undefined && !(await answersHttp(servingPort))) {
+        if (servingPort === undefined) {
+          project.lastProbe = 'ningún proceso del proyecto tenía un puerto escuchando';
+        } else if (await answersHttp(servingPort)) {
+          project.lastProbe = `contestó en el puerto ${servingPort}`;
+        } else {
+          project.lastProbe = `abrió el puerto ${servingPort} pero no contestó una petición HTTP`;
           servingPort = undefined;
         }
       } finally {

@@ -394,6 +394,21 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### El runner ahora dice qué vio, no sólo que se rindió
+
+«No llegó a estar listo» deja indistinguibles los dos fallos posibles, y piden investigaciones
+opuestas: un servidor que **nunca abrió un puerto** es un comando que falló o un framework que no
+arrancó; uno que **abrió el puerto y no contestó** arrancó y se atascó. El log decía sólo que la
+espera terminó, así que cada caso costaba otra ronda de conjeturas.
+
+Ahora el mensaje lleva lo observado en el último sondeo: *«ningún proceso del proyecto tenía un
+puerto escuchando»* o *«abrió el puerto N pero no contestó una petición HTTP»*. El evento
+`server-timeout` lleva el mismo dato al navegador.
+
+Pendiente de cerrar con esa información: un proyecto real estuvo **30 minutos con el proceso vivo
+sin llegar a servir**, y los dos sintomas —el sondeo que nunca daba verde y el proxy que se colgaba—
+encajan con un servidor que abre su puerto y no contesta. Falta confirmarlo con el mensaje nuevo.
+
 ### Un redespliegue borraba los sitios publicados
 
 `PUBLISHED_ROOT` caía por defecto en `/data/published`. Se lee como «al lado de los proyectos», y es
