@@ -394,6 +394,82 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### Republicar parecía imposible, y eran dos cosas distintas
+
+Del lado del runner republicar siempre funcionó — se comprobó publicando dos veces con el mismo
+nombre y verificando que el sitio servido cambiaba. Lo que fallaba estaba a los lados.
+
+**La caché.** `servePublished` no mandaba nada sobre frescura, así que el navegador cacheaba por
+heurística. La página que alguien vuelve a publicar para enseñar lo que cambió es justo la que el
+navegador le devuelve **sin cambiar**, desde caché. Visto desde fuera es idéntico a que publicar no
+haya funcionado, y así se reportó. Ahora va `cache-control: no-cache`, y a todo, no sólo al HTML:
+Vite pone huella a lo que compila en `assets/`, pero lo que el proyecto guarde en `public/` se copia
+con su propio nombre y cachearlo fuerte devolvería el mismo problema por otra puerta.
+
+**El diálogo.** Tras publicar, la vista de éxito terminaba en «Cerrar»: para volver al formulario
+había que cerrar y reabrir. Volver a publicar es lo normal —se construye el sitio, se enseña, piden
+un cambio, se quiere el mismo enlace— así que ahora hay un botón «Publicar de nuevo con los
+cambios» ahí mismo.
+
+### El 502 que no era del runner
+
+Diagnosticado desde fuera, y el método vale tanto como el hallazgo: se probaron cinco nombres bajo
+el comodín. Cuatro contestaron **con** `cross-origin-resource-policy` — o sea, los contestó el
+runner. El quinto, el del proyecto que sí existía, devolvió un 502 **sin** esa cabecera y con la
+página de error de EasyPanel. Esa cabecera es la firma del runner: si falta, la petición ni le
+llegó. DNS, TLS, el comodín y Traefik estaban perfectos; el problema estaba dentro.
+
+Lo que pasaba: el proxy reenvía al servidor del proyecto y **no tenía plazo**. Un servidor de
+desarrollo atascado en su primera compilación acepta la conexión y se queda callado, así que el
+runner sostenía la petición abierta sin nada que la cortara, hasta que la pasarela de delante se
+cansaba y servía su propio error. El usuario veía un 502 genérico de un servicio que ni siquiera
+había opinado, y el mensaje del runner —que existe y explica el problema— no llegaba a ejecutarse.
+
+Y la rama del 502 **no llevaba `EMBEDDABLE`**. Las otras tres del enrutado por Host sí; a esta se le
+pasó. Bajo la política COEP del builder, una respuesta sin esa cabecera se bloquea antes de
+pintarse: una explicación que no se puede leer dentro del marco vale lo mismo que ninguna. Es
+exactamente el fallo que ya estaba documentado más arriba, sobreviviendo en la cuarta rama.
+
+`ready-watcher.spec.mjs` lo fija con un servidor que acepta y nunca contesta: la respuesta llega en
+15 s, con el mensaje del runner y con la cabecera. Las dos mitades de ese archivo viven juntas a
+propósito — vitest paraleliza archivos pero serializa dentro de uno, y separadas competían por el
+rango de puertos 41000-41999: el sondeo de una alcanzaba el servidor deliberadamente mudo de la
+otra.
+
+### El «StreamRecoveryManager» que no recuperaba nada
+
+Cuando OpenRouter enruta a un proveedor que se cuelga, el modelo deja de mandar tokens y no avisa.
+`api.chat.ts` lo detecta con un vigilante de 180 s — eso estaba bien. Lo que no estaba bien es lo que
+hacía después.
+
+`StreamRecoveryManager` lleva `_retryCount`, `maxRetries`, `onRecovery`, y escribe *«Attempting
+stream recovery»* en el log. No reintenta nunca: lo único que hace su `_handleTimeout` es llamar a
+`onTimeout`, y en `api.chat.ts` ese callback **aborta la petición**. `maxRetries: 1` no significaba
+«reintenta una vez», significaba «aborta en el primer timeout». Es el mismo patrón que ya estaba
+documentado del handler viejo que «sólo registraba *attempting recovery* sin recuperar nada»: quedó
+a medio arreglar, y el nombre siguió mintiendo.
+
+Ahora sí reintenta, **una sola vez y sólo cuando no llegó nada**. Esa condición es la que hace que
+sea seguro: si el modelo todavía no escribió un carácter, volver a preguntar no puede duplicar nada
+porque no hay nada en pantalla que duplicar. En cuanto llega el primer `text-delta`, `receivedOutput`
+se pone en `true` y un cuelgue posterior vuelve a terminar la petición como antes — reintentar ahí
+repetiría trabajo ya mostrado.
+
+Dos cosas que el reintento tiene que respetar y por las que el código es más largo de lo que parece:
+
+1. **El intento colgado hay que soltarlo**, no dejarlo corriendo. Cada intento lleva su propio
+   `AbortController` para poder abortarlo sin abortar la petición entera.
+2. **Un rezagado no puede escribir en una respuesta que ya siguió sin él.** Cada intento lleva su
+   número, y sólo el intento vigente puede reportar un fallo o dar la respuesta por terminada. Sin
+   eso, abortar el intento 1 haría que su propio error cerrara la respuesta del intento 2.
+
+Y como abortar hace que el `for await` lance, el bucle va dentro de un `try/catch` que distingue «me
+abortaron a propósito» de un fallo real.
+
+**Sin verificar en ejecución.** Un cuelgue de OpenRouter no se reproduce a pedido, y las
+dependencias de la app no se pueden instalar donde se escribió esto. Es el cambio más delicado de
+esta tanda: toca el bucle de streaming, que es por donde pasa toda la generación.
+
 ### Un `MutationObserver` sobre todo el documento para leer la URL
 
 `FilesStore` quería enterarse de que el chat de la URL había cambiado, y lo hacía con un
