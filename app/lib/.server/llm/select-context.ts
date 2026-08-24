@@ -224,8 +224,25 @@ export async function selectContext(props: {
   const totalFiles = Object.keys(filteredFiles).length;
   logger.info(`Total files: ${totalFiles}`);
 
-  if (totalFiles == 0) {
-    throw new Error(`Bolt failed to select files`);
+  /*
+   * Selecting nothing is an answer, not a failure.
+   *
+   * The prompt above says it twice — «if no changes are needed, you can leave the response empty» —
+   * and then this threw on exactly that reply, killing the whole request before a single token of
+   * the real answer was generated. The user saw «Bolt failed to select files» and a turn that never
+   * happened.
+   *
+   * Empty is also the ordinary outcome in a second, quieter way: `filteredFiles` collects only what
+   * is *new*, since anything already in the buffer is skipped above. A model that correctly picks
+   * the files it needs, all of which are already in context, produces zero here — which is the
+   * right call being reported as a fault.
+   *
+   * The buffer that is already loaded is what the selector just judged sufficient, so that is what
+   * the turn should run with.
+   */
+  if (totalFiles === 0) {
+    logger.info('No new files to add; keeping the context buffer as it stands');
+    return contextFiles;
   }
 
   return filteredFiles;

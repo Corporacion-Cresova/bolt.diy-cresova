@@ -394,6 +394,35 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### «Bolt failed to select files»: elegir nada se trataba como fallo
+
+Antes de generar, `selectContext` hace una llamada aparte al modelo para decidir qué archivos entran
+en el buffer de contexto. Su propio prompt dice **dos veces** que si no hace falta cambiar nada se
+puede devolver el bloque vacío… y después el código lanzaba un error fatal justo con esa respuesta:
+
+```js
+if (totalFiles == 0) {
+  throw new Error(`Bolt failed to select files`);
+}
+```
+
+La petición moría **antes de generar un solo token**. Desde fuera se ve como un modelo que no
+responde, que es exactamente como se reportó: *«le mandé mensaje y no respondió»*.
+
+Y hay una segunda vía, más silenciosa, hacia el mismo cero: `filteredFiles` sólo acumula lo
+**nuevo**, porque lo que ya está en el buffer se salta unas líneas antes. Un modelo que elige
+correctamente los archivos que necesita, todos ya cargados, produce cero — su acierto reportado como
+fallo. Con un proyecto de 3 archivos eso deja de ser un caso raro y pasa a ser lo normal.
+
+Ahora cero significa «el buffer está bien como está» y se devuelve el buffer vigente, ya con las
+exclusiones aplicadas.
+
+**Lo que este fallo enseñó del método:** se pasaron horas buscando en el runner por qué no había
+vista previa. No había vista previa porque no había servidor; no había servidor porque no había
+acción `start`; no había acción `start` porque la generación no llegaba a producir el artefacto. El
+transporte estaba sano — no había carga que transportar. Cuando falta el último eslabón de una
+cadena, conviene comprobar el primero antes de desarmar el resto.
+
 ### El arreglo del volumen estaba inerte porque la imagen fijaba la variable
 
 Cambiar el **default** de `PUBLISHED_ROOT` no sirvió de nada: `runner/Dockerfile` traía
