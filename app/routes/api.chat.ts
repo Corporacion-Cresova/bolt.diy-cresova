@@ -56,10 +56,38 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
    * their combined time was aborting perfectly healthy requests.
    */
   const streamAbort = new AbortController();
+
+  /*
+   * Whether the model has said anything at all yet.
+   *
+   * This is what decides between retrying and giving up. A stall with nothing written is an
+   * upstream that never got going: asking again costs one call and cannot duplicate anything,
+   * because there is nothing on screen to duplicate. A stall *after* the model has started is the
+   * opposite — retrying would replay work already shown, so that one still ends the request.
+   */
+  let receivedOutput = false;
+  let retriedEmptyStream = false;
+
+  /** Set once the attempt is running, so a stalled attempt can be dropped without ending the request. */
+  let retryStalledStream: (() => void) | undefined;
+
   const streamRecovery = new StreamRecoveryManager({
     timeout: 180000,
     maxRetries: 1,
     onTimeout: () => {
+      if (!receivedOutput && !retriedEmptyStream && retryStalledStream) {
+        retriedEmptyStream = true;
+        logger.warn('No output at all after 180s, asking the model once more');
+
+        try {
+          retryStalledStream();
+          return;
+        } catch (error) {
+          // a retry that cannot even start is not a reason to hang: fall through and end the request
+          logger.error('Could not restart the stalled stream', error);
+        }
+      }
+
       logger.warn('No activity for 180s, aborting the request');
       streamAbort.abort(new Error('The model stopped responding. No output was received for 3 minutes.'));
     },
@@ -392,56 +420,131 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           message: 'Generating Response',
         } satisfies ProgressAnnotation);
 
-        const result = await streamText({
-          messages: [...processedMessages],
-          env: context.cloudflare?.env,
-          options,
-          apiKeys,
-          files,
-          providerSettings,
-          promptId,
-          contextOptimization,
-          contextFiles: filteredFiles,
-          chatMode,
-          designScheme,
-          summary,
-          messageSliceId,
-        });
+        /*
+         * One try at getting the model to answer.
+         *
+         * Written as something that can be run twice because an upstream that stalls before saying
+         * anything is worth asking again — see `receivedOutput` above. Each attempt gets its own
+         * abort controller so a stalled one can be dropped without ending the request, and every
+         * attempt carries its number so that a straggler waking up late cannot write into a
+         * response that has moved on without it: only the current attempt may report a failure or
+         * declare the response finished.
+         */
+        let currentAttempt = 0;
+        let dropCurrentAttempt: (() => void) | undefined;
 
-        // the model is connected, the budget from here on covers time to first token
-        streamRecovery.updateActivity();
+        const runAttempt = async (): Promise<void> => {
+          const attempt = ++currentAttempt;
+          const attemptAbort = new AbortController();
+          const isStale = () => attempt !== currentAttempt;
 
-        (async () => {
-          for await (const part of result.fullStream) {
-            streamRecovery.updateActivity();
+          dropCurrentAttempt = () => attemptAbort.abort(new Error('Dropped after stalling without output'));
 
-            if (part.type === 'error') {
-              const error: any = part.error;
-              logger.error('Streaming error:', error);
-              streamFailure = asError(error ?? 'The model stopped mid-response');
-              streamRecovery.stop();
+          // giving up on the request as a whole has to stop whichever attempt is in flight
+          streamAbort.signal.addEventListener('abort', () => attemptAbort.abort(streamAbort.signal.reason));
 
-              // Enhanced error handling for common streaming issues
-              if (error.message?.includes('Invalid JSON response')) {
-                logger.error('Invalid JSON response detected - likely malformed API response');
-              } else if (error.message?.includes('token')) {
-                logger.error('Token-related error detected - possible token limit exceeded');
+          const result = await streamText({
+            messages: [...processedMessages],
+            env: context.cloudflare?.env,
+            options: { ...options, abortSignal: attemptAbort.signal },
+            apiKeys,
+            files,
+            providerSettings,
+            promptId,
+            contextOptimization,
+            contextFiles: filteredFiles,
+            chatMode,
+            designScheme,
+            summary,
+            messageSliceId,
+          });
+
+          // the model is connected, the budget from here on covers time to first token
+          streamRecovery.updateActivity();
+
+          (async () => {
+            try {
+              for await (const part of result.fullStream) {
+                if (isStale()) {
+                  return;
+                }
+
+                streamRecovery.updateActivity();
+
+                /*
+                 * The first sign of life. Past this point a stall is no longer worth retrying: the
+                 * browser already has text, and asking again would replay it.
+                 */
+                if (part.type === 'text-delta') {
+                  receivedOutput = true;
+                }
+
+                if (part.type === 'error') {
+                  const error: any = part.error;
+                  logger.error('Streaming error:', error);
+                  streamFailure = asError(error ?? 'The model stopped mid-response');
+                  streamRecovery.stop();
+
+                  // Enhanced error handling for common streaming issues
+                  if (error.message?.includes('Invalid JSON response')) {
+                    logger.error('Invalid JSON response detected - likely malformed API response');
+                  } else if (error.message?.includes('token')) {
+                    logger.error('Token-related error detected - possible token limit exceeded');
+                  }
+
+                  markAllSegmentsDone();
+
+                  return;
+                }
+              }
+            } catch (error) {
+              /*
+               * Dropping a stalled attempt aborts its stream, and an aborted `for await` throws
+               * here. That throw is this code's own doing, not something to report: without this it
+               * would surface as an unhandled rejection and, worse, end a request that has already
+               * moved on to the next attempt.
+               */
+              if (isStale()) {
+                return;
               }
 
+              logger.error('The stream ended unexpectedly', error);
+              streamFailure = asError(error ?? 'The model stopped mid-response');
+              streamRecovery.stop();
               markAllSegmentsDone();
 
               return;
             }
-          }
-          streamRecovery.stop();
 
-          /*
-           * A stream that ends without onFinish, which happens when the upstream drops, must not
-           * leave execute() waiting forever. Resolving twice is a no-op.
-           */
-          markAllSegmentsDone();
-        })();
-        result.mergeIntoDataStream(dataStream);
+            if (isStale()) {
+              return;
+            }
+
+            streamRecovery.stop();
+
+            /*
+             * A stream that ends without onFinish, which happens when the upstream drops, must not
+             * leave execute() waiting forever. Resolving twice is a no-op.
+             */
+            markAllSegmentsDone();
+          })();
+          result.mergeIntoDataStream(dataStream);
+        };
+
+        /*
+         * Handed to the watchdog only now that there is something to restart. Until this is set the
+         * watchdog ends the request exactly as it always did, which is what should happen to a stall
+         * that predates the first attempt.
+         */
+        retryStalledStream = () => {
+          dropCurrentAttempt?.();
+          void runAttempt().catch((error) => {
+            logger.error('The second attempt could not be started', error);
+            streamAbort.abort(asError(error));
+          });
+        };
+
+        await runAttempt();
 
         streamAbort.signal.addEventListener('abort', () => markAllSegmentsDone());
 

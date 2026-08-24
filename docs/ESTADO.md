@@ -394,6 +394,40 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### El «StreamRecoveryManager» que no recuperaba nada
+
+Cuando OpenRouter enruta a un proveedor que se cuelga, el modelo deja de mandar tokens y no avisa.
+`api.chat.ts` lo detecta con un vigilante de 180 s — eso estaba bien. Lo que no estaba bien es lo que
+hacía después.
+
+`StreamRecoveryManager` lleva `_retryCount`, `maxRetries`, `onRecovery`, y escribe *«Attempting
+stream recovery»* en el log. No reintenta nunca: lo único que hace su `_handleTimeout` es llamar a
+`onTimeout`, y en `api.chat.ts` ese callback **aborta la petición**. `maxRetries: 1` no significaba
+«reintenta una vez», significaba «aborta en el primer timeout». Es el mismo patrón que ya estaba
+documentado del handler viejo que «sólo registraba *attempting recovery* sin recuperar nada»: quedó
+a medio arreglar, y el nombre siguió mintiendo.
+
+Ahora sí reintenta, **una sola vez y sólo cuando no llegó nada**. Esa condición es la que hace que
+sea seguro: si el modelo todavía no escribió un carácter, volver a preguntar no puede duplicar nada
+porque no hay nada en pantalla que duplicar. En cuanto llega el primer `text-delta`, `receivedOutput`
+se pone en `true` y un cuelgue posterior vuelve a terminar la petición como antes — reintentar ahí
+repetiría trabajo ya mostrado.
+
+Dos cosas que el reintento tiene que respetar y por las que el código es más largo de lo que parece:
+
+1. **El intento colgado hay que soltarlo**, no dejarlo corriendo. Cada intento lleva su propio
+   `AbortController` para poder abortarlo sin abortar la petición entera.
+2. **Un rezagado no puede escribir en una respuesta que ya siguió sin él.** Cada intento lleva su
+   número, y sólo el intento vigente puede reportar un fallo o dar la respuesta por terminada. Sin
+   eso, abortar el intento 1 haría que su propio error cerrara la respuesta del intento 2.
+
+Y como abortar hace que el `for await` lance, el bucle va dentro de un `try/catch` que distingue «me
+abortaron a propósito» de un fallo real.
+
+**Sin verificar en ejecución.** Un cuelgue de OpenRouter no se reproduce a pedido, y las
+dependencias de la app no se pueden instalar donde se escribió esto. Es el cambio más delicado de
+esta tanda: toca el bucle de streaming, que es por donde pasa toda la generación.
+
 ### Un `MutationObserver` sobre todo el documento para leer la URL
 
 `FilesStore` quería enterarse de que el chat de la URL había cambiado, y lo hacía con un
