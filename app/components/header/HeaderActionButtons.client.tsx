@@ -3,6 +3,7 @@ import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { DeployButton } from '~/components/deploy/DeployButton';
 import { PublishButton } from '~/components/deploy/PublishButton';
+import { DiagnosticsButton } from '~/components/deploy/DiagnosticsButton';
 
 interface HeaderActionButtonsProps {
   chatStarted: boolean;
@@ -28,6 +29,12 @@ export function HeaderActionButtons({ chatStarted: _chatStarted }: HeaderActionB
        * its own whether it has anything to publish.
        */}
       <PublishButton />
+
+      {/*
+       * Same reasoning as Publish, and more so: the moment this button is worth pressing is the
+       * moment there is no preview, so gating it on one would hide it exactly when it is needed.
+       */}
+      <DiagnosticsButton />
 
       {/* Debug Tools */}
       {shouldShowButtons && (

@@ -335,6 +335,7 @@ const handlers = {
   stdin: (id, message) => projects.write(id, message.processId, message.data),
   kill: (id, message) => projects.kill(id, message.processId),
   publish: (id, message) => projects.publish(id, message.name),
+  diagnostics: (id) => projects.diagnostics(id),
 };
 
 wss.on('connection', async (ws) => {

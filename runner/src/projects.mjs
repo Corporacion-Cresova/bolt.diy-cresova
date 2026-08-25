@@ -3,9 +3,9 @@ import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/pro
 import { dirname, join, relative } from 'node:path';
 import { createConnection, createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { isValidProjectId, isValidPublishName, resolveInsideProject } from './paths.mjs';
-import { findServingPort } from './ports.mjs';
+import { findServingPort, listeningPortsForInodes, processGroupMembers, socketInodes } from './ports.mjs';
 
 /*
  * The same order `#runBuildAction` in the app tries them in — kept in sync by hand, since the two
@@ -348,6 +348,46 @@ export class ProjectManager {
     console.log(`Published ${projectId} as ${name}`);
 
     return { url: this.publishedUrl(name) };
+  }
+
+  /**
+   * Everything the runner knows about one project, in one answer.
+   *
+   * This exists because the same handful of questions kept being asked by hand, one shell command
+   * at a time, hours apart: is anything running, what did it open, did the probe ever reach it. The
+   * answers only mean something together — a live process with no port is a different fault from a
+   * port that never answers — and by the time they were collected separately the project had often
+   * moved on. Asking the service that already knows is faster and cannot be measured at the wrong
+   * moment.
+   *
+   * Deliberately no environment and no file contents: this is written to be pasted into a chat, and
+   * the environment is where the credentials live.
+   */
+  async diagnostics(projectId) {
+    const project = await this.open(projectId);
+    const groups = [...project.processes.values()].map((child) => child.pid).filter(Boolean);
+
+    const pids = [];
+
+    for (const group of groups) {
+      pids.push(...(await processGroupMembers(group)));
+    }
+
+    const listeningPorts = pids.length > 0 ? await listeningPortsForInodes(await socketInodes(pids)) : [];
+
+    return {
+      projectId,
+      assignedPort: project.port,
+      servingPort: project.servingPort,
+      ready: project.ready,
+      liveProcesses: project.processes.size,
+      stillWatching: Boolean(project.readyWatcher),
+      lastProbe: project.lastProbe,
+      listeningPorts,
+      lastCommand: project.lastCommand,
+      idleForMs: Date.now() - project.lastSeen,
+      publishedNames: existsSync(this.publishedRoot) ? readdirSync(this.publishedRoot) : [],
+    };
   }
 
   async writeFile(projectId, path, content) {
