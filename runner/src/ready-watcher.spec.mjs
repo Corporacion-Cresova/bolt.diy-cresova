@@ -220,6 +220,58 @@ afterAll(async () => {
  * and is stripped out of the model's context anyway — carried across the socket only to be thrown
  * away at the other end.
  */
+/*
+ * One answer that carries every question that kept being asked by hand.
+ *
+ * These readings only mean something together: a live process with no port open is a different
+ * fault from a port that is open and never answers, and collected one shell command at a time —
+ * hours apart, as happened — the project had usually moved on before the set was complete.
+ */
+describe('the diagnostics of a project', () => {
+  it('reports what the runner sees, and nothing from the environment', async () => {
+    const diagRoot = await mkdtemp(join(tmpdir(), 'cresova-diag-'));
+    const { ProjectManager: Manager } = await import('./projects.mjs');
+    const manager = new Manager({
+      root: diagRoot,
+      publishedRoot: join(diagRoot, '.published'),
+      previewDomain: 'preview.test',
+      onEvent() {},
+    });
+
+    const projectId = 'cresova-diagtest';
+    await manager.open(projectId);
+
+    const idle = await manager.diagnostics(projectId);
+
+    expect(idle.projectId).toBe(projectId);
+    expect(idle.liveProcesses).toBe(0);
+    expect(idle.listeningPorts).toEqual([]);
+    expect(idle.servingPort).toBeUndefined();
+    expect(idle.ready).toBe(false);
+
+    // nothing that could carry a credential: the environment is where those live
+    expect(JSON.stringify(idle)).not.toMatch(/sk-|API_KEY|TOKEN/i);
+
+    await writeFile(
+      join(diagRoot, projectId, 'server.mjs'),
+      `import { createServer } from 'node:http';
+       createServer((_request, response) => response.end('ok')).listen(Number(process.env.PORT));`,
+    );
+    await manager.spawn(projectId, 'node server.mjs', []);
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+
+    const busy = await manager.diagnostics(projectId);
+
+    expect(busy.liveProcesses).toBeGreaterThan(0);
+    expect(busy.listeningPorts).toContain(busy.assignedPort);
+    expect(busy.lastCommand).toBe('node server.mjs');
+    expect(busy.lastProbe).toBeTruthy();
+
+    await manager.closeAll();
+    await rm(diagRoot, { recursive: true, force: true });
+  }, 30_000);
+});
+
 describe('the project tree', () => {
   it('carries the project files but not the lockfile', async () => {
     const treeRoot = await mkdtemp(join(tmpdir(), 'cresova-tree-'));

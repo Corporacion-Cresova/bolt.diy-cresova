@@ -18,6 +18,21 @@ interface WatchEvent {
 
 type WatchCallback = (events: WatchEvent[]) => void;
 
+/** What the runner reports about a project when asked to describe itself. */
+export interface RunnerDiagnostics {
+  projectId: string;
+  assignedPort: number;
+  servingPort?: number;
+  ready: boolean;
+  liveProcesses: number;
+  stillWatching: boolean;
+  lastProbe?: string;
+  listeningPorts: number[];
+  lastCommand?: string;
+  idleForMs: number;
+  publishedNames: string[];
+}
+
 /** One entry from the runner's `fs.tree`, relative to the project root. */
 interface TreeEntry {
   path: string;
@@ -61,6 +76,17 @@ export class RemoteContainer {
    * Publishing over a name that already has a site replaces it — the same name is how you update
    * what you published before, not a way to end up with two.
    */
+  /**
+   * What the runner knows about this project, for the diagnostics report.
+   *
+   * The readings only mean something together — a live process with no open port is a different
+   * fault from an open port that never answers — so they are fetched in one call rather than
+   * reconstructed by hand, one shell command at a time, long after the moment they describe.
+   */
+  diagnostics(): Promise<RunnerDiagnostics> {
+    return this._connection.call<RunnerDiagnostics>('diagnostics');
+  }
+
   publish(name: string): Promise<{ url: string }> {
     // runs the project's build on the server, which takes longer than an ordinary call is given
     return this._connection.call<{ url: string }>('publish', { name }, BUILD_TIMEOUT_MS);

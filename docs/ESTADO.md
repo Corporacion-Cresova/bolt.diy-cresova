@@ -394,6 +394,34 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### Un botón de diagnóstico, porque las lecturas sueltas no servían
+
+Diagnosticar la vista previa costó horas de ida y vuelta pidiendo comandos de a uno: mira los
+puertos, mira los procesos, pega el log. Y el problema no era la falta de datos sino **cuándo** se
+tomaban: las lecturas sólo significan algo **juntas y en el mismo instante**.
+
+- Un proceso vivo **sin ningún puerto abierto** es un comando que nunca arrancó.
+- Un puerto abierto **que no contesta** es un servidor que arrancó y se atascó.
+
+Son fallos opuestos y piden arreglos opuestos. Recogidas por separado y con horas de diferencia, el
+proyecto ya se había reciclado antes de completar el juego — pasó exactamente así más de una vez.
+
+`diagnostics` en el runner devuelve todo de una: procesos vivos, puertos escuchando, puerto
+asignado frente a puerto sirviendo, si el vigilante sigue buscando, el último sondeo, el último
+comando y qué hay publicado. El botón de la cabecera lo junta con lo que cree el navegador —backend
+en uso, archivos, vistas previas— y lo copia como texto para pegar en el chat.
+
+Dos decisiones que importan:
+
+- **No lleva entorno ni contenido de archivos.** Está pensado para pegarse en una conversación, y el
+  entorno es donde viven las credenciales. Una prueba lo fija comprobando que la respuesta no
+  contenga nada con forma de clave — la lección de haber pedido un `ps` que imprimió tres.
+- **No se esconde detrás de la vista previa**, como sí hacen los botones vecinos. El momento en que
+  vale la pena pulsarlo es justo el momento en que no hay vista previa.
+
+No se extendió `debugLogger` (1284 líneas heredadas de bolt.diy): produce un volcado JSON genérico
+que no sabe nada del runner, que es donde estaban todas las respuestas.
+
 ### El árbol de archivos llevaba el lockfile, y midiendo se descartaron dos teorías
 
 `fs.tree` manda **todos los archivos con contenido** después de **cada comando**, y excluía
