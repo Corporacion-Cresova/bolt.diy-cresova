@@ -435,3 +435,113 @@ describe('a preview whose server never answers', () => {
     expect(answer.headers['cross-origin-resource-policy']).toBe('cross-origin');
   }, 60_000);
 });
+
+/*
+ * How a browser that was not there learns that a preview exists.
+ *
+ * `server-ready` is emitted once, to whichever sockets happen to be open at that instant, and it is
+ * the only thing that puts a preview in the workbench's list. Every other way of arriving therefore
+ * found nothing: a reload, a reopened chat, a reconnection after this service restarted. The
+ * project was serving perfectly and the builder showed no preview at all — and since a project that
+ * already has files is deliberately not rebuilt on open, nothing was ever going to be started again
+ * to produce a second announcement.
+ *
+ * The state of the server belongs in the handshake for that reason: a fact any new connection can
+ * read, rather than an event you had to be present for.
+ */
+describe('a browser connecting to a project that is already serving', () => {
+  const HANDSHAKE_PORT = 3988;
+  const HANDSHAKE_TOKEN = 'runner-token-for-handshake-'.padEnd(40, 'x');
+  const HANDSHAKE_PROJECT = 'cresova-alreadyserving';
+
+  let handshakeRunner;
+  let handshakeRoot;
+
+  const open = async () => {
+    const { default: WebSocket } = await import('ws');
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${HANDSHAKE_PORT}/connect?projectId=${HANDSHAKE_PROJECT}&ticket=${createTicket(
+        HANDSHAKE_TOKEN,
+        HANDSHAKE_PROJECT,
+      )}`,
+    );
+
+    const ready = await new Promise((resolve, reject) => {
+      socket.on('message', (raw) => {
+        const event = JSON.parse(raw.toString());
+
+        if (event.type === 'ready') {
+          resolve(event);
+        }
+      });
+      socket.on('error', reject);
+    });
+
+    return { socket, ready };
+  };
+
+  beforeAll(async () => {
+    handshakeRoot = await mkdtemp(join(tmpdir(), 'cresova-handshake-'));
+    await mkdir(join(handshakeRoot, HANDSHAKE_PROJECT), { recursive: true });
+
+    await writeFile(
+      join(handshakeRoot, HANDSHAKE_PROJECT, 'server.mjs'),
+      `import { createServer } from 'node:http';
+       createServer((_request, response) => response.end('vivo')).listen(Number(process.env.PORT));`,
+    );
+
+    handshakeRunner = spawn('node', [join(import.meta.dirname, 'index.mjs')], {
+      env: {
+        ...process.env,
+        PORT: String(HANDSHAKE_PORT),
+        RUNNER_TOKEN: HANDSHAKE_TOKEN,
+        PROJECT_ROOT: handshakeRoot,
+        PUBLISHED_ROOT: join(handshakeRoot, 'published'),
+        PREVIEW_DOMAIN: 'preview.test',
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }, 30_000);
+
+  afterAll(async () => {
+    handshakeRunner?.kill('SIGTERM');
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await rm(handshakeRoot, { recursive: true, force: true });
+  });
+
+  it('is told about the dev server it arrived too late to be announced', async () => {
+    const first = await open();
+
+    expect(first.ready.serverReady).toBe(false);
+
+    const announced = new Promise((resolve, reject) => {
+      first.socket.on('message', (raw) => {
+        const event = JSON.parse(raw.toString());
+
+        if (event.type === 'server-ready') {
+          resolve(event);
+        }
+      });
+      setTimeout(() => reject(new Error('the server never came up')), 30_000);
+    });
+
+    first.socket.send(JSON.stringify({ type: 'spawn', id: 1, command: 'node server.mjs', args: [] }));
+
+    const serving = await announced;
+
+    /*
+     * The socket that heard the announcement goes away, which is what a reload, a closed tab or a
+     * dropped connection all look like from here.
+     */
+    first.socket.close();
+
+    const second = await open();
+
+    expect(second.ready.serverReady).toBe(true);
+    expect(second.ready.servingPort).toBe(serving.port);
+    expect(second.ready.previewUrl).toBe(`https://${HANDSHAKE_PROJECT}.preview.test`);
+
+    second.socket.close();
+  }, 60_000);
+});

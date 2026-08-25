@@ -5,7 +5,15 @@ import { executionBackendStore, runnerFailureStore } from '~/lib/cresova/executi
 import { workbenchStore } from '~/lib/stores/workbench';
 import { webcontainer } from '~/lib/webcontainer';
 import type { RemoteContainer, RunnerDiagnostics } from '~/lib/cresova/remote-container';
+import { describeTabSuspension, watchTabSuspension } from '~/lib/cresova/tab-suspension';
 import versionInfo from '~/version.json';
+
+/*
+ * Started from here because this is the button that reads it, and because the header is on screen
+ * from the moment a chat opens — the listeners have to be in place before the user leaves the tab,
+ * which is the only moment there is anything to record.
+ */
+watchTabSuspension();
 
 const NOT_REPORTED = 'sin dato';
 
@@ -42,6 +50,8 @@ function describe(diagnostics: RunnerDiagnostics | undefined, runnerError: strin
   if (runnerError) {
     lines.push(`  el VPS falló: ${runnerError}`);
   }
+
+  lines.push('', ...describeTabSuspension());
 
   lines.push('', 'RUNNER');
 

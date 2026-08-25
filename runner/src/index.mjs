@@ -353,6 +353,18 @@ wss.on('connection', async (ws) => {
    * `hasFiles` travels with the handshake because the browser needs it before it decides anything:
    * it replays a restored chat's artifact to rebuild the project, which is right when the project
    * is gone and wasteful when it is not.
+   *
+   * And so does the state of the dev server, for a reason that cost the preview entirely. The
+   * browser learns that a preview exists from exactly one message — the `server-ready` this service
+   * emits when the watcher first sees the server answer — and that message is sent once, to
+   * whichever sockets happen to be open at that instant. Every way of arriving afterwards therefore
+   * found nothing: reloading the page, reopening the chat, or simply reconnecting after this
+   * service restarted. Worse, a project that already has files is deliberately *not* rebuilt by the
+   * browser any more, so nothing was ever started again to produce a second announcement — a
+   * reopened chat could never get its preview back.
+   *
+   * Saying it in the handshake makes the preview a fact about the project that any new connection
+   * can read, instead of an event you had to be present for.
    */
   ws.send(
     JSON.stringify({
@@ -361,6 +373,8 @@ wss.on('connection', async (ws) => {
       previewUrl: projects.previewUrl(projectId),
       port: project.port,
       hasFiles: await projects.hasFiles(projectId),
+      serverReady: Boolean(project.ready && project.servingPort),
+      servingPort: project.servingPort,
     }),
   );
 

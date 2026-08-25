@@ -1,5 +1,6 @@
 import { WORK_DIR } from '~/utils/constants';
 import { createScopedLogger } from '~/utils/logger';
+import { recordRunnerMessage } from './tab-suspension';
 
 const logger = createScopedLogger('CresovaRunner');
 
@@ -25,7 +26,15 @@ const HANDSHAKE_TIMEOUT_MS = 20_000;
 export type ConnectionState = 'open' | 'reconnecting' | 'closed';
 
 export type RunnerEvent =
-  | { type: 'ready'; projectId: string; previewUrl: string; port: number; hasFiles?: boolean }
+  | {
+      type: 'ready';
+      projectId: string;
+      previewUrl: string;
+      port: number;
+      hasFiles?: boolean;
+      serverReady?: boolean;
+      servingPort?: number;
+    }
   | { type: 'output'; processId: string; stream: 'stdout' | 'stderr'; data: string }
   | { type: 'exit'; processId: string; code: number }
   | { type: 'server-ready'; port: number; url: string }
@@ -46,6 +55,20 @@ export class RunnerConnection {
   #pending = new Map<number, { resolve: (value: never) => void; reject: (error: Error) => void }>();
   #listeners = new Map<EventName, Set<Listener>>();
   #nextId = 1;
+
+  /**
+   * The dev server this project is serving on, once anything has said so.
+   *
+   * Kept rather than merely forwarded, because a preview used to depend on being subscribed at one
+   * particular instant. `server-ready` is sent once, when the runner's watcher first sees the
+   * server answer, and whoever was not listening right then never found out: a reload, a reopened
+   * chat, or a reconnection after the runner restarted all ended up with a working site and no
+   * preview. Remembering it turns the preview into something a late arrival can ask about.
+   *
+   * Fed from both ends of that problem — the live event, and the handshake of a connection that
+   * arrives after the fact.
+   */
+  #serverReady?: { port: number; url: string };
 
   #state: ConnectionState = 'closed';
   #reconnected?: Promise<void>;
@@ -70,6 +93,11 @@ export class RunnerConnection {
 
   get state(): ConnectionState {
     return this.#state;
+  }
+
+  /** The dev server, if this project already had one when we arrived or came to have one since. */
+  get serverReady(): { port: number; url: string } | undefined {
+    return this.#serverReady;
   }
 
   #setState(state: ConnectionState) {
@@ -203,12 +231,33 @@ export class RunnerConnection {
   }
 
   #dispatch(raw: string) {
+    // how much the runner sent while nobody was watching, for the background tab measurement
+    recordRunnerMessage(raw.length);
+
     let event: RunnerEvent;
 
     try {
       event = JSON.parse(raw) as RunnerEvent;
     } catch {
       return;
+    }
+
+    if (event.type === 'server-ready') {
+      this.#serverReady = { port: event.port, url: event.url };
+    }
+
+    /*
+     * A connection that opens onto a project whose server is already up learns it here, and nowhere
+     * else: nothing is going to be started again, so no second announcement is ever coming.
+     *
+     * The handshake is also the authority when it says there is no server. Reaching this point at
+     * all means a socket just opened, and after a reconnection that is a runner which stopped every
+     * project it had on the way out — so whatever we remembered from before is about a process that
+     * no longer exists.
+     */
+    if (event.type === 'ready') {
+      this.#serverReady =
+        event.serverReady && event.servingPort ? { port: event.servingPort, url: event.previewUrl } : undefined;
     }
 
     if (event.type === 'result') {

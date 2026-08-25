@@ -308,6 +308,44 @@ describe.skipIf(!RUNNER_READY)('RemoteContainer against a live runner', () => {
 
     connection.close();
   }, 15000);
+
+  /*
+   * The preview used to depend on being subscribed at one particular instant. `server-ready` is
+   * emitted once, and the workbench routinely attaches to a project long afterwards: a reload, a
+   * reopened chat, a reconnection after the runner restarted. Each of those found a site that was
+   * serving perfectly and showed no preview at all — and a project that already has files is no
+   * longer rebuilt on open, so no second announcement was ever coming.
+   */
+  it('tells a listener that subscribes after the server was announced', async () => {
+    const { connection } = await connect('late-demo');
+    const container = new RemoteContainer(connection);
+
+    await container.fs.writeFile(
+      'server.mjs',
+      `import{createServer}from'node:http';createServer((q,s)=>s.end('ok')).listen(process.env.PORT);`,
+    );
+
+    await new Promise<void>((resolve) => {
+      container.on('server-ready', () => resolve());
+      void runCommand(connection, 'node', ['server.mjs']);
+    });
+
+    connection.close();
+
+    // a second session, the way a reload or a reopened chat arrives: nothing is started again
+    const reopened = await connect('late-demo');
+    const port = await new Promise<number>((resolve) => {
+      new RemoteContainer(reopened.connection).on('port', (received, type) => {
+        if (type === 'open') {
+          resolve(received);
+        }
+      });
+    });
+
+    expect(port).toBeGreaterThan(0);
+
+    reopened.connection.close();
+  }, 30000);
 });
 
 describe('rewriting the workdir out of a command', () => {

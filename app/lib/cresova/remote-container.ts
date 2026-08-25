@@ -112,27 +112,41 @@ export class RemoteContainer {
    * The runner reports a single `server-ready`; the workbench needs both events from it, because
    * `server-ready` triggers the preview refresh while `port` is what actually puts the preview in
    * the list. Only one is ever reported by the runner, so both are driven from it.
+   *
+   * And a server that is already up is delivered to a listener that subscribes afterwards, which is
+   * what makes a preview survive anything other than the first time. Under WebContainer the
+   * container dies with the tab, so subscribing before the server starts is the only order there
+   * is; on the runner the server outlives the tab, and the workbench routinely attaches to a
+   * project that has been serving for an hour. Without this, that listener waited for an
+   * announcement that had already happened — and since a project with files is no longer rebuilt on
+   * open, one that was never going to happen again.
    */
   on(event: 'server-ready', listener: (port: number, url: string) => void): () => void;
   on(event: 'port', listener: (port: number, type: 'open' | 'close', url: string) => void): () => void;
   on(event: string, listener: (...args: never[]) => void): () => void;
   on(event: string, listener: (...args: never[]) => void): () => void {
     if (event === 'server-ready') {
+      const deliver = (port: number, url: string) =>
+        (listener as unknown as (port: number, url: string) => void)(port, url);
+
+      this.#replayServerReady(deliver);
+
       return this._connection.on('server-ready', (received) => {
         if (received.type === 'server-ready') {
-          (listener as unknown as (port: number, url: string) => void)(received.port, received.url);
+          deliver(received.port, received.url);
         }
       });
     }
 
     if (event === 'port') {
+      const deliver = (port: number, url: string) =>
+        (listener as unknown as (port: number, type: 'open' | 'close', url: string) => void)(port, 'open', url);
+
+      this.#replayServerReady(deliver);
+
       return this._connection.on('server-ready', (received) => {
         if (received.type === 'server-ready') {
-          (listener as unknown as (port: number, type: 'open' | 'close', url: string) => void)(
-            received.port,
-            'open',
-            received.url,
-          );
+          deliver(received.port, received.url);
         }
       });
     }
@@ -207,6 +221,24 @@ export class RemoteContainer {
       };
     },
   };
+
+  /**
+   * Hands a listener the server that is already running, without letting it fire inside `on`.
+   *
+   * The delay is not decoration: callers subscribe while they are still being constructed — the
+   * previews store does it from its own initialiser — and calling back synchronously would reach
+   * them mid-build. A task later they are whole, and the event looks exactly like one that arrived
+   * on its own.
+   */
+  #replayServerReady(deliver: (port: number, url: string) => void) {
+    const known = this._connection.serverReady;
+
+    if (!known) {
+      return;
+    }
+
+    setTimeout(() => deliver(known.port, known.url), 0);
+  }
 
   #watchers = new Set<WatchCallback>();
 
