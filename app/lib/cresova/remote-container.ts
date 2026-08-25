@@ -23,12 +23,19 @@ export interface RunnerDiagnostics {
   projectId: string;
   assignedPort: number;
   servingPort?: number;
+  servingHost?: string;
   ready: boolean;
   liveProcesses: number;
   stillWatching: boolean;
   lastProbe?: string;
   listeningPorts: number[];
+
+  /** Addresses as well as ports: a server on the IPv6 loopback is not one on the IPv4 loopback. */
+  listeningSockets?: string[];
   lastCommand?: string;
+
+  /** The tail of what the last command printed, which is where a wedged server says what it is on. */
+  lastOutput?: string;
   idleForMs: number;
   publishedNames: string[];
 }

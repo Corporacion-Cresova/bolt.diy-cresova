@@ -5,6 +5,7 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import { generateId } from '~/utils/fileUtils';
 import { createScopedLogger } from '~/utils/logger';
 import { detectBuildIntent } from './build-intent';
+import { serverTimeoutStore } from './execution-backend';
 import { detectWorkspaceCommands, hasInstalledDependencies } from './dev-server';
 import { describeActionFailures } from './action-failures';
 
@@ -31,8 +32,19 @@ const PREVIEW_TIMEOUT_ALERT = {
   title: 'La vista previa no llegó a estar lista',
   description: 'El servidor del proyecto no respondió a tiempo',
   content:
-    'El proyecto se creó, pero su servidor no llegó a responder. Revisa la terminal: si la instalación de dependencias falló, el error está ahí. Puedes volver a intentarlo pidiendo que se arranque de nuevo.',
+    'El proyecto se creó, pero su servidor no llegó a responder. Revisa la terminal: si la instalación de dependencias falló, el error está ahí. Pulsa **Diagnóstico** y pega el resultado: dice si el servidor abrió su puerto y en qué se quedó. El sitio se puede publicar igualmente — publicar compila los archivos del disco y no necesita el servidor de desarrollo.',
 } as const;
+
+/** The same, when the runner has already told us what it saw. Its account beats our guess. */
+function serverTimeoutAlert(observed: string) {
+  return {
+    type: 'error',
+    title: 'El servidor del proyecto no llegó a servir',
+    description: observed,
+    content:
+      'El runner dejó de buscarlo y dijo esto. Pulsa **Diagnóstico** y pega el resultado para ver en qué se quedó. Publicar sigue funcionando: compila los archivos del disco y no depende del servidor de desarrollo.',
+  } as const;
+}
 
 /** Marks the assistant message the guard injects, so the guard never re-enters on its own output. */
 export const AUTO_START_ANNOTATION = 'cresova-auto-start';
@@ -81,6 +93,37 @@ export type ExecutionGuardOutcome =
   | 'no-start-command'
   | 'preview-timeout';
 
+/**
+ * Carries on with the plan when the preview never came.
+ *
+ * The wait exists so each phase enriches something the user can already watch changing, and that is
+ * the right order — while the dev server is merely slow. When it is broken, holding the plan there
+ * turns one missing preview into a site that stops at phase one: the user asked for the rest, the
+ * files were written, and nothing said the build had quietly ended. That happened, and what was
+ * reported was not «no preview» but «I asked for one more thing and it did not do it».
+ *
+ * A phase that wrote no files still does not advance, which is the rule that keeps this from
+ * spending money building on top of a project that is not there. Publishing does not need the dev
+ * server either, so a build finished this way is still a site that can be put online.
+ */
+function continueWithoutPreview(
+  context: ExecutionGuardContext,
+  pending: ReturnType<typeof nextPhase>,
+  observed: string | undefined,
+): ExecutionGuardOutcome {
+  logger.warn(`No preview URL was reported by the execution backend${observed ? `: ${observed}` : ''}`);
+  workbenchStore.actionAlert.set(observed ? serverTimeoutAlert(observed) : { ...PREVIEW_TIMEOUT_ALERT });
+
+  if (!pending) {
+    return 'preview-timeout';
+  }
+
+  logger.info(`Advancing to phase ${pending.number}/${pending.total} without a live preview`);
+  context.requestNextPhase(phasePrompt(pending));
+
+  return 'next-phase';
+}
+
 function getTurnActions(assistantMessageId: string): ActionState[] {
   const artifacts = workbenchStore.artifacts.get();
 
@@ -108,6 +151,11 @@ async function waitForPreview(timeoutMs: number, giveUp?: () => boolean): Promis
     return true;
   }
 
+  // the runner has already said it is not coming; there is nothing left to wait for
+  if (serverTimeoutStore.get()) {
+    return false;
+  }
+
   return new Promise<boolean>((resolve) => {
     /*
      * The budget only runs down while the tab is visible. WebContainer executes the install and
@@ -116,9 +164,14 @@ async function waitForPreview(timeoutMs: number, giveUp?: () => boolean): Promis
      */
     let remainingMs = timeoutMs;
 
+    let stopListeningForTimeout = () => {
+      // replaced below, once there is a listener to stop
+    };
+
     const finish = (ready: boolean) => {
       clearInterval(ticker);
       unsubscribe();
+      stopListeningForTimeout();
       resolve(ready);
     };
 
@@ -142,6 +195,21 @@ async function waitForPreview(timeoutMs: number, giveUp?: () => boolean): Promis
     const unsubscribe = workbenchStore.previews.listen((previews) => {
       if (previews.some((preview) => preview.ready)) {
         finish(true);
+      }
+    });
+
+    /*
+     * The runner's verdict ends the wait immediately. It is the only side that can know: it watches
+     * the project's processes and probes its ports, while this side only knows that nothing has
+     * arrived. Waiting out ten more minutes after it has said the server is not coming holds up the
+     * build for no reason — and, since the next phase is only asked for once a preview is live,
+     * holds up the rest of the build with it.
+     *
+     * Registered last so everything it has to tear down already exists.
+     */
+    stopListeningForTimeout = serverTimeoutStore.listen((reason) => {
+      if (reason) {
+        finish(false);
       }
     });
   });
@@ -224,10 +292,7 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
     );
 
     if (!ready) {
-      logger.warn('No preview URL was reported by the execution backend');
-      workbenchStore.actionAlert.set({ ...PREVIEW_TIMEOUT_ALERT });
-
-      return 'preview-timeout';
+      return continueWithoutPreview(context, pending, serverTimeoutStore.get());
     }
 
     logger.info(`Server ready: ${workbenchStore.previews.get()[0]?.baseUrl}`);
@@ -282,10 +347,7 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
   const ready = await waitForPreview(PREVIEW_TIMEOUT_MS);
 
   if (!ready) {
-    logger.warn('Auto start did not produce a preview URL');
-    workbenchStore.actionAlert.set({ ...PREVIEW_TIMEOUT_ALERT });
-
-    return 'preview-timeout';
+    return continueWithoutPreview(context, pending, serverTimeoutStore.get());
   }
 
   logger.info(`Server ready: ${workbenchStore.previews.get()[0]?.baseUrl}`);

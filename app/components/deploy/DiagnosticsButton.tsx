@@ -65,8 +65,11 @@ function describe(diagnostics: RunnerDiagnostics | undefined, runnerError: strin
     `  proyecto: ${diagnostics.projectId}`,
     `  procesos vivos: ${diagnostics.liveProcesses}`,
     `  puertos escuchando: ${diagnostics.listeningPorts.join(', ') || 'ninguno'}`,
+    `  direcciones escuchando: ${diagnostics.listeningSockets?.join(', ') || 'ninguna'}`,
     `  puerto asignado: ${diagnostics.assignedPort}`,
-    `  puerto sirviendo: ${diagnostics.servingPort ?? 'ninguno todavía'}`,
+    `  sirviendo en: ${
+      diagnostics.servingPort ? `${diagnostics.servingHost ?? '127.0.0.1'}:${diagnostics.servingPort}` : 'nada todavía'
+    }`,
     `  servidor anunciado: ${sí(diagnostics.ready)}`,
     `  sigue buscándolo: ${sí(diagnostics.stillWatching)}`,
     `  último sondeo: ${diagnostics.lastProbe ?? NOT_REPORTED}`,
@@ -74,6 +77,22 @@ function describe(diagnostics: RunnerDiagnostics | undefined, runnerError: strin
     `  inactivo desde hace: ${Math.round(diagnostics.idleForMs / 1000)} s`,
     `  sitios publicados: ${diagnostics.publishedNames.join(', ') || 'ninguno'}`,
   );
+
+  /*
+   * Last, and only when there is any: it is the longest thing here and the only part that is not a
+   * single reading. A server that binds its port and then never answers says what it is stuck on in
+   * its own output, and nothing else in this report can say it.
+   */
+  if (diagnostics.lastOutput?.trim()) {
+    lines.push(
+      '',
+      '  últimas líneas del comando:',
+      ...diagnostics.lastOutput
+        .trimEnd()
+        .split('\n')
+        .map((line) => `    ${line}`),
+    );
+  }
 
   return lines.join('\n');
 }

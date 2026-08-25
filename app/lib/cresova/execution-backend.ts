@@ -34,6 +34,19 @@ const logger = createScopedLogger('CresovaRunner');
  */
 export const projectWasAlreadyBuiltStore = atom(false);
 
+/**
+ * What the runner said when it stopped looking for this project's dev server.
+ *
+ * The runner and the browser were each waiting on their own clock, and only the runner ever learns
+ * anything: it watches the processes and probes the ports. When it gives up, the browser used to go
+ * on waiting out its own ten minutes for an announcement that was never coming — and with the build
+ * held there, the next phase is never asked for either, so a wedged dev server quietly stops the
+ * whole thing rather than failing where it broke.
+ *
+ * Kept as a store, not just a log line, so the wait can end the moment the answer is known.
+ */
+export const serverTimeoutStore = atom<string | undefined>(undefined);
+
 const PROJECT_ID_KEY = 'cresova.projectId';
 
 /*
@@ -211,9 +224,14 @@ export async function connectToRunner(): Promise<RemoteContainer | undefined> {
    */
   connection.on('server-timeout', (event) => {
     if (event.type === 'server-timeout') {
-      logger.warn(`The runner stopped waiting for the dev server: ${event.reason}`);
+      const observed = 'observed' in event ? ` (${String(event.observed)})` : '';
+      logger.warn(`The runner stopped waiting for the dev server: ${event.reason}${observed}`);
+      serverTimeoutStore.set(`${event.reason}${observed}`);
     }
   });
+
+  // a new project, or a retry of this one, starts without the previous verdict hanging over it
+  serverTimeoutStore.set(undefined);
 
   try {
     const opened = await withTimeout(connection.connect(), CONNECT_TIMEOUT_MS, 'The runner did not answer in time');

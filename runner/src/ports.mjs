@@ -82,15 +82,45 @@ export async function socketInodes(pids, procRoot = '/proc') {
   return inodes;
 }
 
-/** Listening TCP ports, from the kernel's tables, restricted to the given socket inodes. */
-export async function listeningPortsForInodes(inodes, procRoot = '/proc') {
-  const ports = new Set();
+/**
+ * The loopback address a listening socket can actually be reached on.
+ *
+ * Reading the port and assuming `127.0.0.1` is an assumption, not an observation, and it is the
+ * same kind of assumption that `PORT` turned out to be: the whole point of asking the kernel is to
+ * stop guessing what the project did. A dev server that ends up on the IPv6 loopback is listening,
+ * shows up here, and refuses every connection to `127.0.0.1` — which reads from the outside exactly
+ * like a server that opened its port and wedged.
+ *
+ * The IPv4 table only ever holds IPv4 sockets, and one bound to `0.0.0.0` or to `127.0.0.1` is
+ * reachable at `127.0.0.1` either way. In the IPv6 table, `::1` reaches both a socket bound to the
+ * IPv6 loopback and one bound to `::`, since Node leaves dual stack on. The exception is an
+ * IPv4-mapped address (`::ffff:a.b.c.d`), which is an IPv4 socket wearing an IPv6 shape and has to
+ * be reached as IPv4.
+ */
+const IPV4_MAPPED_PREFIX = '0000000000000000FFFF0000';
 
-  for (const table of [`${procRoot}/net/tcp`, `${procRoot}/net/tcp6`]) {
+function loopbackFor(table, addressHex) {
+  if (table === 'tcp') {
+    return '127.0.0.1';
+  }
+
+  return addressHex.toUpperCase().startsWith(IPV4_MAPPED_PREFIX) ? '127.0.0.1' : '::1';
+}
+
+/**
+ * Listening TCP sockets, from the kernel's tables, restricted to the given socket inodes.
+ *
+ * Each entry carries the address to reach it on as well as the port, because those are two separate
+ * facts and only one of them used to be read.
+ */
+export async function listeningSocketsForInodes(inodes, procRoot = '/proc') {
+  const sockets = new Map();
+
+  for (const table of ['tcp', 'tcp6']) {
     let content;
 
     try {
-      content = await readFile(table, 'utf8');
+      content = await readFile(`${procRoot}/net/${table}`, 'utf8');
     } catch {
       continue;
     }
@@ -102,15 +132,28 @@ export async function listeningPortsForInodes(inodes, procRoot = '/proc') {
         continue;
       }
 
-      const port = Number.parseInt(columns[1].split(':')[1], 16);
+      const [addressHex, portHex] = columns[1].split(':');
+      const port = Number.parseInt(portHex, 16);
 
-      if (Number.isFinite(port) && port > 0) {
-        ports.add(port);
+      if (!Number.isFinite(port) || port <= 0) {
+        continue;
       }
+
+      const host = loopbackFor(table, addressHex);
+
+      // the same port can be held on both families; each address is worth trying on its own
+      sockets.set(`${host}:${port}`, { host, port });
     }
   }
 
-  return [...ports];
+  return [...sockets.values()];
+}
+
+/** Just the port numbers, for the readings that only care which ports are held. */
+export async function listeningPortsForInodes(inodes, procRoot = '/proc') {
+  const sockets = await listeningSocketsForInodes(inodes, procRoot);
+
+  return [...new Set(sockets.map((socket) => socket.port))];
 }
 
 /**
@@ -127,7 +170,7 @@ export async function listeningPortsForInodes(inodes, procRoot = '/proc') {
  * asking each one for a page. `preferred` still leads, because a framework that honours PORT is
  * telling us plainly where it is.
  */
-export async function findServingPorts(pgids, preferred, procRoot = '/proc') {
+export async function findServingSockets(pgids, preferred, procRoot = '/proc') {
   const pids = [];
 
   for (const pgid of pgids) {
@@ -138,10 +181,27 @@ export async function findServingPorts(pgids, preferred, procRoot = '/proc') {
     return [];
   }
 
-  const ports = await listeningPortsForInodes(await socketInodes(pids, procRoot), procRoot);
+  const sockets = await listeningSocketsForInodes(await socketInodes(pids, procRoot), procRoot);
 
-  // newest last from Vite's stepping, so the highest is the likeliest live one after `preferred`
-  const rest = ports.filter((port) => port !== preferred).sort((a, b) => b - a);
+  /*
+   * `preferred` first, because a framework that honours PORT is telling us plainly where it is.
+   * After that the highest port, since Vite steps upward past every port it finds taken and the
+   * newest server is therefore the one with the highest number. IPv4 before IPv6 at the same port:
+   * the same socket often appears in both tables, and the IPv4 route is the one everything else
+   * here already speaks.
+   */
+  const isIpv6 = (socket) => socket.host.includes(':');
 
-  return ports.includes(preferred) ? [preferred, ...rest] : rest;
+  return sockets.sort((a, b) => {
+    if ((a.port === preferred) !== (b.port === preferred)) {
+      return a.port === preferred ? -1 : 1;
+    }
+
+    if (a.port !== b.port) {
+      return b.port - a.port;
+    }
+
+    // never localeCompare here: collation does not order punctuation the way an address reads
+    return Number(isIpv6(a)) - Number(isIpv6(b));
+  });
 }

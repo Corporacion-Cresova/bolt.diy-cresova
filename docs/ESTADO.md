@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 207 · rama `claude/preview-tab-hang-issues-dk3u86`.
+**Última actualización:** build 208 · rama `claude/preview-tab-hang-issues-dk3u86`.
 
 ---
 
@@ -14,21 +14,35 @@ Lo primero que hay que saber al abrir una sesión nueva.
 ### Lo que espera acción del usuario
 
 **1. Redesplegar `bolt-diy` y `runner` en EasyPanel.** Nada de esto corre en producción hasta ese
-redespliegue. La insignia del header debe pasar a **build 207**; si sigue en un número menor, el
+redespliegue. La insignia del header debe pasar a **build 208**; si sigue en un número menor, el
 despliegue no llegó. Ese contador es la única forma fiable de saberlo y estuvo roto hasta el
 build 199 (ver §5).
 
-**2. Pulsar el botón «Diagnóstico» justo después de un cuelgue de pestaña, y pegar el texto.** Es lo
-único que falta para cerrar el problema de la pestaña en segundo plano: ahora el informe lleva si el
-navegador **congeló** la pestaña, cuántas tareas largas hubo en los 15 s siguientes a volver, cuánto
-tiempo bloquearon el hilo, y cuántos KB había mandado el runner mientras nadie miraba. Ver §0 bis.
+**2. Volver a pulsar «Diagnóstico» con un proyecto cuya vista previa no aparezca.** El informe dice
+ahora **por qué** falló el sondeo —conexión rechazada frente a aceptada y sin contestar, que son
+fallos opuestos—, en qué direcciones está escuchando el proyecto, y las últimas líneas que imprimió
+el servidor. Ver §0 bis.
+
+**3. Y pulsarlo también tras un cuelgue de pestaña.** La primera lectura ya descartó la hipótesis de
+la avalancha; ahora falta saber **qué función** retiene el hilo, que es lo que añade esta tanda. Ver
+§0 bis.
+
+### Lo cerrado en el build 208
+
+| Qué | Verificado |
+|---|---|
+| El sondeo y el proxy dejan de suponer `127.0.0.1` y usan la dirección que el kernel reporta | sí, pruebas unitarias con un `/proc` de mentira (10 casos) |
+| El diagnóstico dice **por qué** falló el sondeo, en qué direcciones escucha y qué imprimió el servidor | sí, pruebas del runner |
+| El veredicto del runner corta la espera de la vista previa en vez de dejarla agotar 10 minutos | sí, typecheck; no probado en un navegador |
+| La construcción avanza de fase aunque la vista previa no llegue, si la fase escribió archivos | no probado en ejecución |
+| Atribución de las tareas largas por función (`long-animation-frame`) | sí, pruebas; el informe no se probó en un navegador |
 
 ### Lo cerrado en el build 207
 
 | Qué | Verificado |
 |---|---|
 | La vista previa sobrevive a recargar, reabrir el chat y reconectar: el estado del servidor viaja en el apretón de manos | sí, prueba de extremo a extremo con un runner real |
-| Medición de la pestaña en segundo plano dentro del botón Diagnóstico | sí, pruebas; el botón no se probó en un navegador |
+| Medición de la pestaña en segundo plano dentro del botón Diagnóstico | **sí, y dio resultado** — ver §0 bis |
 | Una actualización de React cada 100 ms en vez de una por token (`experimental_throttle`) | no — es menos trabajo por construcción, pero no se midió en ejecución |
 
 ### Lo que quedó cerrado en la tanda anterior (PR #37 a #46)
@@ -47,8 +61,8 @@ tiempo bloquearon el hilo, y cuántos KB había mandado el runner mientras nadie
 
 ### Los problemas abiertos
 
-**1. La pestaña en segundo plano.** Sigue sin causa identificada, pero ya no sin instrumentos. Ver
-§0 bis: qué se midió, qué se descartó, y qué lectura falta.
+**1. La pestaña en segundo plano.** Sigue sin causa identificada, pero ya no sin instrumentos, y la
+hipótesis de partida está descartada por medición. Ver §0 ter.
 
 **2. Tres cambios sin verificar en ejecución**, todos en caminos delicados: el reintento del stream
 en `api.chat.ts` (toca el bucle de streaming, por donde pasa toda la generación), el salto de
@@ -58,9 +72,9 @@ sospechosos.
 
 ---
 
-## 0 bis. Los dos problemas del build 207
+## 0 bis. Los problemas abiertos, y lo que se ha medido de ellos
 
-### La vista previa que no aparecía — resuelto, y por qué costó tanto verlo
+### La vista previa, primera causa: el anuncio que había que estar presente para oír (build 207)
 
 El síntoma que lo delató fue *"la publicación todo bien, solo es la preview que no termina de
 aparecer"*. Esa asimetría es la pista entera: **publicar compila los archivos del disco**, así que un
@@ -103,7 +117,74 @@ cuando aparece una URL nueva.
 qué más dependía de que esa repetición ocurriera. Aquí la reproducción del artefacto no sólo
 reconstruía el proyecto — era también lo que volvía a anunciar el servidor.
 
-### El cuelgue al volver a la pestaña — medido, no adivinado
+### La vista previa, segunda causa: el servidor abre su puerto y no contesta (build 208)
+
+El arreglo del apretón de manos era correcto y no era suficiente. La primera lectura real del
+diagnóstico lo dijo en una línea:
+
+```
+puertos escuchando: 5173
+puerto sirviendo: ninguno todavía
+servidor anunciado: no
+sigue buscándolo: sí
+último sondeo: abrió 5173 pero ninguno contestó una petición HTTP
+```
+
+Es decir: el proyecto **sí** levantó su servidor —el puerto está abierto y el kernel lo confirma—
+pero una petición HTTP a `127.0.0.1:5173` no obtiene respuesta. Nada que ver con el evento perdido:
+aquí no había nada que anunciar. Es el fallo que §5 daba por «pendiente de confirmar con el mensaje
+nuevo»; queda confirmado.
+
+Y el mensaje, tal como estaba, **juntaba dos fallos opuestos en la misma frase**:
+
+- **conexión rechazada** → el servidor no está donde estamos mirando. Otra dirección, otro puerto.
+- **conexión aceptada y sin contestar** → el servidor arrancó y se atascó.
+
+Piden investigaciones contrarias, y «no contestó» valía para las dos. Ahora el sondeo dice cuál fue,
+con el código de error cuando lo hay.
+
+**La suposición que había debajo.** `answersHttp` y el proxy hablaban con `127.0.0.1` sin haberlo
+observado nunca. Es exactamente el mismo error que `PORT`: dictar en vez de mirar. Un servidor de
+desarrollo que acaba en el bucle IPv6 —Node resuelve `localhost` en el orden que le da el sistema, y
+en un contenedor con IPv6 eso puede ser `::1`— está escuchando, aparece en la tabla del kernel, y
+rechaza todas las conexiones a `127.0.0.1`. Visto desde fuera es idéntico a un servidor atascado.
+
+`ports.mjs` lee ahora la dirección además del puerto, decodificándola de `/proc/net/tcp` y
+`/proc/net/tcp6`, y el sondeo y el proxy usan **la que el kernel reporta**. Tres casos, y los tres
+con prueba: IPv4 (incluido `0.0.0.0`) → `127.0.0.1`; IPv6 (incluido `::`, que en Node acepta las dos
+familias) → `::1`; y una dirección IPv4 mapeada dentro de la tabla IPv6, que es un socket IPv4 con
+forma de IPv6 y hay que alcanzarlo como IPv4.
+
+Se midió antes de escribirlo: en este contenedor —sin IPv6 en absoluto, `/proc/net/tcp6` ni existe—
+Vite 5.4.21 se ata a `127.0.0.1` y contesta. O sea que **no está reproducido** que el fallo de
+producción sea el IPv6; lo que sí está establecido es que el código lo suponía sin mirarlo. El
+cambio quita la suposición y, si no era eso, el sondeo nuevo lo dice en la siguiente lectura.
+
+Las pruebas usan un `/proc` de mentira precisamente porque el real no puede enseñar aquí lo que hay
+que cubrir. Y encontraron un fallo de verdad al escribirlas: ordenar direcciones con `localeCompare`
+pone `::1` antes que `127.0.0.1`, porque la collation no ordena la puntuación como se lee una
+dirección.
+
+### La construcción se paraba en la fase 1 cuando no había vista previa
+
+Reportado como *«le pedí que hiciera una opción para verlo en español y no siguió; parece que cuando
+el bot quiere seguir da error»*. No era el modelo: el guardián sólo pide la fase siguiente **después**
+de que la vista previa esté lista, así que un servidor de desarrollo roto convertía «falta la vista
+previa» en «el sitio se queda a medio construir», sin que nada dijera que el plan había terminado
+antes de tiempo.
+
+Dos cambios:
+
+- El veredicto del runner (`server-timeout`) **corta la espera**. Antes cada lado esperaba en su
+  propio reloj y sólo el runner podía saber algo: él vigila los procesos y sondea los puertos. Que
+  el navegador agotara diez minutos más después de que el runner dijera «no viene» era esperar por
+  esperar.
+- Cuando la vista previa no llega y **la fase sí escribió archivos**, el plan avanza igualmente y el
+  aviso lo dice. La regla de coste no cambia: una fase que no escribe nada sigue sin avanzar, y
+  `MAX_PHASES` sigue siendo 6. Publicar tampoco necesita el servidor de desarrollo, así que un sitio
+  terminado por este camino se puede poner online igual.
+
+## 0 ter. El cuelgue al volver a la pestaña — medido, no adivinado
 
 Lo que dijo el usuario: *"cuando regreso a la pestaña se cuelga... creo que es porque se descarga
 todo a la vez y cuando son muchos recursos da error, porque si me quedo todo el rato con la pestaña
@@ -142,10 +223,41 @@ y vuelve a analizar el markdown de un mensaje que sólo crece — el coste de un
 justo el trabajo que una pestaña oculta no puede quitarse de encima. Es menos trabajo en cualquier
 caso; **no es una afirmación de haber encontrado la causa.**
 
-**Lo que falta:** pulsar Diagnóstico justo después de un cuelgue. Si sale «congelada: sí» con
-cientos de KB acumulados, el arreglo es cortar la avalancha al reanudar. Si sale «congelada: no» con
-una sola tarea larga enorme, el arreglo está en lo que se re-renderiza. Son arreglos opuestos y sin
-esa lectura sólo se puede elegir a ciegas.
+### La primera lectura real, y qué descartó
+
+Llegó con el build 207 y vale la pena copiarla entera, porque **descarta la hipótesis de partida**:
+
+```
+el navegador llegó a congelarla: no
+tareas largas en toda la sesión: 2214 (186558 ms bloqueado)
+  tras 57 s fuera: 147 tareas largas, 11931 ms, la mayor de 301 ms
+                   del runner mientras estuvo fuera: 15 mensajes, 0 KB
+  tras 32 s fuera:  83 tareas largas,  8350 ms, la mayor de 236 ms
+                   del runner mientras estuvo fuera:  0 mensajes, 0 KB
+```
+
+Tres cosas quedan establecidas:
+
+1. **No hay avalancha.** La pestaña nunca se congeló y el runner no mandó prácticamente nada
+   mientras estuvo de fondo — **0 KB**. La explicación de partida («se descarga todo a la vez») es
+   falsa, y buscar por ahí habría costado otra ronda.
+2. **El bloqueo es real y es enorme.** 186 segundos de hilo principal retenido en unos once minutos:
+   el 28 % de toda la sesión. En los 15 s siguientes a volver de una ausencia larga sube al **80 %**.
+   Eso es exactamente lo que el navegador reporta como «Page Unresponsive».
+3. **La forma no es la de un vaciado de cola.** No es una tarea gigante sino ~10 tareas de ~80 ms por
+   segundo, sostenidas. Eso es trabajo que se repite, no un atasco que se drena. Y escala con el
+   tiempo fuera (57 s fuera → 11,9 s de bloqueo; 32 s → 8,4 s), lo que sí apunta a algo acumulado —
+   pero acumulado **en el navegador**, no en la red.
+
+Un hueco del instrumento que conviene saber: cuenta los bytes del **runner**, no los del stream del
+modelo, que llega por un `fetch` aparte. Si lo acumulado es el stream, esta medición no lo ve.
+
+**Lo que falta, y lo que se añadió para conseguirlo.** `longtask` dice que una tarea fue larga; no
+dice de quién. `long-animation-frame` sí: nombra la función, el archivo y qué la invocó. El informe
+lleva ahora las cinco que más hilo retuvieron, con su total y cuántas veces. Sólo Chromium reciente,
+así que los recuentos de `longtask` se quedan como la lectura que siempre funciona.
+
+Con un nombre encima de esos 186 segundos, el arreglo deja de ser una elección a ciegas.
 
 ### El método que funcionó, y el que no
 
@@ -275,7 +387,7 @@ Todo lo añadido por Cresova vive en carpetas identificables.
 | `src/projects.mjs` | Un directorio y un puerto por proyecto. Puertos 41000–41999. Entorno con lista blanca. |
 | `src/paths.mjs` | Confina toda ruta dentro del proyecto. |
 | `src/tickets.mjs` | Firma y verificación HMAC-SHA256. |
-| `src/ports.mjs` | Descubre por `/proc` qué puerto abrió de verdad el proyecto. |
+| `src/ports.mjs` | Descubre por `/proc` **en qué dirección y puerto** escucha de verdad el proyecto. La dirección importa: un servidor en el bucle IPv6 rechaza todo lo que vaya a `127.0.0.1`. |
 
 ### Otros
 
@@ -1015,7 +1127,8 @@ Ninguno impide generar y ver un sitio.
 | Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
-| **La pestaña en segundo plano** | El problema abierto más importante. Ya está instrumentado: falta una lectura del botón Diagnóstico tomada justo después de un cuelgue. Ver §0 bis. |
+| **La pestaña en segundo plano** | Medido: no hay congelación ni avalancha, pero sí 186 s de hilo bloqueado en once minutos. Falta una lectura con la atribución por función. Ver §0 bis. |
+| **El servidor de desarrollo que abre su puerto y no contesta** | Confirmado en producción. Se quitó la suposición de `127.0.0.1` y el sondeo dice ahora por qué falla; falta la lectura que nombre el fallo restante. Ver §0 bis. |
 | Verificar lo que se desplegó sin probar | El reintento del stream (`api.chat.ts`), el salto de reproducción (`workbench.ts`) y el `experimental_throttle` del chat. |
 | Vista Preview por defecto | El usuario lo pidió: *"al final lo que me interesa es la preview, no el código"*, dejando la opción. Es decisión de **producto**, no de rendimiento — se midió y el render del código no es la causa de los cuelgues. Parcialmente cubierto: el panel ya salta a la vista previa cuando aparece una URL nueva. |
 | `bindings.sh` pasa los secretos por la línea de comandos | Cualquiera con una shell en el contenedor los ve con un `ps`, y se filtran a cualquier diagnóstico que liste procesos. Es así en bolt.diy de origen. Se arregla con `.dev.vars`. |
