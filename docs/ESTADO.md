@@ -3,8 +3,74 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 148 · rama `claude/bolt-cresova-evolution-isgupq` · todo fusionado
-en `main`.
+**Última actualización:** build 205 · rama `claude/preview-publish-performance-2hxczl` · todo
+fusionado en `main` (PR #37 a #46).
+
+---
+
+## 0. Dónde retomar
+
+Lo primero que hay que saber al abrir una sesión nueva.
+
+### Lo que espera acción del usuario
+
+**Redesplegar `bolt-diy` y `runner` en EasyPanel.** Todo lo de abajo está en `main` y **nada de ello
+corre en producción hasta ese redespliegue**. La insignia del header debe pasar a **build 205**; si
+sigue en un número menor, el despliegue no llegó. Ese contador es la única forma fiable de saberlo y
+estuvo roto hasta el build 199 (ver §5).
+
+### Lo que quedó cerrado en esta tanda
+
+| # | Qué | Verificado |
+|---|---|---|
+| 37 | El vigilante espera mientras el proceso siga vivo, y avisa al rendirse. Publicar deja de esconderse tras la vista previa | sí, en ejecución |
+| 38 | Plazo en el proxy de vistas previas + cabecera CORP en la rama del 502. Republicar: caché y botón | sí, en ejecución |
+| 39/42 | Lo publicado sobrevive al redespliegue — el arreglo del default **más** quitar la variable que lo anulaba en el Dockerfile | sí, pruebas |
+| 40 | El runner dice **qué observó**, no sólo que se rindió | sí, pruebas |
+| 41 | El contador de compilación sube de verdad, y siempre hacia adelante | sí |
+| 43 | `selectContext` deja de matar la petición cuando no hace falta ningún archivo nuevo | **no** — necesita una llamada real al modelo |
+| 44 | El lockfile sale del árbol de archivos | sí, pruebas |
+| 45 | Botón de diagnóstico | sí, pruebas del runner; el botón no se probó en un navegador |
+| 46 | Se sirve el servidor que **contesta**, y abrir un proyecto deja de reconstruirlo entero | pruebas del runner; el cambio de `workbench.ts` **no** se probó en un navegador |
+
+### Los tres problemas abiertos
+
+**1. La pestaña en segundo plano.** Es el hallazgo del usuario y todavía no tiene arreglo:
+*"cuando me quedo mirando la generación sale bien; cuando cambio de pestaña y vuelvo, es cuando
+fallan las cosas"*. Dos mecanismos posibles, y hay que distinguirlos antes de tocar nada:
+
+- **«Page Unresponsive» al volver** → el navegador procesa de golpe el backlog que se acumuló
+  mientras `requestAnimationFrame` estaba congelado.
+- **«The model stopped responding»** → el vigilante de 180 s de `api.chat.ts` no distingue un
+  **modelo** muerto de un **cliente** dormido: si la contrapresión del navegador estrangulado
+  detiene el bucle que consume la respuesta, nadie llama a `updateActivity()` y se aborta una
+  petición sana. Sin confirmar: depende de cómo el AI SDK reparte el stream, y sus dependencias no
+  se pueden instalar en el entorno de desarrollo (ver §8).
+
+**Cómo decidirlo:** mismo prompt dos veces, una mirando la pestaña y otra cambiando de pestaña tres
+minutos. Cuál de los dos mensajes aparece nombra el mecanismo.
+
+**2. ¿Sigue fallando la vista previa?** Sin respuesta todavía sobre el build 205. Los dos arreglos
+del PR #46 son los candidatos: eran la causa medida del último fallo real. Si vuelve a fallar, el
+botón **Diagnóstico** lo resuelve en una lectura — así se encontró aquello.
+
+**3. Dos cambios sin verificar en ejecución**, ambos en caminos delicados: el reintento del stream en
+`api.chat.ts` (toca el bucle de streaming, por donde pasa toda la generación) y el salto de
+reproducción en `workbench.ts` (toca el arranque de cada proyecto). Si algo se rompe del todo tras
+el despliegue, son los primeros sospechosos.
+
+### El método que funcionó, y el que no
+
+Se perdieron horas persiguiendo la vista previa en el runner. No había vista previa porque no había
+servidor; no había servidor porque no había acción `start`; no había acción `start` porque la
+generación no llegaba a producir el artefacto. **El transporte estaba sano — no había carga que
+transportar.** Cuando falta el último eslabón de una cadena, conviene comprobar el primero antes de
+desarmar el resto.
+
+Y dos hipótesis muy razonables —el `MutationObserver` sobre el documento, el coste de renderizar el
+código— costaron un despliegue cada una **por no medirlas antes**. Cuando por fin se midieron, las
+dos quedaron descartadas en minutos (§ el árbol de archivos). Medir primero es más barato que
+desplegar y preguntar.
 
 ---
 
@@ -860,6 +926,11 @@ Ninguno impide generar y ver un sitio.
 | Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
+| **La pestaña en segundo plano** | El problema abierto más importante. Ver §0: hay que distinguir los dos mecanismos antes de tocar nada. |
+| Verificar lo que se desplegó sin probar | El reintento del stream (`api.chat.ts`) y el salto de reproducción (`workbench.ts`). |
+| Vista Preview por defecto | El usuario lo pidió: *"al final lo que me interesa es la preview, no el código"*, dejando la opción. Es decisión de **producto**, no de rendimiento — se midió y el render del código no es la causa de los cuelgues. |
+| `bindings.sh` pasa los secretos por la línea de comandos | Cualquiera con una shell en el contenedor los ve con un `ps`, y se filtran a cualquier diagnóstico que liste procesos. Es así en bolt.diy de origen. Se arregla con `.dev.vars`. |
+| Los proyectos se acumulan en un contenedor | Con `IDLE_TIMEOUT_MS` en 30 min, varios proyectos comparten host y Vite va escalando 5173, 5174, 5175. La etapa 4 (Docker por proyecto) es la solución de fondo. |
 | Unificar la barra de botones | Ver la tabla de abajo — ya no incluye `Publish`, resuelto. |
 | Calidad visual | **Prioridad 2**, después de la base. |
 | Interfaz al estilo Lovable | **Prioridad 3**, lo último. Ver abajo. |
@@ -902,6 +973,42 @@ Las pruebas de integración levantan un **runner real** y hablan con él. Se sal
 cd runner && npm install
 ```
 
+### Si `pnpm install` falla en el entorno de desarrollo
+
+En algunos entornos `codeload.github.com` está bloqueado por política de egreso, y `electron-builder`
+lo necesita: **no hay forma de instalar las dependencias de la aplicación**, así que `pnpm typecheck`,
+`pnpm lint` y el grueso de las pruebas no se pueden correr. Eso deja dos salidas, y conviene conocer
+las dos porque hicieron todo el trabajo de esta tanda:
+
+**Las pruebas del runner sí se pueden correr solas** — no dependen de la aplicación:
+
+```bash
+cd runner && npm install --no-save vitest
+cat > vitest.temp.config.mjs <<'EOF'
+import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['src/**/*.spec.mjs'], testTimeout: 90000, hookTimeout: 90000 } });
+EOF
+npx vitest run --config vitest.temp.config.mjs && rm vitest.temp.config.mjs
+```
+
+Hace falta el config temporal **dentro de `runner/`**: sin él vitest sube hasta el `vite.config.ts`
+de la raíz, que no puede cargar sin las dependencias de la aplicación. Hoy: **4 archivos, 28
+pruebas.**
+
+**Y un typecheck parcial del lado TypeScript**, instalando sólo `typescript` y saltándose la
+resolución de módulos:
+
+```bash
+npx --yes typescript@latest tsc --ignoreConfig --noEmit --noResolve --skipLibCheck \
+  --jsx react-jsx --target es2022 --lib es2022,dom --module esnext --moduleResolution bundler --strict \
+  app/ruta/al/archivo.ts
+```
+
+Atrapa errores de sintaxis y de tipos locales. **Ignora** todo lo que diga `Cannot find module`,
+`Cannot find name`, `implicitly has an 'any'`, `JSX element implicitly` y `Property 'hot' does not
+exist`: son consecuencia de `--noResolve`, no hallazgos. Lo delator es que aparezcan en **líneas que
+acabas de escribir**; en líneas preexistentes son ruido.
+
 Las más valiosas:
 
 - `remote-shell.spec.ts` — usa el `BoltShell` **real, sin modificar**, contra el runner. Si el
@@ -910,6 +1017,8 @@ Las más valiosas:
   el puerto, servirlo por el proxy. Incluye el caso de un servidor que elige su propio puerto.
 - `runner-shutdown.spec.ts` — que apagar el runner no deje servidores huérfanos ocupando puertos.
   Comprobado que falla si se quita el arreglo.
-- `runner/src/ready-watcher.spec.mjs` — contra qué reloj se mide la espera del servidor. Fija las dos
-  salidas: un servidor que tarda mucho **sí** se anuncia, y un comando que sale sin servir se anuncia
-  también en vez de callarse.
+- `runner/src/ready-watcher.spec.mjs` — el archivo más denso del runner, y a propósito: contra qué
+  reloj se mide la espera del servidor, qué pasa con **varios servidores a la vez** (el sano gana
+  aunque no sea el primero), qué lleva y qué no lleva el árbol de archivos, dónde queda lo publicado,
+  y que el diagnóstico no filtre credenciales. Sus mitades viven juntas porque separadas competían
+  por el rango de puertos 41000-41999.
