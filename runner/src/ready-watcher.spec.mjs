@@ -212,6 +212,49 @@ afterAll(async () => {
  * one redeploy away from being gone, with nothing able to bring it back: the built files are the
  * whole record of a publish. This pins the default inside `PROJECT_ROOT`, where the volume is.
  */
+/*
+ * What the file tree carries, and what it should not.
+ *
+ * The tree is sent in full after every command, so anything in it is paid for again each time. A
+ * lockfile is the largest thing in an ordinary project after `node_modules`, is shown to nobody,
+ * and is stripped out of the model's context anyway — carried across the socket only to be thrown
+ * away at the other end.
+ */
+describe('the project tree', () => {
+  it('carries the project files but not the lockfile', async () => {
+    const treeRoot = await mkdtemp(join(tmpdir(), 'cresova-tree-'));
+    const { ProjectManager: Manager } = await import('./projects.mjs');
+    const manager = new Manager({
+      root: treeRoot,
+      publishedRoot: join(treeRoot, '.published'),
+      previewDomain: 'preview.test',
+      onEvent() {},
+    });
+
+    const projectId = 'cresova-treetest';
+    await manager.open(projectId);
+    await mkdir(join(treeRoot, projectId, 'src'), { recursive: true });
+    await writeFile(join(treeRoot, projectId, 'package.json'), '{"name":"demo"}');
+    await writeFile(join(treeRoot, projectId, 'src', 'App.tsx'), 'export const App = () => null;');
+    await writeFile(join(treeRoot, projectId, 'package-lock.json'), '{"lockfileVersion":3}');
+    await writeFile(join(treeRoot, projectId, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+
+    const paths = (await manager.tree(projectId)).map((entry) => entry.path);
+
+    expect(paths).toContain('package.json');
+    expect(paths).toContain(join('src', 'App.tsx'));
+    expect(paths).not.toContain('package-lock.json');
+    expect(paths).not.toContain('pnpm-lock.yaml');
+
+    // and the files it does carry still arrive with their contents, which is the point of the tree
+    const appFile = (await manager.tree(projectId)).find((entry) => entry.path === join('src', 'App.tsx'));
+    expect(appFile.content).toContain('export const App');
+
+    await manager.closeAll();
+    await rm(treeRoot, { recursive: true, force: true });
+  });
+});
+
 describe('where a publish is kept', () => {
   it('defaults inside the projects root, which is the part that is on a volume', async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), 'cresova-default-'));

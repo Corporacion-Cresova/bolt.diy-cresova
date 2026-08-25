@@ -22,6 +22,27 @@ const KILL_GRACE_MS = 4000;
  * survive the runner process being replaced, which is what a redeploy does.
  */
 const SERVER_MEMO = '.cresova-runner.json';
+
+/**
+ * Files the tree never carries, alongside the directories it already skips.
+ *
+ * A lockfile is the largest thing in an ordinary project after `node_modules` — comfortably past a
+ * megabyte — and it is sent again in full after every command, to establish almost every time that
+ * nothing changed. Nothing wants it either: the browser shows it to no one, and `sanitizeText`
+ * already strips `package-lock.json` out of what reaches the model, so today it is carried across
+ * the socket only to be thrown away at the other end.
+ *
+ * Left out entirely rather than listed without content: an entry with no content reaches the file
+ * store as an empty file, and a file the workbench believes is empty is worse than one it has never
+ * heard of.
+ */
+const UNTRACKED_FILES = new Set([
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  'bun.lockb',
+  '.DS_Store',
+]);
 const READY_POLL_MS = 500;
 
 /** Generous: a cold dev server can spend a while on the first request before it answers. */
@@ -382,7 +403,8 @@ export class ProjectManager {
           entry.name === 'node_modules' ||
           entry.name === '.git' ||
           entry.name === 'dist' ||
-          entry.name === SERVER_MEMO
+          entry.name === SERVER_MEMO ||
+          UNTRACKED_FILES.has(entry.name)
         ) {
           continue;
         }

@@ -394,6 +394,30 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### El árbol de archivos llevaba el lockfile, y midiendo se descartaron dos teorías
+
+`fs.tree` manda **todos los archivos con contenido** después de **cada comando**, y excluía
+`node_modules`, `.git` y `dist` pero **no el lockfile**. En un proyecto Vite+React eso es entre 500 KB
+y 1.5 MB reenviados una y otra vez para descubrir, casi siempre, que no cambió nada. Y no lo quiere
+nadie: el navegador no lo muestra, y `sanitizeText` ya lo borra de lo que llega al modelo — se
+transportaba sólo para tirarlo al otro lado.
+
+Se excluye entero en vez de listarlo sin contenido: una entrada sin contenido llega al almacén como
+**archivo vacío**, y un archivo que el workbench cree vacío es peor que uno del que nunca supo.
+
+**Lo importante de este apartado es lo que la medición descartó.** La sospecha era que descargar el
+árbol y renderizar el código durante la generación causaba los cuelgues de pestaña. Medido:
+
+| | |
+|---|---|
+| Parsear un árbol de 444 KB (`JSON.parse` + `TextEncoder`) | **0.9 ms** |
+| `diffLines` de un archivo de 2000 líneas, 100 recálculos | **77 ms en total** |
+
+Ninguno de los dos se acerca a los segundos de bloqueo que produce un «Page Unresponsive». Quitar el
+lockfile es una mejora de **ancho de banda, no de CPU**, y conviene no venderla como otra cosa. La
+causa del cuelgue sigue **sin identificar**; el único sospechoso de esa lista que no se pudo medir
+aquí es el re-render de CodeMirror, que necesita las dependencias de la aplicación.
+
 ### «Bolt failed to select files»: elegir nada se trataba como fallo
 
 Antes de generar, `selectContext` hace una llamada aparte al modelo para decidir qué archivos entran
