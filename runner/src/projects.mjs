@@ -5,7 +5,13 @@ import { createConnection, createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { existsSync, readdirSync } from 'node:fs';
 import { isValidProjectId, isValidPublishName, resolveInsideProject } from './paths.mjs';
-import { findServingPorts, listeningPortsForInodes, processGroupMembers, socketInodes } from './ports.mjs';
+import {
+  findServingSockets,
+  listeningPortsForInodes,
+  listeningSocketsForInodes,
+  processGroupMembers,
+  socketInodes,
+} from './ports.mjs';
 
 /*
  * The same order `#runBuildAction` in the app tries them in — kept in sync by hand, since the two
@@ -36,14 +42,23 @@ const SERVER_MEMO = '.cresova-runner.json';
  * store as an empty file, and a file the workbench believes is empty is worse than one it has never
  * heard of.
  */
-const UNTRACKED_FILES = new Set([
-  'package-lock.json',
-  'pnpm-lock.yaml',
-  'yarn.lock',
-  'bun.lockb',
-  '.DS_Store',
-]);
+const UNTRACKED_FILES = new Set(['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lockb', '.DS_Store']);
 const READY_POLL_MS = 500;
+
+/** `127.0.0.1:5173`, and `[::1]:5173` for the family that needs brackets to be read back. */
+function describeSocket({ host, port }) {
+  return host.includes(':') ? `[${host}]:${port}` : `${host}:${port}`;
+}
+
+/**
+ * How much of a command's output the diagnostics report carries.
+ *
+ * The tail, not the head: a server that wedges says what it is stuck on last. Small enough to paste
+ * into a conversation. It is the same stream the browser already shows in its terminal, and it
+ * cannot carry a credential — project processes are given an allowlisted environment (`projectEnv`)
+ * precisely so the OpenRouter and runner secrets are not theirs to print.
+ */
+const OUTPUT_TAIL_CHARS = 2000;
 
 /** Generous: a cold dev server can spend a while on the first request before it answers. */
 const HTTP_PROBE_TIMEOUT_MS = 30_000;
@@ -103,26 +118,34 @@ function isPortFree(port) {
 }
 
 /**
- * Whether the dev server on a port actually serves a page.
+ * Whether the dev server on an address actually serves a page, and if not, what went wrong.
  *
  * An open port is not a working preview. Vite binds its port and only then resolves dependencies,
  * so the first request can arrive before there is anything to answer with — which is exactly the
  * blank preview that only a manual reload fixed. Waiting for a real response before announcing the
  * server costs nothing and warms the dev server up, so the browser's first load is the second
  * request rather than the first.
+ *
+ * The reason matters as much as the answer, and used to be thrown away. A refused connection and a
+ * connection that is accepted and then never answered are **opposite** faults: the first is a
+ * server that is not where we are looking — a different address, a port already handed on — and the
+ * second is one that started and wedged. Reported as the same «no contestó», every reading of this
+ * cost another round of guessing.
  */
-function answersHttp(port) {
+function answersHttp(host, port) {
   return new Promise((resolve) => {
-    const probe = httpRequest({ host: '127.0.0.1', port, path: '/', method: 'GET' }, (response) => {
+    const probe = httpRequest({ host, port, path: '/', method: 'GET' }, (response) => {
       response.resume();
-      resolve(true);
+      resolve({ ok: true });
     });
 
     probe.setTimeout(HTTP_PROBE_TIMEOUT_MS, () => {
       probe.destroy();
-      resolve(false);
+      resolve({ ok: false, reason: `aceptó la conexión y no contestó en ${HTTP_PROBE_TIMEOUT_MS / 1000} s` });
     });
-    probe.once('error', () => resolve(false));
+    probe.once('error', (error) =>
+      resolve({ ok: false, reason: `no aceptó la conexión (${error.code ?? error.message})` }),
+    );
     probe.end();
   });
 }
@@ -397,18 +420,29 @@ export class ProjectManager {
       pids.push(...(await processGroupMembers(group)));
     }
 
-    const listeningPorts = pids.length > 0 ? await listeningPortsForInodes(await socketInodes(pids)) : [];
+    const inodes = pids.length > 0 ? await socketInodes(pids) : new Set();
+    const listeningPorts = pids.length > 0 ? await listeningPortsForInodes(inodes) : [];
+
+    /*
+     * The addresses as well as the ports. Reading only the port hides the difference between a
+     * server on the IPv4 loopback and one on the IPv6 loopback, and that difference is the whole
+     * distance between a preview that works and one that refuses every connection.
+     */
+    const listeningSockets = pids.length > 0 ? (await listeningSocketsForInodes(inodes)).map(describeSocket) : [];
 
     return {
       projectId,
       assignedPort: project.port,
       servingPort: project.servingPort,
+      servingHost: project.servingHost,
       ready: project.ready,
       liveProcesses: project.processes.size,
       stillWatching: Boolean(project.readyWatcher),
       lastProbe: project.lastProbe,
       listeningPorts,
+      listeningSockets,
       lastCommand: project.lastCommand,
+      lastOutput: project.lastOutput,
       idleForMs: Date.now() - project.lastSeen,
       publishedNames: existsSync(this.publishedRoot) ? readdirSync(this.publishedRoot) : [],
     };
@@ -522,8 +556,11 @@ export class ProjectManager {
     project.processes.set(processId, child);
     project.lastCommand = [command, ...args].join(' ').trim();
 
-    const emit = (stream, chunk) =>
-      this.onEvent(projectId, { type: 'output', processId, stream, data: chunk.toString() });
+    const emit = (stream, chunk) => {
+      const data = chunk.toString();
+      project.lastOutput = `${project.lastOutput ?? ''}${data}`.slice(-OUTPUT_TAIL_CHARS);
+      this.onEvent(projectId, { type: 'output', processId, stream, data });
+    };
 
     child.stdout?.on('data', (chunk) => emit('stdout', chunk));
     child.stderr?.on('data', (chunk) => emit('stderr', chunk));
@@ -575,23 +612,27 @@ export class ProjectManager {
     const groups = [...project.processes.values()].map((child) => child.pid).filter(Boolean);
 
     if (groups.length > 0) {
-      const candidates = await findServingPorts(groups, project.port);
+      const candidates = await findServingSockets(groups, project.port);
 
       /*
        * Asked one by one rather than picked. A project can end up with more than one server — a
        * restored chat replays its artifact, and Vite steps past a port it finds taken — and then
        * which one is *open* stops being the question: the useful one is whichever still answers.
        */
-      for (const port of candidates) {
-        if (await answersHttp(port)) {
-          return port;
+      const refusals = [];
+
+      for (const candidate of candidates) {
+        const answer = await answersHttp(candidate.host, candidate.port);
+
+        if (answer.ok) {
+          return candidate;
         }
+
+        refusals.push(`${describeSocket(candidate)} ${answer.reason}`);
       }
 
       project.lastProbe =
-        candidates.length > 0
-          ? `abrió ${candidates.join(', ')} pero ninguno contestó una petición HTTP`
-          : 'ningún proceso del proyecto tenía un puerto escuchando';
+        refusals.length > 0 ? `abrió ${refusals.join('; ')}` : 'ningún proceso del proyecto tenía un puerto escuchando';
 
       return undefined;
     }
@@ -602,7 +643,11 @@ export class ProjectManager {
       return undefined;
     }
 
-    return (await canConnect(project.port)) && (await answersHttp(project.port)) ? project.port : undefined;
+    const fallback = { host: '127.0.0.1', port: project.port };
+
+    return (await canConnect(project.port)) && (await answersHttp(fallback.host, fallback.port)).ok
+      ? fallback
+      : undefined;
   }
 
   /**
@@ -668,20 +713,20 @@ export class ProjectManager {
 
       project.probing = true;
 
-      let servingPort;
+      let serving;
 
       try {
-        servingPort = await this.#findServingPort(project);
+        serving = await this.#findServingPort(project);
 
         // every unsuccessful path leaves its own note inside #findServingPort, which knows what it saw
-        if (servingPort !== undefined) {
-          project.lastProbe = `contestó en el puerto ${servingPort}`;
+        if (serving !== undefined) {
+          project.lastProbe = `contestó en ${describeSocket(serving)}`;
         }
       } finally {
         project.probing = false;
       }
 
-      if (servingPort === undefined) {
+      if (serving === undefined) {
         return;
       }
 
@@ -692,12 +737,13 @@ export class ProjectManager {
       clearInterval(project.readyWatcher);
       project.readyWatcher = undefined;
       project.ready = true;
-      project.servingPort = servingPort;
+      project.servingPort = serving.port;
+      project.servingHost = serving.host;
       void this.#rememberServerCommand(project);
 
       this.onEvent(project.id, {
         type: 'server-ready',
-        port: servingPort,
+        port: serving.port,
         url: this.previewUrl(project.id),
       });
     }, READY_POLL_MS);

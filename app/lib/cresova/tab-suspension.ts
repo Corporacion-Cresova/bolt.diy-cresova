@@ -44,6 +44,27 @@ interface Totals {
   blockedMs: number;
 }
 
+/**
+ * One script blamed for holding the main thread, and for how long in total.
+ *
+ * A `longtask` entry says a task ran long; it does not say whose. That was enough to establish
+ * *that* the thread is being held — the first reading showed 186 seconds of it in eleven minutes —
+ * and useless for the next question, which is by what. `long-animation-frame` answers that: it
+ * names the function, the file and what invoked it. Chromium only, and only recent versions, so the
+ * `longtask` counts stay as the reading that always works.
+ */
+interface Offender {
+  source: string;
+  blockedMs: number;
+  entries: number;
+}
+
+/** Enough to name a culprit; the tail of a long list is noise in a report meant to be pasted. */
+const REPORTED_OFFENDERS = 5;
+
+/** A single runaway component must not be able to grow this without bound. */
+const MAX_TRACKED_OFFENDERS = 200;
+
 let started = false;
 let hiddenAt: number | undefined;
 let frozenWhileHidden = false;
@@ -57,6 +78,15 @@ let measuringUntil = 0;
 
 const returns: ReturnToTab[] = [];
 const totals: Totals = { longTasks: 0, blockedMs: 0 };
+const offenders = new Map<string, Offender>();
+
+/** What Chromium reports about the scripts inside a long animation frame. */
+interface LongAnimationFrameScript {
+  duration: number;
+  invoker?: string;
+  sourceURL?: string;
+  sourceFunctionName?: string;
+}
 
 /** True while the tab is out of sight, which is when the interesting accumulation happens. */
 function isHidden(): boolean {
@@ -74,6 +104,61 @@ export function recordRunnerMessage(bytes: number): void {
   if (isHidden()) {
     runnerMessagesWhileHidden++;
     runnerBytesWhileHidden += bytes;
+  }
+}
+
+/**
+ * A name short enough to read in a pasted report: the function, and the file it came from.
+ *
+ * The invoker is preferred when there is one, because it says what *caused* the work — an event
+ * listener, a timer, a promise resolution — and that is usually more useful than the name of
+ * whatever function happened to be on top of the stack.
+ */
+function nameScript(script: LongAnimationFrameScript): string {
+  const where = script.sourceURL ? script.sourceURL.split('/').pop()?.split('?')[0] : undefined;
+  const what = script.invoker || script.sourceFunctionName || 'sin nombre';
+
+  return where ? `${what} · ${where}` : what;
+}
+
+function blame(script: LongAnimationFrameScript) {
+  const source = nameScript(script);
+  const existing = offenders.get(source);
+
+  if (existing) {
+    existing.blockedMs += script.duration;
+    existing.entries++;
+
+    return;
+  }
+
+  if (offenders.size >= MAX_TRACKED_OFFENDERS) {
+    return;
+  }
+
+  offenders.set(source, { source, blockedMs: script.duration, entries: 1 });
+}
+
+function observeLongAnimationFrames() {
+  if (
+    typeof PerformanceObserver === 'undefined' ||
+    !PerformanceObserver.supportedEntryTypes?.includes('long-animation-frame')
+  ) {
+    return;
+  }
+
+  try {
+    const observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        for (const script of (entry as unknown as { scripts?: LongAnimationFrameScript[] }).scripts ?? []) {
+          blame(script);
+        }
+      }
+    });
+
+    observer.observe({ type: 'long-animation-frame', buffered: true });
+  } catch {
+    // the counts above still work; this is the attribution on top of them
   }
 }
 
@@ -166,6 +251,7 @@ export function watchTabSuspension(): void {
   });
 
   observeLongTasks();
+  observeLongAnimationFrames();
 
   if (isHidden()) {
     onHidden();
@@ -184,6 +270,16 @@ export function describeTabSuspension(): string[] {
     `  el navegador llegó a congelarla: ${everFrozen ? 'sí' : 'no'}`,
     `  tareas largas en toda la sesión: ${totals.longTasks} (${Math.round(totals.blockedMs)} ms bloqueado)`,
   );
+
+  const blamed = [...offenders.values()].sort((a, b) => b.blockedMs - a.blockedMs).slice(0, REPORTED_OFFENDERS);
+
+  if (blamed.length > 0) {
+    lines.push('  quién retuvo el hilo, de mayor a menor:');
+
+    for (const offender of blamed) {
+      lines.push(`    ${Math.round(offender.blockedMs)} ms en ${offender.entries} veces — ${offender.source}`);
+    }
+  }
 
   if (returns.length === 0) {
     lines.push('  no se ha vuelto a la pestaña tras dejarla de fondo');

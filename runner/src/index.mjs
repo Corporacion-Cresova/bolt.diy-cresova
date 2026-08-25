@@ -186,6 +186,15 @@ const server = createServer(async (request, response) => {
     const port = project.servingPort ?? project.port;
 
     /*
+     * The address the watcher actually got an answer on, not an assumed one. Forwarding to
+     * `127.0.0.1` regardless is the same guess the readiness probe used to make, and it fails the
+     * same way: a dev server on the IPv6 loopback refuses every one of these and the gateway in
+     * front serves its own error for a site that is up and serving.
+     */
+    const host = project.servingHost ?? '127.0.0.1';
+    const authority = host.includes(':') ? `[${host}]:${port}` : `${host}:${port}`;
+
+    /*
      * Answering badly beats not answering.
      *
      * A dev server that accepts the connection and then says nothing used to leave this request
@@ -211,11 +220,11 @@ const server = createServer(async (request, response) => {
 
     const forward = upstream.request(
       {
-        host: '127.0.0.1',
+        host,
         port,
         method: request.method,
         path: request.url,
-        headers: { ...request.headers, host: `127.0.0.1:${port}` },
+        headers: { ...request.headers, host: authority },
       },
       (upstreamResponse) => {
         response.writeHead(upstreamResponse.statusCode ?? 502, { ...upstreamResponse.headers, ...EMBEDDABLE });
@@ -268,11 +277,15 @@ const previewUpgrade = async (request, socket, head) => {
   }
 
   const { request: httpRequest } = await import('node:http');
+  const port = project.servingPort ?? project.port;
+  const host = project.servingHost ?? '127.0.0.1';
+  const authority = host.includes(':') ? `[${host}]:${port}` : `${host}:${port}`;
+
   const forward = httpRequest({
-    host: '127.0.0.1',
-    port: project.servingPort ?? project.port,
+    host,
+    port,
     path: request.url,
-    headers: { ...request.headers, host: `127.0.0.1:${project.servingPort ?? project.port}` },
+    headers: { ...request.headers, host: authority },
     method: request.method,
   });
 
