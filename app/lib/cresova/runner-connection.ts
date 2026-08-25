@@ -25,7 +25,7 @@ const HANDSHAKE_TIMEOUT_MS = 20_000;
 export type ConnectionState = 'open' | 'reconnecting' | 'closed';
 
 export type RunnerEvent =
-  | { type: 'ready'; projectId: string; previewUrl: string; port: number }
+  | { type: 'ready'; projectId: string; previewUrl: string; port: number; hasFiles?: boolean }
   | { type: 'output'; processId: string; stream: 'stdout' | 'stderr'; data: string }
   | { type: 'exit'; processId: string; code: number }
   | { type: 'server-ready'; port: number; url: string }
@@ -81,7 +81,7 @@ export class RunnerConnection {
     this.onStateChange?.(state);
   }
 
-  async connect(): Promise<{ previewUrl: string; port: number }> {
+  async connect(): Promise<{ previewUrl: string; port: number; hasFiles: boolean }> {
     /*
      * A ticket, not the shared secret: it is scoped to this project, expires in minutes, and is
      * issued by the app server through /api/runner-ticket.
@@ -123,7 +123,7 @@ export class RunnerConnection {
           logger.info(`Project ${event.projectId} ready, preview at ${event.previewUrl}`);
           this.#setState('open');
           clearTimeout(handshake);
-          resolve({ previewUrl: event.previewUrl, port: event.port });
+          resolve({ previewUrl: event.previewUrl, port: event.port, hasFiles: event.hasFiles ?? false });
         }
       });
     });

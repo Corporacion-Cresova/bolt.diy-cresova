@@ -3,6 +3,7 @@ import type { EditorDocument, ScrollPosition } from '~/components/editor/codemir
 import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
 import { webcontainer } from '~/lib/webcontainer';
+import { executionBackendStore, projectWasAlreadyBuiltStore } from '~/lib/cresova/execution-backend';
 import type { ITerminal } from '~/types/terminal';
 import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
@@ -560,7 +561,30 @@ export class WorkbenchStore {
     return artifact.runner.addAction(data);
   }
 
+  /**
+   * Whether this action belongs to a message being replayed onto a project that already exists.
+   *
+   * Both halves matter. A replayed message whose project is gone — the runner reaps an idle one,
+   * files and all — still has to be rebuilt, and under WebContainer every reload starts from an
+   * empty container, so there the replay is the only thing that brings a project back. It is only
+   * pointless, and harmful, when the work is already on disk.
+   */
+  #alreadyBuilt(data: ActionCallbackData): boolean {
+    return (
+      this.#reloadedMessages.has(data.messageId) &&
+      executionBackendStore.get() === 'runner' &&
+      projectWasAlreadyBuiltStore.get()
+    );
+  }
+
   runAction(data: ActionCallbackData, isStreaming: boolean = false) {
+    if (this.#alreadyBuilt(data)) {
+      const artifact = this.#getArtifact(data.artifactId);
+      artifact?.runner.markAsAlreadyBuilt(data);
+
+      return;
+    }
+
     if (isStreaming) {
       this.actionStreamSampler(data, isStreaming);
     } else {

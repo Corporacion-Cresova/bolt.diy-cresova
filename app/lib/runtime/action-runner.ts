@@ -147,6 +147,29 @@ export class ActionRunner {
     });
   }
 
+  /**
+   * Records an action as done without running it, for work the project already carries.
+   *
+   * Reopening a chat re-parses its stored messages, and every action in them fires again. Under
+   * WebContainer that is the only way the project comes back, because the container died with the
+   * tab. On the runner the files are still on disk and the server may still be serving, so running
+   * them again rewrites what is there, installs what is installed, and starts a second server over
+   * the first — a project was found holding three at once because of this.
+   *
+   * The action still has to be marked, not merely skipped: the workbench reads these states to draw
+   * the artifact, and one left pending shows a build that never finished.
+   */
+  markAsAlreadyBuilt(data: ActionCallbackData) {
+    const { actionId } = data;
+    const action = this.actions.get()[actionId];
+
+    if (!action || action.executed) {
+      return;
+    }
+
+    this.#updateAction(actionId, { ...action, ...data.action, status: 'complete', executed: true });
+  }
+
   async runAction(data: ActionCallbackData, isStreaming: boolean = false) {
     const { actionId } = data;
     const action = this.actions.get()[actionId];
