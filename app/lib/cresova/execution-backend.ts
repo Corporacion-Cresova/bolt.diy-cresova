@@ -23,6 +23,17 @@ export const runnerFailureStore = atom<string | undefined>(undefined);
 
 const logger = createScopedLogger('CresovaRunner');
 
+/**
+ * Whether the project already had its files when this session connected.
+ *
+ * The workbench replays a restored chat's artifact when it opens a project, because under
+ * WebContainer that is the only way the project comes back — the container dies with the tab. On the
+ * runner the files outlive the tab, and replaying then rewrites what is already there, runs the
+ * install again, and starts a second server over one that was already serving. It still has to
+ * happen for a project the runner reaped, so what decides is this, not the backend alone.
+ */
+export const projectWasAlreadyBuiltStore = atom(false);
+
 const PROJECT_ID_KEY = 'cresova.projectId';
 
 /*
@@ -205,7 +216,8 @@ export async function connectToRunner(): Promise<RemoteContainer | undefined> {
   });
 
   try {
-    await withTimeout(connection.connect(), CONNECT_TIMEOUT_MS, 'The runner did not answer in time');
+    const opened = await withTimeout(connection.connect(), CONNECT_TIMEOUT_MS, 'The runner did not answer in time');
+    projectWasAlreadyBuiltStore.set(opened.hasFiles);
   } catch (error) {
     connection.close();
     throw error;

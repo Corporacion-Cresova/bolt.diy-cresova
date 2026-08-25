@@ -394,6 +394,43 @@ página en blanco delante del usuario que sólo se arreglaba recargando a mano. 
 una petición HTTP real antes de anunciar: cuesta nada y de paso calienta el servidor, así que la
 primera carga del navegador es la segunda petición, no la primera.
 
+### Tres servidores a la vez, y el runner eligiendo siempre el muerto
+
+El botón de diagnóstico dio la respuesta en su primer uso real:
+
+```
+procesos vivos: 3
+puertos escuchando: 5173, 5175, 5174
+puerto sirviendo: ninguno todavía
+último sondeo: abrió el puerto 5173 pero no contestó una petición HTTP
+```
+
+Tres servidores del mismo proyecto. Son **dos fallos que se suman**, y hacía falta verlos juntos.
+
+**1. Abrir un proyecto reconstruía todo otra vez.** Al reabrir un chat se re-analizan sus mensajes
+guardados y **cada acción vuelve a ejecutarse**: reescribe los archivos, repite el `npm install` y
+levanta otro servidor. `#reloadedMessages` existía pero sólo silenciaba **alertas**, no impedía la
+ejecución.
+
+No es un descuido: bajo WebContainer **es la única forma** de que el proyecto vuelva, porque el
+contenedor muere con la pestaña. En el runner los archivos sobreviven, así que ahí sobra — salvo
+cuando el proyecto fue reciclado por inactividad, que es justo cuando hace falta. Por eso la regla
+no es «no reproducir en el runner» sino **«no reproducir si el proyecto ya tiene archivos»**, y el
+runner lo dice en el `ready` del apretón de manos, antes de que el navegador decida nada.
+
+**2. Se elegía el puerto más bajo, que es el más viejo.** `findServingPort` tomaba `Math.min(...)`.
+Vite intenta 5173 y sube cuando lo encuentra ocupado, así que el número más bajo es el **primer**
+servidor: el más viejo y el más probable de estar atascado. El sondeo lo re-elegía cada medio
+segundo hasta rendirse, con un servidor sano a un número de distancia.
+
+Ahora se devuelven **candidatos** y se le pregunta a cada uno por una página: cuál está *abierto*
+deja de ser la pregunta, la útil es cuál **contesta**. `preferred` sigue primero, porque un
+framework que respeta `PORT` está diciendo dónde está.
+
+La prueba usa la disposición difícil a propósito —el atascado en el puerto **alto**, el sano en el
+bajo— porque los candidatos se prueban de mayor a menor: sólo pasa si un puerto que no contesta es
+seguido por el siguiente en vez de terminar la búsqueda.
+
 ### Un botón de diagnóstico, porque las lecturas sueltas no servían
 
 Diagnosticar la vista previa costó horas de ida y vuelta pidiendo comandos de a uno: mira los

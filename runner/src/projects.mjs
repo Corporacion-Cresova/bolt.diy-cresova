@@ -5,7 +5,7 @@ import { createConnection, createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { existsSync, readdirSync } from 'node:fs';
 import { isValidProjectId, isValidPublishName, resolveInsideProject } from './paths.mjs';
-import { findServingPort, listeningPortsForInodes, processGroupMembers, socketInodes } from './ports.mjs';
+import { findServingPorts, listeningPortsForInodes, processGroupMembers, socketInodes } from './ports.mjs';
 
 /*
  * The same order `#runBuildAction` in the app tries them in — kept in sync by hand, since the two
@@ -363,6 +363,30 @@ export class ProjectManager {
    * Deliberately no environment and no file contents: this is written to be pasted into a chat, and
    * the environment is where the credentials live.
    */
+  /**
+   * Whether the project already has files of its own on disk.
+   *
+   * The browser replays a restored chat's whole artifact when it opens a project, because under
+   * WebContainer that is the only way the project comes back: the container dies with the tab. On
+   * the runner the files outlive both, so the same replay rewrites what is already there, runs the
+   * install again, and starts a second server on top of one that was already serving.
+   *
+   * It cannot simply be switched off, though — an idle project is reaped, files and all, and coming
+   * back to one of those needs exactly that rebuild. So the browser is told which case it is in
+   * rather than guessing.
+   *
+   * The bookkeeping file is not a file of the project's own: a directory holding only that is a
+   * project that was reaped and reopened, and it still needs rebuilding.
+   */
+  async hasFiles(projectId) {
+    try {
+      const entries = await readdir(`${this.root}/${projectId}`);
+      return entries.some((entry) => entry !== SERVER_MEMO);
+    } catch {
+      return false;
+    }
+  }
+
   async diagnostics(projectId) {
     const project = await this.open(projectId);
     const groups = [...project.processes.values()].map((child) => child.pid).filter(Boolean);
@@ -551,18 +575,34 @@ export class ProjectManager {
     const groups = [...project.processes.values()].map((child) => child.pid).filter(Boolean);
 
     if (groups.length > 0) {
-      const observed = await findServingPort(groups, project.port);
+      const candidates = await findServingPorts(groups, project.port);
 
-      if (observed !== undefined) {
-        return observed;
+      /*
+       * Asked one by one rather than picked. A project can end up with more than one server — a
+       * restored chat replays its artifact, and Vite steps past a port it finds taken — and then
+       * which one is *open* stops being the question: the useful one is whichever still answers.
+       */
+      for (const port of candidates) {
+        if (await answersHttp(port)) {
+          return port;
+        }
       }
+
+      project.lastProbe =
+        candidates.length > 0
+          ? `abrió ${candidates.join(', ')} pero ninguno contestó una petición HTTP`
+          : 'ningún proceso del proyecto tenía un puerto escuchando';
+
+      return undefined;
     }
+
+    project.lastProbe = 'el proyecto no tiene ningún proceso corriendo';
 
     if (existsSync('/proc/net/tcp')) {
       return undefined;
     }
 
-    return (await canConnect(project.port)) ? project.port : undefined;
+    return (await canConnect(project.port)) && (await answersHttp(project.port)) ? project.port : undefined;
   }
 
   /**
@@ -633,13 +673,9 @@ export class ProjectManager {
       try {
         servingPort = await this.#findServingPort(project);
 
-        if (servingPort === undefined) {
-          project.lastProbe = 'ningún proceso del proyecto tenía un puerto escuchando';
-        } else if (await answersHttp(servingPort)) {
+        // every unsuccessful path leaves its own note inside #findServingPort, which knows what it saw
+        if (servingPort !== undefined) {
           project.lastProbe = `contestó en el puerto ${servingPort}`;
-        } else {
-          project.lastProbe = `abrió el puerto ${servingPort} pero no contestó una petición HTTP`;
-          servingPort = undefined;
         }
       } finally {
         project.probing = false;

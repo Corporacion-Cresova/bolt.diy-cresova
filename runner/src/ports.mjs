@@ -114,12 +114,20 @@ export async function listeningPortsForInodes(inodes, procRoot = '/proc') {
 }
 
 /**
- * The port a project is serving on, or undefined if it is not listening yet.
+ * Every port a project's processes are listening on, in the order worth trying them.
  *
- * `preferred` is the port the runner assigned: when a framework does respect PORT that is the one
- * to use, and only otherwise is the lowest observed port taken.
+ * This used to pick one and commit to it — `preferred` if it was open, otherwise the lowest number
+ * observed — and the lowest number is a trap. Vite always tries 5173 first and steps up when it is
+ * taken, so a project that ended up with servers on 5173, 5174 and 5175 has its *newest* server on
+ * the highest port and its oldest on the lowest. Choosing the minimum therefore chose the most
+ * stale one, and when that one was wedged the search never moved on: it re-picked the same dead
+ * port every half second until the watcher gave up, while a healthy server sat one number away.
+ *
+ * Returning candidates instead lets the caller settle it the only way that is not a guess — by
+ * asking each one for a page. `preferred` still leads, because a framework that honours PORT is
+ * telling us plainly where it is.
  */
-export async function findServingPort(pgids, preferred, procRoot = '/proc') {
+export async function findServingPorts(pgids, preferred, procRoot = '/proc') {
   const pids = [];
 
   for (const pgid of pgids) {
@@ -127,14 +135,13 @@ export async function findServingPort(pgids, preferred, procRoot = '/proc') {
   }
 
   if (pids.length === 0) {
-    return undefined;
+    return [];
   }
 
   const ports = await listeningPortsForInodes(await socketInodes(pids, procRoot), procRoot);
 
-  if (ports.length === 0) {
-    return undefined;
-  }
+  // newest last from Vite's stepping, so the highest is the likeliest live one after `preferred`
+  const rest = ports.filter((port) => port !== preferred).sort((a, b) => b - a);
 
-  return ports.includes(preferred) ? preferred : Math.min(...ports);
+  return ports.includes(preferred) ? [preferred, ...rest] : rest;
 }

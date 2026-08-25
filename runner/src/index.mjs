@@ -348,7 +348,21 @@ wss.on('connection', async (ws) => {
   sockets.get(projectId).add(ws);
 
   const project = await projects.open(projectId);
-  ws.send(JSON.stringify({ type: 'ready', projectId, previewUrl: projects.previewUrl(projectId), port: project.port }));
+
+  /*
+   * `hasFiles` travels with the handshake because the browser needs it before it decides anything:
+   * it replays a restored chat's artifact to rebuild the project, which is right when the project
+   * is gone and wasteful when it is not.
+   */
+  ws.send(
+    JSON.stringify({
+      type: 'ready',
+      projectId,
+      previewUrl: projects.previewUrl(projectId),
+      port: project.port,
+      hasFiles: await projects.hasFiles(projectId),
+    }),
+  );
 
   ws.on('message', async (raw) => {
     let message;

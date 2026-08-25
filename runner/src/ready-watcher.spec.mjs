@@ -227,6 +227,71 @@ afterAll(async () => {
  * fault from a port that is open and never answers, and collected one shell command at a time —
  * hours apart, as happened — the project had usually moved on before the set was complete.
  */
+/*
+ * A project that ended up with more than one server, which is ordinary rather than exotic: opening
+ * a restored chat replays its artifact, and Vite steps past any port it finds taken. A real project
+ * was found holding 5173, 5174 and 5175 at once.
+ *
+ * The old rule picked the lowest number and committed to it. The lowest is the oldest — the first
+ * server started, the one most likely to have wedged — so the search re-picked the same dead port
+ * every half second and never reached the healthy one sitting a number away. What settles it is not
+ * which port is open but which one still answers.
+ */
+describe('a project with more than one server', () => {
+  it('serves from the one that answers, not the first one it finds open', async () => {
+    const manyRoot = await mkdtemp(join(tmpdir(), 'cresova-many-'));
+    const events = [];
+    const { ProjectManager: Manager } = await import('./projects.mjs');
+    const manager = new Manager({
+      root: manyRoot,
+      publishedRoot: join(manyRoot, '.published'),
+      previewDomain: 'preview.test',
+      onEvent: (_id, event) => events.push(event),
+      readyGraceAfterExitMs: 5000,
+      readyCeilingMs: 60_000,
+    });
+
+    const projectId = 'cresova-manyservers';
+    const project = await manager.open(projectId);
+
+    /*
+     * The wedged one takes the higher port and the healthy one the lower, which is the harder
+     * arrangement: candidates are tried highest first, so this only passes if a port that fails to
+     * answer is actually followed by the next one instead of ending the search.
+     */
+    const healthy = project.port + 1;
+    const wedged = project.port + 2;
+
+    await writeFile(
+      join(manyRoot, projectId, 'servers.mjs'),
+      `import { createServer } from 'node:http';
+       createServer((_request, response) => response.end('vivo')).listen(${healthy});
+       createServer(() => {}).listen(${wedged});`,
+    );
+
+    await manager.spawn(projectId, 'node servers.mjs', []);
+
+    const ready = await new Promise((resolve) => {
+      const started = Date.now();
+      const tick = setInterval(() => {
+        const found = events.find((event) => event.type === 'server-ready');
+
+        if (found || Date.now() - started > 40_000) {
+          clearInterval(tick);
+          resolve(found);
+        }
+      }, 250);
+    });
+
+    expect(ready).toBeDefined();
+    expect(ready.port).toBe(healthy);
+    expect(manager.get(projectId).servingPort).toBe(healthy);
+
+    await manager.closeAll();
+    await rm(manyRoot, { recursive: true, force: true });
+  }, 60_000);
+});
+
 describe('the diagnostics of a project', () => {
   it('reports what the runner sees, and nothing from the environment', async () => {
     const diagRoot = await mkdtemp(join(tmpdir(), 'cresova-diag-'));
