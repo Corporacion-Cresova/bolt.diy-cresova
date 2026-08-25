@@ -3,8 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 205 · rama `claude/preview-publish-performance-2hxczl` · todo
-fusionado en `main` (PR #37 a #46).
+**Última actualización:** build 207 · rama `claude/preview-tab-hang-issues-dk3u86`.
 
 ---
 
@@ -14,12 +13,25 @@ Lo primero que hay que saber al abrir una sesión nueva.
 
 ### Lo que espera acción del usuario
 
-**Redesplegar `bolt-diy` y `runner` en EasyPanel.** Todo lo de abajo está en `main` y **nada de ello
-corre en producción hasta ese redespliegue**. La insignia del header debe pasar a **build 205**; si
-sigue en un número menor, el despliegue no llegó. Ese contador es la única forma fiable de saberlo y
-estuvo roto hasta el build 199 (ver §5).
+**1. Redesplegar `bolt-diy` y `runner` en EasyPanel.** Nada de esto corre en producción hasta ese
+redespliegue. La insignia del header debe pasar a **build 207**; si sigue en un número menor, el
+despliegue no llegó. Ese contador es la única forma fiable de saberlo y estuvo roto hasta el
+build 199 (ver §5).
 
-### Lo que quedó cerrado en esta tanda
+**2. Pulsar el botón «Diagnóstico» justo después de un cuelgue de pestaña, y pegar el texto.** Es lo
+único que falta para cerrar el problema de la pestaña en segundo plano: ahora el informe lleva si el
+navegador **congeló** la pestaña, cuántas tareas largas hubo en los 15 s siguientes a volver, cuánto
+tiempo bloquearon el hilo, y cuántos KB había mandado el runner mientras nadie miraba. Ver §0 bis.
+
+### Lo cerrado en el build 207
+
+| Qué | Verificado |
+|---|---|
+| La vista previa sobrevive a recargar, reabrir el chat y reconectar: el estado del servidor viaja en el apretón de manos | sí, prueba de extremo a extremo con un runner real |
+| Medición de la pestaña en segundo plano dentro del botón Diagnóstico | sí, pruebas; el botón no se probó en un navegador |
+| Una actualización de React cada 100 ms en vez de una por token (`experimental_throttle`) | no — es menos trabajo por construcción, pero no se midió en ejecución |
+
+### Lo que quedó cerrado en la tanda anterior (PR #37 a #46)
 
 | # | Qué | Verificado |
 |---|---|---|
@@ -33,31 +45,107 @@ estuvo roto hasta el build 199 (ver §5).
 | 45 | Botón de diagnóstico | sí, pruebas del runner; el botón no se probó en un navegador |
 | 46 | Se sirve el servidor que **contesta**, y abrir un proyecto deja de reconstruirlo entero | pruebas del runner; el cambio de `workbench.ts` **no** se probó en un navegador |
 
-### Los tres problemas abiertos
+### Los problemas abiertos
 
-**1. La pestaña en segundo plano.** Es el hallazgo del usuario y todavía no tiene arreglo:
-*"cuando me quedo mirando la generación sale bien; cuando cambio de pestaña y vuelvo, es cuando
-fallan las cosas"*. Dos mecanismos posibles, y hay que distinguirlos antes de tocar nada:
+**1. La pestaña en segundo plano.** Sigue sin causa identificada, pero ya no sin instrumentos. Ver
+§0 bis: qué se midió, qué se descartó, y qué lectura falta.
 
-- **«Page Unresponsive» al volver** → el navegador procesa de golpe el backlog que se acumuló
-  mientras `requestAnimationFrame` estaba congelado.
-- **«The model stopped responding»** → el vigilante de 180 s de `api.chat.ts` no distingue un
-  **modelo** muerto de un **cliente** dormido: si la contrapresión del navegador estrangulado
-  detiene el bucle que consume la respuesta, nadie llama a `updateActivity()` y se aborta una
-  petición sana. Sin confirmar: depende de cómo el AI SDK reparte el stream, y sus dependencias no
-  se pueden instalar en el entorno de desarrollo (ver §8).
+**2. Tres cambios sin verificar en ejecución**, todos en caminos delicados: el reintento del stream
+en `api.chat.ts` (toca el bucle de streaming, por donde pasa toda la generación), el salto de
+reproducción en `workbench.ts` (toca el arranque de cada proyecto) y ahora el
+`experimental_throttle` del chat. Si algo se rompe del todo tras el despliegue, son los primeros
+sospechosos.
 
-**Cómo decidirlo:** mismo prompt dos veces, una mirando la pestaña y otra cambiando de pestaña tres
-minutos. Cuál de los dos mensajes aparece nombra el mecanismo.
+---
 
-**2. ¿Sigue fallando la vista previa?** Sin respuesta todavía sobre el build 205. Los dos arreglos
-del PR #46 son los candidatos: eran la causa medida del último fallo real. Si vuelve a fallar, el
-botón **Diagnóstico** lo resuelve en una lectura — así se encontró aquello.
+## 0 bis. Los dos problemas del build 207
 
-**3. Dos cambios sin verificar en ejecución**, ambos en caminos delicados: el reintento del stream en
-`api.chat.ts` (toca el bucle de streaming, por donde pasa toda la generación) y el salto de
-reproducción en `workbench.ts` (toca el arranque de cada proyecto). Si algo se rompe del todo tras
-el despliegue, son los primeros sospechosos.
+### La vista previa que no aparecía — resuelto, y por qué costó tanto verlo
+
+El síntoma que lo delató fue *"la publicación todo bien, solo es la preview que no termina de
+aparecer"*. Esa asimetría es la pista entera: **publicar compila los archivos del disco**, así que un
+proyecto que publica bien tiene sus archivos, su `package.json` y su build en orden. Lo único que
+publicar no necesita es el `server-ready`.
+
+Y el `server-ready` es un **evento que se emite una sola vez**, a los sockets que estén abiertos en
+ese instante. El navegador se entera de que existe una vista previa por ahí y por ningún otro sitio:
+`previews.ts` construye la lista desde el evento `port`, que `remote-container.ts` deriva de ese
+`server-ready`. Quien no estuviera escuchando en ese instante no se enteraba nunca. Eso son tres
+formas cotidianas de llegar tarde:
+
+- recargar la página,
+- reabrir el chat,
+- reconectar después de que el runner se reiniciara (un redespliegue basta).
+
+Y el arreglo del PR #46 —**no reproducir el artefacto si el proyecto ya tiene archivos**, que era
+correcto y arreglaba lo de los tres servidores— cerró la única puerta que quedaba: al no volver a
+ejecutarse la acción `start`, **no había un segundo anuncio que esperar**. Un chat reabierto no podía
+recuperar su vista previa jamás. El sitio servía perfectamente y el builder no enseñaba nada.
+
+El arreglo es dejar de tratarlo como un evento: el estado del servidor viaja ahora en el apretón de
+manos (`serverReady`, `servingPort`), y `RemoteContainer.on('server-ready'|'port')` se lo entrega a
+quien se suscriba después. La vista previa pasa a ser **un hecho del proyecto que cualquier conexión
+nueva puede leer**, en vez de un evento en el que había que estar presente.
+
+Dos detalles que importan:
+
+- El apretón de manos **también manda cuando dice que no hay servidor**. Llegar ahí significa que un
+  socket acaba de abrirse, y tras una reconexión eso es un runner que paró todos sus proyectos al
+  salir: lo que recordáramos de antes habla de un proceso que ya no existe.
+- La entrega al suscriptor tardío va un turno después (`setTimeout(0)`), no síncrona: la tienda de
+  vistas previas se suscribe **desde su propio inicializador**, y llamarla en ese momento la
+  alcanzaría a medio construir.
+
+No hizo falta tocar el cambio de vista: `Workbench.client.tsx` ya salta a la pestaña de vista previa
+cuando aparece una URL nueva.
+
+**La lección, que es la parte reusable:** cuando un arreglo apaga una repetición, hay que preguntarse
+qué más dependía de que esa repetición ocurriera. Aquí la reproducción del artefacto no sólo
+reconstruía el proyecto — era también lo que volvía a anunciar el servidor.
+
+### El cuelgue al volver a la pestaña — medido, no adivinado
+
+Lo que dijo el usuario: *"cuando regreso a la pestaña se cuelga... creo que es porque se descarga
+todo a la vez y cuando son muchos recursos da error, porque si me quedo todo el rato con la pestaña
+abierta no hay error"*.
+
+En este proyecto ya hay dos hipótesis muy razonables sobre esto que **costaron un despliegue cada
+una** por no medirlas antes (el `MutationObserver` y el coste de renderizar el código; ver §5). Así
+que esta vez no se adivina. Lo que se leyó del código, y lo que descartó:
+
+| Sospechoso | Por qué no cuadra |
+|---|---|
+| El backlog del stream procesado de golpe al volver | `createSampler` no lo mueve un temporizador sino la llegada de cada trozo, así que sigue funcionando con la pestaña oculta; el navegador estrangula los `setTimeout`, no el flujo que los dispara |
+| `useStickToBottom` acumulando cadenas de `requestAnimationFrame` | sus disparadores son `ResizeObserver` y `scroll`, que el navegador entrega **dentro** del ciclo de pintado y por tanto también suspende: al volver llega una notificación, no cien |
+| La salida del terminal desbordando xterm | el runner arranca los proyectos con `CI=true` y `FORCE_COLOR=0`, así que `npm install` no imprime barras de progreso; el volumen es modesto |
+| `debugLogger` capturando cada trozo del terminal | trabajo real pero microscópico: un `import()` ya cacheado y un regex por trozo, del orden de decenas de ms en toda una generación |
+
+Lo que **sí** queda en pie es un mecanismo que el código no puede confirmar solo: Chromium
+**congela** una pestaña de fondo (Page Lifecycle), y una pestaña congelada no ejecuta nada — todo lo
+que mandaron el runner y el modelo sigue en cola y **entra de golpe al volver**. Eso es exactamente
+lo que describe el usuario. Pero una pestaña meramente estrangulada se comporta parecido desde fuera
+y pide un arreglo distinto.
+
+`app/lib/cresova/tab-suspension.ts` mide precisamente eso, y sale en el botón Diagnóstico:
+
+- si el navegador llegó a **congelar** la pestaña (eventos `freeze`/`resume`);
+- cuántas **tareas largas** hubo en los 15 s siguientes a volver, cuánto bloquearon en total y cuál
+  fue la mayor — «Page Unresponsive» *es* un hilo principal retenido, así que esto lo cuantifica;
+- cuántos mensajes y KB mandó el runner mientras nadie miraba.
+
+Sólo cuenta tamaños, nunca contenidos: el informe está pensado para pegarse en una conversación.
+
+Y una mitigación que no depende del diagnóstico para justificarse: `useChat` va ahora con
+`experimental_throttle: 100`. Sin él, cada trozo del modelo re-renderiza la lista de mensajes entera
+y vuelve a analizar el markdown de un mensaje que sólo crece — el coste de un turno sube con el
+**cuadrado** de su longitud, y cada render deja estilo, disposición y pintado pendientes, que es
+justo el trabajo que una pestaña oculta no puede quitarse de encima. Es menos trabajo en cualquier
+caso; **no es una afirmación de haber encontrado la causa.**
+
+**Lo que falta:** pulsar Diagnóstico justo después de un cuelgue. Si sale «congelada: sí» con
+cientos de KB acumulados, el arreglo es cortar la avalancha al reanudar. Si sale «congelada: no» con
+una sola tarea larga enorme, el arreglo está en lo que se re-renderiza. Son arreglos opuestos y sin
+esa lectura sólo se puede elegir a ciegas.
 
 ### El método que funcionó, y el que no
 
@@ -177,6 +265,7 @@ Todo lo añadido por Cresova vive en carpetas identificables.
 | `remote-container.ts` | `RunnerConnection` (WebSocket con correlación por id) y `RemoteContainer` (forma de WebContainer). |
 | `remote-shell.ts` | El shell compatible con jsh. Ver §5. |
 | `execution-backend.ts` | Elige el backend y expone `executionBackendStore` para la insignia. |
+| `tab-suspension.ts` | Mide qué le pasa a la pestaña mientras está de fondo: si la congelaron, cuánto bloqueó el hilo al volver, cuánto mandó el runner entretanto. Sale en el botón Diagnóstico. |
 
 ### `runner/`
 
@@ -926,9 +1015,9 @@ Ninguno impide generar y ver un sitio.
 | Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
-| **La pestaña en segundo plano** | El problema abierto más importante. Ver §0: hay que distinguir los dos mecanismos antes de tocar nada. |
-| Verificar lo que se desplegó sin probar | El reintento del stream (`api.chat.ts`) y el salto de reproducción (`workbench.ts`). |
-| Vista Preview por defecto | El usuario lo pidió: *"al final lo que me interesa es la preview, no el código"*, dejando la opción. Es decisión de **producto**, no de rendimiento — se midió y el render del código no es la causa de los cuelgues. |
+| **La pestaña en segundo plano** | El problema abierto más importante. Ya está instrumentado: falta una lectura del botón Diagnóstico tomada justo después de un cuelgue. Ver §0 bis. |
+| Verificar lo que se desplegó sin probar | El reintento del stream (`api.chat.ts`), el salto de reproducción (`workbench.ts`) y el `experimental_throttle` del chat. |
+| Vista Preview por defecto | El usuario lo pidió: *"al final lo que me interesa es la preview, no el código"*, dejando la opción. Es decisión de **producto**, no de rendimiento — se midió y el render del código no es la causa de los cuelgues. Parcialmente cubierto: el panel ya salta a la vista previa cuando aparece una URL nueva. |
 | `bindings.sh` pasa los secretos por la línea de comandos | Cualquiera con una shell en el contenedor los ve con un `ps`, y se filtran a cualquier diagnóstico que liste procesos. Es así en bolt.diy de origen. Se arregla con `.dev.vars`. |
 | Los proyectos se acumulan en un contenedor | Con `IDLE_TIMEOUT_MS` en 30 min, varios proyectos comparten host y Vite va escalando 5173, 5174, 5175. La etapa 4 (Docker por proyecto) es la solución de fondo. |
 | Unificar la barra de botones | Ver la tabla de abajo — ya no incluye `Publish`, resuelto. |
@@ -965,6 +1054,12 @@ pnpm lint             # eslint
 npx vitest run        # 203 pruebas en 23 archivos
 pnpm build            # remix vite build
 ```
+
+Las nuevas de esta tanda: `runner/src/ready-watcher.spec.mjs` cubre que una segunda conexión a un
+proyecto que ya sirve reciba el servidor en el apretón de manos (comprobado que **falla** sin el
+arreglo), `remote-container.spec.ts` cubre el mismo caso desde el lado del navegador, y
+`tab-suspension.spec.ts` cubre el informe de la pestaña con un `document` de mentira — no necesita
+las dependencias de la aplicación, así que se puede correr suelta.
 
 Las pruebas de integración levantan un **runner real** y hablan con él. Se saltan solas si
 `runner/node_modules/ws` no existe:

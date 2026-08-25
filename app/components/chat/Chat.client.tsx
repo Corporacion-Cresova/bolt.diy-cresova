@@ -139,6 +139,21 @@ export const ChatImpl = memo(
       addToolResult,
     } = useChat({
       api: '/api/chat',
+
+      /*
+       * One React update per 100 ms instead of one per token.
+       *
+       * Without it every chunk the model sends re-renders the whole message list and re-parses the
+       * markdown of an assistant message that only grows, so the cost of a turn climbs with the
+       * square of its length — and each of those renders leaves the browser style, layout and paint
+       * to do. That is work a hidden tab cannot get rid of: rendering is suspended while the tab is
+       * out of sight, so it all waits for the moment it comes back.
+       *
+       * This is not, on its own, a claim about what causes the hang — that is what the readings in
+       * `tab-suspension.ts` are for. It is less work either way, and the trailing update still
+       * lands, so nothing is lost from the end of a response.
+       */
+      experimental_throttle: 100,
       body: {
         apiKeys,
         files,
