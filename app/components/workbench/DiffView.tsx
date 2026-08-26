@@ -541,6 +541,16 @@ const FileInfo = memo(
   },
 );
 
+/**
+ * Only the languages this builder actually produces.
+ *
+ * The list used to carry seventeen, php, ruby, java, c, cpp, csharp, go and rust among them, for a
+ * tool that writes React and TypeScript websites. Every one is a separate chunk fetched on demand,
+ * and two of them have now failed in production for real users: `ruby` once, `php` again later.
+ * Nine grammars nobody here can ever need were nine extra ways for the tab to break.
+ */
+const DIFF_LANGUAGES = ['typescript', 'javascript', 'tsx', 'jsx', 'json', 'html', 'css', 'plaintext'];
+
 // Create and manage a single highlighter instance at the module level
 let highlighterInstance: any = null;
 let highlighterPromise: Promise<any> | null = null;
@@ -554,30 +564,22 @@ const getSharedHighlighter = async () => {
     return highlighterPromise;
   }
 
-  highlighterPromise = getHighlighter({
+  const pending = getHighlighter({
     themes: ['github-dark', 'github-light'],
-    langs: [
-      'typescript',
-      'javascript',
-      'json',
-      'html',
-      'css',
-      'jsx',
-      'tsx',
-      'python',
-      'php',
-      'java',
-      'c',
-      'cpp',
-      'csharp',
-      'go',
-      'ruby',
-      'rust',
-      'plaintext',
-    ],
+    langs: DIFF_LANGUAGES,
+  }).catch((error: unknown) => {
+    /*
+     * Without this the rejected promise stayed cached in `highlighterPromise` for the life of the
+     * page: the first failed grammar fetch was one error, and every later call handed back the same
+     * rejection — which is why the browser report showed the identical message thirty-one times.
+     * Releasing it lets the next attempt actually retry.
+     */
+    highlighterPromise = null;
+    throw error;
   });
 
-  highlighterInstance = await highlighterPromise;
+  highlighterPromise = pending;
+  highlighterInstance = await pending;
   highlighterPromise = null;
 
   // Clear the promise once resolved
@@ -599,7 +601,16 @@ const InlineDiffComparison = memo(({ beforeCode, afterCode, filename, language }
 
   useEffect(() => {
     // Fetch the shared highlighter instance
-    getSharedHighlighter().then(setHighlighter);
+    /*
+     * A highlighter that cannot load is a diff without colours, not a broken panel. Unhandled, it
+     * was showing up in the browser error report instead — and telling the user nothing they could
+     * act on.
+     */
+    getSharedHighlighter()
+      .then(setHighlighter)
+      .catch((error: unknown) => {
+        console.warn('Diff highlighting unavailable, showing plain text', error);
+      });
 
     /*
      * No cleanup needed here for the highlighter instance itself,

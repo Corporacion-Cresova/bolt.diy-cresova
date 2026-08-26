@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 214 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
+**Última actualización:** build 215 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
 
 ---
 
@@ -13,15 +13,24 @@ Lo primero que hay que saber al abrir una sesión nueva.
 
 ### Lo que espera acción del usuario
 
-**1. Redesplegar `bolt-diy` en EasyPanel.** La insignia debe pasar a **build 214**. Esta tanda **no
-toca el runner**.
+**1. Redesplegar `bolt-diy` y RECARGAR FUERTE la pestaña** (Ctrl+Shift+R). La insignia debe pasar a
+**build 215**. La recarga fuerte importa: ver §5, «los chunks con hash desaparecen al redesplegar».
 
-**2. Comprobar en Diagnóstico que pone `tokens de salida: 64000`.** Si dice «sin declarar», el campo
-nuevo no está llegando y el arreglo es inerte.
+**2. La medición que lleva dos tandas pendiente:** generar un sitio y **mirar si sigue viéndose
+plano**. No se ha podido hacer todavía porque el sitio salía roto. Si sigue plano con el sitio ya
+compilando, el siguiente sospechoso es el modelo (§7), no el prompt.
 
-**3. Y luego la medición que decide la tanda siguiente:** generar un sitio y **mirar si sigue
-viéndose plano**. Con ocho veces más sitio para escribir, puede que el refinamiento que antes caía
-por el borde ahora quepa. Si sigue plano, el siguiente sospechoso es el modelo (§7), no el prompt.
+### Lo cerrado en el build 215
+
+| Qué | Verificado |
+|---|---|
+| El contrato prohíbe inventarse valores de escala en `@apply` (`duration-350` rompió un sitio entero) | no — hace falta una generación real |
+| `DiffView` deja de cargar nueve gramáticas que este constructor no usa nunca | typecheck |
+| Un resaltador que falla deja de quedarse cacheado como rechazo para toda la vida de la página | typecheck |
+
+**El build 214 funcionó, y conviene no perderlo:** el informe trajo `tokens de salida: 64000`,
+`TURNOS AUTOMÁTICOS: ninguno` y **31 archivos en una sola pasada**. Antes eran 2 y 15 encadenando
+fases. El techo de 8.192 era la causa y era nuestro.
 
 ### Lo cerrado en el build 214
 
@@ -936,6 +945,58 @@ La solución no fue observar el disco en el servidor — eso obligaría a mandar
 que toca `npm install` para no decir nada útil — sino que el navegador reporte sus propias
 escrituras: es él quien las hace. `remote-container.ts` emite el evento después de que la escritura
 tiene éxito, nunca antes.
+
+### Una utilidad de Tailwind que parece real y no existe
+
+`@apply group` fue la primera versión de esta trampa y decírselo al modelo bastó. Ésta es la
+segunda, y la regla que había **no la cubría**:
+
+```
+The `duration-350` class does not exist.
+  .product-card {
+    @apply relative bg-white rounded-card shadow-card border border-black/5
+           transition-all duration-350 ease-out cursor-pointer
+```
+
+`rounded-card` y `shadow-card` **sí** existían: el modelo las había añadido a `theme.extend`.
+`duration-350` no, y la escala por defecto de Tailwind es 75 100 150 200 300 500 700 1000. Extendió
+unas claves del tema y no otras, y luego usó las cuatro como si todas existieran.
+
+El contrato ya decía «todo lo que pongas en `@apply` tiene que ser una utilidad que produzca
+declaraciones». Es cierto y no sirve aquí: `duration-350` **parece** exactamente eso. No es un
+fallo de categoría como `group`, es un fallo de existencia — un número elegido a ojo dentro de una
+escala cerrada.
+
+La regla nueva da la salida segura en vez de pedir memoria: **dentro de una hoja de estilo, para
+cualquier número que elijas tú, CSS plano** (`transition-duration: 350ms`), y `@apply` sólo para
+utilidades que no te has inventado.
+
+### El arreglo de shiki del build 211 fue la mitad
+
+`CodeBlock.tsx` era **un** sitio que cargaba gramáticas bajo demanda. `DiffView.tsx` era el otro, y
+siguió cargando diecisiete —php, ruby, java, c, cpp, csharp, go, rust incluidas— para un constructor
+que escribe React y TypeScript. Las dos que han fallado en producción, `ruby` en el build 210 y
+`php` en el 214, estaban las dos en esa lista.
+
+Y había un detalle peor que el desperdicio: `getSharedHighlighter` guardaba la promesa en
+`highlighterPromise` y sólo la limpiaba **al resolverse**. Una que fallara quedaba cacheada como
+rechazo para el resto de la vida de la página, y cada llamada posterior devolvía el mismo rechazo
+sin tocar la red. De ahí el `(×31)` del informe: un fallo real y treinta ecos.
+
+**Por qué fallan, probablemente:** los chunks llevan hash en el nombre. Al redesplegar `bolt-diy`
+con una pestaña abierta, los viejos desaparecen del servidor y la siguiente importación perezosa da
+404. Encaja con que sea una gramática distinta cada vez y con que empezara justo en la tanda de
+redesplegar cada media hora. **Una recarga fuerte tras cada redespliegue lo evita.**
+
+### El coste del hilo subió, y es la contrapartida de escribir de una vez
+
+Tras el build 214: **717 tareas largas, 53 s bloqueados**, 42 de ellos en
+`ReadableStreamDefaultReader.read.then`. Antes eran ~16 tareas y 1,8 s. No es una regresión: es lo
+que cuesta streamear 31 archivos en una pasada en lugar de 2 con fases.
+
+No se toca —la pestaña no se congeló y las vueltas del segundo plano fueron limpias— pero queda
+medido. Si empeora, el lector del shell es donde mirar, y ya se le borró un escaneo cuadrático una
+vez (§0 ter).
 
 ### Nadie contaba el total, y por ahí se coló un bucle
 
