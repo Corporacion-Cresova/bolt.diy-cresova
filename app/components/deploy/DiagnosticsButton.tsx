@@ -6,14 +6,43 @@ import { workbenchStore } from '~/lib/stores/workbench';
 import { webcontainer } from '~/lib/webcontainer';
 import type { RemoteContainer, RunnerDiagnostics } from '~/lib/cresova/remote-container';
 import { describeTabSuspension, watchTabSuspension } from '~/lib/cresova/tab-suspension';
+import { describeBrowserErrors, watchBrowserErrors } from '~/lib/cresova/browser-errors';
 import versionInfo from '~/version.json';
 
 /*
- * Started from here because this is the button that reads it, and because the header is on screen
- * from the moment a chat opens — the listeners have to be in place before the user leaves the tab,
- * which is the only moment there is anything to record.
+ * Started from here because this is the button that reads them, and because the header is on screen
+ * from the moment a chat opens — the listeners have to be in place before the thing they are meant
+ * to catch happens, which is the only moment there is anything to record.
  */
 watchTabSuspension();
+watchBrowserErrors();
+
+/** Enough terminal history to see what a failed command said, without pasting a whole install. */
+const TERMINAL_LINES = 40;
+
+/**
+ * The tail of the terminal, from the browser's own record.
+ *
+ * The runner reports the last output of the **last** command; this covers whatever ran before it,
+ * which is where an install that failed says so. It is the one part of the inherited debug log that
+ * actually fills up in an ordinary session, so it is worth reading here rather than leaving it
+ * behind a second button that reports mostly empty arrays.
+ */
+async function terminalTail(): Promise<string[]> {
+  try {
+    const { getDebugLogger } = await import('~/utils/debugLogger');
+    const entries = getDebugLogger().recentTerminalLogs(TERMINAL_LINES);
+
+    if (entries.length === 0) {
+      return [];
+    }
+
+    return ['', `TERMINAL (últimas ${entries.length} líneas)`, ...entries.map((entry) => `  ${entry.content}`)];
+  } catch {
+    // the report is worth more without this section than not at all
+    return [];
+  }
+}
 
 const NOT_REPORTED = 'sin dato';
 
@@ -29,7 +58,11 @@ function sí(value: boolean | undefined): string {
  * that only mean something next to each other — a live process with no open port is a command that
  * never got going, an open port that never answered is one that started and wedged.
  */
-function describe(diagnostics: RunnerDiagnostics | undefined, runnerError: string | undefined): string {
+function describe(
+  diagnostics: RunnerDiagnostics | undefined,
+  runnerError: string | undefined,
+  terminal: string[],
+): string {
   const backend = executionBackendStore.get();
   const previews = workbenchStore.previews.get();
   const files = Object.values(workbenchStore.files.get()).filter((dirent) => dirent?.type === 'file').length;
@@ -51,6 +84,7 @@ function describe(diagnostics: RunnerDiagnostics | undefined, runnerError: strin
     lines.push(`  el VPS falló: ${runnerError}`);
   }
 
+  lines.push('', ...describeBrowserErrors());
   lines.push('', ...describeTabSuspension());
 
   lines.push('', 'RUNNER');
@@ -58,7 +92,7 @@ function describe(diagnostics: RunnerDiagnostics | undefined, runnerError: strin
   if (!diagnostics) {
     lines.push('  no respondió; el proyecto no corre en el VPS o la conexión está caída');
 
-    return lines.join('\n');
+    return [...lines, ...terminal].join('\n');
   }
 
   lines.push(
@@ -94,7 +128,7 @@ function describe(diagnostics: RunnerDiagnostics | undefined, runnerError: strin
     );
   }
 
-  return lines.join('\n');
+  return [...lines, ...terminal].join('\n');
 }
 
 /**
@@ -123,7 +157,7 @@ export function DiagnosticsButton() {
       // a runner that cannot answer is itself part of the report, not a reason to have none
     }
 
-    const report = describe(diagnostics, runnerError);
+    const report = describe(diagnostics, runnerError, await terminalTail());
 
     try {
       await navigator.clipboard.writeText(report);

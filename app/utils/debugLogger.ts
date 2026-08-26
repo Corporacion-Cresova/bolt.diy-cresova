@@ -675,6 +675,21 @@ class DebugLogger {
     }
   }
 
+  /**
+   * The tail of the terminal history, for a report that wants it without the rest of the dump.
+   *
+   * `generateDebugLog` is the only other way in, and it turns capture on and off around itself as a
+   * side effect. This is a plain read: the terminal buffer is the one thing here that fills up in an
+   * ordinary session, because `shell.ts` writes to it whether or not debug mode was ever enabled.
+   */
+  recentTerminalLogs(limit: number): TerminalEntry[] {
+    this._flushTerminalLogs();
+
+    const entries = this._terminalLogs.toArray();
+
+    return entries.slice(-limit);
+  }
+
   private _flushTerminalLogs(): void {
     try {
       while (this._terminalLogQueue.length > 0) {
