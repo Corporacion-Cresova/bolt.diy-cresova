@@ -8,6 +8,7 @@ import { expoUrlAtom } from '~/lib/stores/qrCodeStore';
 import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import type { ElementInfo } from './Inspector';
 import { executionBackendStore } from '~/lib/cresova/execution-backend';
+import { PreviewBuilding } from './PreviewBuilding';
 
 type ResizeSide = 'left' | 'right' | null;
 
@@ -1061,9 +1062,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
               />
             </>
           ) : (
-            <div className="flex w-full h-full justify-center items-center bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary">
-              No preview available
-            </div>
+            <PreviewBuilding />
           )}
 
           {isDeviceModeOn && !showDeviceFrameInPreview && (

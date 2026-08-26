@@ -1,11 +1,13 @@
 import { useStore } from '@nanostores/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { computed } from 'nanostores';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { createHighlighter, type BundledLanguage, type BundledTheme, type HighlighterGeneric } from 'shiki';
 import type { ActionState } from '~/lib/runtime/action-runner';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { dedupeFileActions } from '~/lib/cresova/dedupe-file-actions';
+import { describeBuildProgress } from '~/lib/cresova/build-progress';
+import { streamingState } from '~/lib/stores/streaming';
 import { classNames } from '~/utils/classNames';
 import { cubicEasingFn } from '~/utils/easings';
 import { WORK_DIR } from '~/utils/constants';
@@ -28,12 +30,14 @@ interface ArtifactProps {
 }
 
 export const Artifact = memo(({ artifactId }: ArtifactProps) => {
-  const userToggledActions = useRef(false);
   const [showActions, setShowActions] = useState(false);
   const [allActionFinished, setAllActionFinished] = useState(false);
 
   const artifacts = useStore(workbenchStore.artifacts);
   const artifact = artifacts[artifactId];
+
+  const streaming = useStore(streamingState);
+  const previews = useStore(workbenchStore.previews);
 
   const actions = useStore(
     computed(artifact.runner.actions, (actions) => {
@@ -46,15 +50,10 @@ export const Artifact = memo(({ artifactId }: ArtifactProps) => {
   );
 
   const toggleActions = () => {
-    userToggledActions.current = true;
     setShowActions(!showActions);
   };
 
   useEffect(() => {
-    if (actions.length && !showActions && !userToggledActions.current) {
-      setShowActions(true);
-    }
-
     if (actions.length !== 0 && artifact.type === 'bundled') {
       const finished = !actions.find(
         (action) => action.status !== 'complete' && !(action.type === 'start' && action.status === 'running'),
@@ -66,17 +65,28 @@ export const Artifact = memo(({ artifactId }: ArtifactProps) => {
     }
   }, [actions, artifact.type, allActionFinished]);
 
-  // Determine the dynamic title based on state for bundled artifacts
-  const dynamicTitle =
-    artifact?.type === 'bundled'
-      ? allActionFinished
-        ? artifact.id === 'restored-project-setup'
-          ? 'Project Restored' // Title when restore is complete
-          : 'Project Created' // Title when initial creation is complete
-        : artifact.id === 'restored-project-setup'
-          ? 'Restoring Project...' // Title during restore
-          : 'Creating Project...' // Title during initial creation
-      : artifact?.title; // Fallback to original title for non-bundled or if artifact is missing
+  /*
+   * What the chat says a build is doing, in place of the list of files it used to print.
+   *
+   * The list was never wrong, it was just the wrong register: a column of "Create src/App.tsx" rows
+   * reads like a build log, and the thing this is meant to feel like is an agent that builds sites.
+   * The detail is still one click away behind the caret, unchanged, for when something breaks.
+   */
+  const progress = describeBuildProgress({
+    actions,
+    streaming,
+    hasPreview: previews.some((preview) => preview.ready),
+  });
+
+  const restoring = artifact?.id === 'restored-project-setup';
+
+  const dynamicTitle = restoring
+    ? allActionFinished
+      ? 'Proyecto restaurado'
+      : 'Restaurando el proyecto…'
+    : progress.stage === 'ready' || (artifact?.closed && !progress.busy)
+      ? 'Sitio construido'
+      : 'Construyendo tu sitio…';
 
   return (
     <>
@@ -91,11 +101,10 @@ export const Artifact = memo(({ artifactId }: ArtifactProps) => {
           >
             <div className="px-5 p-3.5 w-full text-left">
               <div className="w-full text-bolt-elements-textPrimary font-medium leading-5 text-sm">
-                {/* Use the dynamic title here */}
                 {dynamicTitle}
               </div>
-              <div className="w-full w-full text-bolt-elements-textSecondary text-xs mt-0.5">
-                Click to open Workbench
+              <div className="w-full text-bolt-elements-textSecondary text-xs mt-0.5">
+                Abrir el panel
               </div>
             </div>
           </button>
@@ -117,22 +126,30 @@ export const Artifact = memo(({ artifactId }: ArtifactProps) => {
             )}
           </AnimatePresence>
         </div>
-        {artifact.type === 'bundled' && (
+        {/*
+         * One status line for every artifact, where the file list used to be. The bundled kind
+         * always had exactly this and nothing else; what changed is that an ordinary build gets it
+         * too, and says the same thing the preview panel is saying at that moment — both read it
+         * from `describeBuildProgress`, so they cannot drift apart.
+         */}
+        {actions.length > 0 && (
           <div className="flex items-center gap-1.5 p-5 bg-bolt-elements-actions-background border-t border-bolt-elements-artifacts-borderColor">
-            <div className={classNames('text-lg', getIconColor(allActionFinished ? 'complete' : 'running'))}>
-              {allActionFinished ? (
-                <div className="i-ph:check"></div>
-              ) : (
+            <div
+              className={classNames(
+                'text-lg',
+                getIconColor(progress.stage === 'failed' ? 'failed' : progress.busy ? 'running' : 'complete'),
+              )}
+            >
+              {progress.stage === 'failed' ? (
+                <div className="i-ph:warning-circle-duotone"></div>
+              ) : progress.busy ? (
                 <div className="i-svg-spinners:90-ring-with-bg"></div>
+              ) : (
+                <div className="i-ph:check"></div>
               )}
             </div>
             <div className="text-bolt-elements-textPrimary font-medium leading-5 text-sm">
-              {/* This status text remains the same */}
-              {allActionFinished
-                ? artifact.id === 'restored-project-setup'
-                  ? 'Restore files from snapshot'
-                  : 'Initial files created'
-                : 'Creating initial files'}
+              {restoring && !allActionFinished ? 'Recuperando los archivos guardados' : progress.message}
             </div>
           </div>
         )}

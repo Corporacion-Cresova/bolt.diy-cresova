@@ -55,7 +55,12 @@ export class WorkbenchStore {
   artifacts: Artifacts = import.meta.hot?.data.artifacts ?? map({});
 
   showWorkbench: WritableAtom<boolean> = import.meta.hot?.data.showWorkbench ?? atom(false);
-  currentView: WritableAtom<WorkbenchViewType> = import.meta.hot?.data.currentView ?? atom('code');
+  /*
+   * The preview, not the code. "Al final lo que me interesa es la preview, no el código" — and a
+   * builder that opens on source reads like a code editor that happens to generate, rather than a
+   * thing that builds sites. Code stays one click away in the slider.
+   */
+  currentView: WritableAtom<WorkbenchViewType> = import.meta.hot?.data.currentView ?? atom('preview');
   unsavedFiles: WritableAtom<Set<string>> = import.meta.hot?.data.unsavedFiles ?? atom(new Set<string>());
   actionAlert: WritableAtom<ActionAlert | undefined> =
     import.meta.hot?.data.actionAlert ?? atom<ActionAlert | undefined>(undefined);
@@ -642,18 +647,16 @@ export class WorkbenchStore {
        * This is a more complex feature that would be implemented in a future update
        */
 
+      /*
+       * The editor follows the file being written; the panel does not follow the editor.
+       *
+       * This block used to flip the whole workbench to Code on every file of a first build, which
+       * is what made the app look like it was showing source while it worked. Selecting the file is
+       * still worth doing — whoever opens Code finds it already there — but whoever stays on the
+       * preview now watches the site get built instead.
+       */
       if (this.selectedFile.value !== fullPath) {
         this.setSelectedFile(fullPath);
-      }
-
-      /*
-       * Follow the file being written, but never steal the panel from a running preview:
-       * once an app is live, edits should be watched in the preview (Cresova Builder).
-       */
-      const hasLivePreview = this.previews.get().some((preview) => preview.ready);
-
-      if (this.currentView.value !== 'code' && !hasLivePreview) {
-        this.currentView.set('code');
       }
 
       const doc = this.#editorStore.documents.get()[fullPath];

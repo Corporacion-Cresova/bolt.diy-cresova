@@ -47,3 +47,32 @@
     transform: translateY(6px);
   }
 }
+
+/*
+ * The pulse under the preview skeleton while a site is being built.
+ *
+ * A plain opacity animation, and that is the whole point: this runs inside a panel that stays
+ * mounted behind the other two workbench views, so it can be on screen or entirely hidden. The
+ * component drops the class when the panel is not showing or the tab is in the background —
+ * `prefers-reduced-motion` is honoured here for everyone else.
+ */
+.cresova-shimmer {
+  animation: cresovaShimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes cresovaShimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cresova-shimmer {
+    animation: none;
+  }
+}

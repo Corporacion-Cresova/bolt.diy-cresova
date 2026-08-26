@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 210 · rama `claude/preview-tab-hang-issues-dk3u86`.
+**Última actualización:** build 211 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
 
 ---
 
@@ -14,14 +14,30 @@ Lo primero que hay que saber al abrir una sesión nueva.
 ### Lo que espera acción del usuario
 
 **1. Redesplegar `bolt-diy` y `runner` en EasyPanel.** Nada de esto corre en producción hasta ese
-redespliegue. La insignia del header debe pasar a **build 210**; si sigue en un número menor, el
+redespliegue. La insignia del header debe pasar a **build 211**; si sigue en un número menor, el
 despliegue no llegó. Ese contador es la única forma fiable de saberlo y estuvo roto hasta el
-build 199 (ver §5).
+build 199 (ver §5). **Los dos servicios**, porque el arreglo de la vista previa está repartido entre
+los dos: uno solo no basta.
 
-**2. Comprobar que el cuelgue de pestaña desapareció.** La causa está encontrada y arreglada (§0
-ter): era un escaneo cuadrático en `waitTillOscCode`, responsable de **204 de los 242 segundos** de
-hilo bloqueado que midió la última lectura. Si vuelve a colgarse, Diagnóstico ahora nombra la
-función.
+**2. Comprobar que la vista previa se ve dentro del marco.** La causa está encontrada y es medible
+(§0 quinquies): faltaba la mitad de la cabecera. Si vuelve a fallar, el botón Diagnóstico trae ahora
+una sección nueva, `VISTA PREVIA, VISTA DESDE EL NAVEGADOR`, que dice literalmente qué contestó y si
+se puede incrustar — no hay que volver a deducirlo.
+
+**3. Comprobar que el cuelgue de pestaña sigue sin aparecer.** Resuelto en el build 209 (§0 ter):
+era un escaneo cuadrático en `waitTillOscCode`.
+
+### Lo cerrado en el build 211
+
+| Qué | Verificado |
+|---|---|
+| «Refused to connect»: la vista previa manda ahora **su propia** cabecera de incrustación, y el builder deja de exigir aislamiento cuando el runner está configurado | sí, pruebas del runner en las cuatro ramas del `Host`; no probado aún en un navegador |
+| El informe de Diagnóstico mide lo que el navegador recibe de la vista previa, en vez de razonar sobre lo que el runner envía | sí, 6 pruebas |
+| El panel abre en **Preview** y deja de saltar al código mientras se escriben archivos | no probado en un navegador |
+| Animación de construcción en el panel, con la fase real (escribiendo · instalando · arrancando) | sí, 8 pruebas de la lógica; el componente no se probó en un navegador |
+| El chat deja de listar los archivos: una sola línea de agente, con el detalle plegado detrás del acordeón | no probado en un navegador |
+| Los bloques de código dejan de quedarse en blanco por una gramática de shiki que no se descarga | no — hace falta un chat real |
+| Dos puntos donde la pestaña de fondo rompía la vista previa: `requestAnimationFrame` en `refreshPreview` y el temporizador de cola de `createSampler` | sí, 5 pruebas del sampler |
 
 ### Lo cerrado en el build 210
 
@@ -365,6 +381,126 @@ Tres cosas que las pruebas encontraron al escribirlo, y que valen como patrón:
 Y el detector nace con su propia prueba de que no vuelve a ser cuadrático — que es justo el fallo que
 esta misma tanda acaba de borrar del lector del shell.
 
+## 0 quinquies. La vista previa, tercera causa: media cabecera (build 211)
+
+La lectura del build 210 fue la más engañosa de todas, porque **todo estaba bien**:
+
+```
+vistas previas: 1
+  https://cresova-04544854a85f953b.preview.cresova.com (lista: sí)
+sirviendo en: ::1:5173
+servidor anunciado: sí
+último sondeo: contestó en [::1]:5173
+```
+
+Y aun así, «refused to connect». Comprobado desde fuera, sin tocar nada:
+
+```
+GET https://cresova-04544854a85f953b.preview.cresova.com/
+HTTP/2 200 · content-type: text/html · content-length: 1597
+cross-origin-resource-policy: cross-origin
+```
+
+Es decir: DNS, TLS, Traefik, el runner y Vite, todos correctos. Lo que faltaba era una cabecera, y es
+la que el arreglo del build 199 (§5, «era COEP, no una conexión rechazada») dejó a medias.
+
+**La regla completa son dos condiciones, no una.** Un marco de otro origen dentro de una página que
+declara `Cross-Origin-Embedder-Policy` necesita:
+
+1. `Cross-Origin-Resource-Policy: cross-origin` — bajo la política del que incrusta, la CORP del
+   recurso pasa a valer `same-origin` por defecto, así que sin esto se bloquea como subrecurso.
+2. **Su propia** `Cross-Origin-Embedder-Policy` — un documento anidado tiene que llevar una política
+   compatible con la de su anfitrión.
+
+Cumplir sólo la primera es exactamente lo que había, y el navegador lo reporta igual que no cumplir
+ninguna: «refused to connect». Ese es el motivo de que el arreglo anterior pareciera correcto y de
+que el síntoma no se moviera.
+
+**Por qué `credentialless` y no `require-corp`.** Se midió antes de elegir: `images.pexels.com` y
+`picsum.photos` **no** mandan CORP (`fonts.gstatic.com` sí). Bajo `require-corp` cada imagen de otro
+origen dentro del sitio generado tendría que mandarla, así que habríamos cambiado un marco bloqueado
+por sitios llenos de fotos rotas. `credentialless` carga esos recursos sin credenciales, que es todo
+lo que una foto pública necesitó nunca.
+
+**Y la otra capa: el builder deja de exigir aislamiento cuando no le hace falta.** El aislamiento
+existe por una sola razón —WebContainer necesita `SharedArrayBuffer`— y con `RUNNER_URL` configurado
+WebContainer es el respaldo, no el camino. `entry.server.tsx` sólo pone `COEP`/`COOP` cuando no hay
+runner. El precio, dicho claro: en un despliegue con `RUNNER_URL`, si el runner no responde el
+respaldo WebContainer tampoco arranca.
+
+**La lección, que es la parte reusable, y la razón de la sección nueva del Diagnóstico:** las tres
+causas de este mismo síntoma se diagnosticaron razonando sobre cabeceras en vez de leyendo las que
+llegaron. Y no es lo mismo: entre el runner y el navegador hay un Traefik y un certificado comodín,
+cualquiera de los dos podría estar cambiándolas. Ahora el botón Diagnóstico **pide la vista previa
+desde la propia página** y escribe lo que recibió:
+
+```
+VISTA PREVIA, VISTA DESDE EL NAVEGADOR
+  https://cresova-….preview.cresova.com
+  contestó: 200
+  cross-origin-embedder-policy: credentialless
+  cross-origin-resource-policy: cross-origin
+  el builder exige política de incrustación: no
+  se puede incrustar: sí — el builder no impone ninguna condición
+```
+
+Para que el navegador pueda leer esas dos cabeceras hace falta que el runner las exponga
+(`access-control-expose-headers`), que es lo único que se abrió: una URL de vista previa ya servía
+páginas públicas a cualquiera que la tuviera, sin credenciales de por medio.
+
+## 0 sexies. Lo que se le pidió a la herramienta, y qué se hizo (build 211)
+
+Textual del usuario: *«al final se busca que se sienta como que estás hablando con un agente
+constructor»*, *«debería quedarse la pestaña de Preview como primera, así como lo hace Lovable,
+mostrando una animación como construyendo»*, y *«en el chat no creo que sea necesario que se muestre
+los archivos que se están generando»*.
+
+| Qué se pidió | Qué se hizo |
+|---|---|
+| Preview como primera pestaña | `currentView` arranca en `'preview'`, y `workbench.ts` deja de saltar a `'code'` cada vez que se escribe un archivo. El editor sigue seleccionando el archivo, así que quien abra Code lo encuentra donde estaba. |
+| Animación de construcción | `PreviewBuilding.tsx` sustituye al «No preview available». Esqueleto de página con pulso CSS y una línea con la fase real. |
+| El chat sin lista de archivos | La tarjeta del artefacto muestra una línea —«Escribiendo archivos · 7 de 14», «Sitio listo · 14 archivos»— y el acordeón ya no se abre solo. La lista entera sigue detrás del caret. |
+
+Las dos superficies leen la misma función, `build-progress.ts`, precisamente para que no puedan
+decir cosas distintas del mismo momento. Está aparte y sin importar `workbenchStore`, por la misma
+razón que `action-failures.ts`: importar esa tienda abre la conexión con el runner como efecto del
+import, y un módulo que abre un socket no se puede probar barato.
+
+**Lo que la animación no arregla, y conviene no confundirlo:** que la construcción siga dependiendo
+de que la pestaña esté delante. Eso es arquitectura, no interfaz — ver §7.
+
+### El código que no se pintaba nunca, y sale en el mismo informe
+
+`ERRORES DEL NAVEGADOR` del build 210 traía una línea sola: `Failed to fetch dynamically imported
+module: …/ruby-DeZ3UC14.js (×26)`. Es el otro síntoma que reportó el usuario, *«ya no sale el código
+como antes pero siempre da la impresión como que se muestra»*.
+
+`CodeBlock.tsx` era el único sitio del repo que usaba el `codeToHtml` del paquete completo de shiki
+—los otros tres ya usaban `createHighlighter` con `langs` explícitos—, y ese `codeToHtml` descarga la
+gramática bajo demanda. La de `markdown` arrastra unas cuarenta gramáticas incrustadas, `ruby` entre
+ellas. Con que **una** falle, la promesa se rechaza, el HTML se queda en `undefined` y el bloque no
+pinta nada: un bloque que parece estar cargando para siempre. Y el ×26 no son 26 descargas: el
+navegador memoriza el módulo que falló, así que todos los bloques siguientes fallan al instante y sin
+tocar la red.
+
+Ahora hay una lista cerrada de idiomas y un `try/catch` con reserva a texto plano. Un resaltador que
+falla no puede dejar un hueco.
+
+### Los dos sitios donde la pestaña de fondo rompía la vista previa
+
+Medidos, no supuestos, y los dos son de una línea:
+
+- `previews.ts`, `refreshPreview`: ponía `ready = false` y lo devolvía a `true` dentro de un
+  `requestAnimationFrame`. **rAF no dispara en una pestaña oculta**, así que un refresco empezado de
+  fondo dejaba la vista previa marcada como no lista para siempre — y todo lo de abajo filtra por
+  `ready`. Al volver a la pestaña no había vista previa, y lo que la había perdido era el refresco,
+  no la pestaña. Ahora es un `setTimeout(…, 0)`, que da la misma vuelta al bucle de eventos sin
+  depender de que se pinte un fotograma.
+- `sampler.ts`: la llamada de cola es un `setTimeout`, y en una pestaña oculta el navegador lo estira
+  a un segundo, y a uno por minuto pasados cinco. Debajo de ese sampler están el analizador de
+  mensajes y el flujo de acciones. Ahora se vacía lo pendiente en `visibilitychange`, que es el
+  último instante en que algo está garantizado que corre a tiempo.
+
 ## 1. Qué es esto y a dónde va
 
 Fork de bolt.diy convertido en **Cresova Builder**, el constructor de sitios web interno de
@@ -471,6 +607,8 @@ Todo lo añadido por Cresova vive en carpetas identificables.
 | `tab-suspension.ts` | Mide qué le pasa a la pestaña mientras está de fondo: si la congelaron, cuánto bloqueó el hilo al volver, cuánto mandó el runner entretanto, y **qué función** lo retuvo. Sale en el botón Diagnóstico. |
 | `dev-server-errors.ts` | Lee las quejas del servidor de desarrollo en su propia salida. Un proyecto que compila mal sigue sirviendo, así que ninguna otra señal lo nota. |
 | `browser-errors.ts` | Recoge las excepciones no capturadas y las promesas rechazadas, siempre, desde que se abre el chat. Sale en el botón Diagnóstico. |
+| `build-progress.ts` | Una sola lectura de «qué está haciendo el constructor ahora», en español. La leen el chat y el panel de vista previa, para que no puedan contradecirse. |
+| `preview-embedding.ts` | Pide la vista previa desde la propia página y dice si el navegador **puede** incrustarla, con las cabeceras que recibió. Sale en el botón Diagnóstico. |
 
 ### `runner/`
 
@@ -490,6 +628,7 @@ Todo lo añadido por Cresova vive en carpetas identificables.
 - `app/routes/api.runner-ticket.ts` — emite los tickets.
 - `scripts/update-version.mjs` + `app/version.json` — contador de compilación.
 - `public/templates/*.json` — plantillas alojadas por nosotros, no en GitHub.
+- `app/components/workbench/PreviewBuilding.tsx` — el esqueleto animado que llena el panel mientras no hay nada que enmarcar.
 
 ## 5. Las trampas que ya costaron caro
 
@@ -665,6 +804,11 @@ navegador, no en la red.
 
 La cabecera va en las tres ramas del enrutado por Host, la del proyecto muerto incluida: un mensaje
 que no se puede leer dentro del marco no sirve de nada.
+
+> **Corregido en el build 211: esto era la mitad del arreglo.** Un marco de otro origen necesita
+> además **su propia** `Cross-Origin-Embedder-Policy`; con sólo la de recurso el navegador lo sigue
+> rechazando, y con el mismo mensaje. Ver §0 quinquies. Lo que esta entrada dio por cerrado no lo
+> estaba, y el síntoma no se movió durante tres builds por eso.
 
 ### Publicar caducaba a los 60 segundos con el runner trabajando
 
@@ -1238,12 +1382,13 @@ Ninguno impide generar y ver un sitio.
 | ~~El servidor que abre su puerto y no contesta~~ | **Resuelto en el build 208 y confirmado en el 209:** escuchaba en `[::1]:5173` y sondeábamos la IPv4. Ver §0 bis. |
 | **Calidad del CSS generado** | `@apply group` rompió un sitio entero. El contrato ya lo prohíbe y el error se convierte en alerta; falta ver si basta con decírselo al modelo. Ver §0 quater. |
 | Verificar lo que se desplegó sin probar | El reintento del stream (`api.chat.ts`), el salto de reproducción (`workbench.ts`) y el `experimental_throttle` del chat. |
-| Vista Preview por defecto | El usuario lo pidió: *"al final lo que me interesa es la preview, no el código"*, dejando la opción. Es decisión de **producto**, no de rendimiento — se midió y el render del código no es la causa de los cuelgues. Parcialmente cubierto: el panel ya salta a la vista previa cuando aparece una URL nueva. |
+| ~~Vista Preview por defecto~~ | **Hecho en el build 211.** `currentView` arranca en `'preview'` y el panel ya no salta al código mientras se escriben archivos. Code sigue en el slider. |
 | `bindings.sh` pasa los secretos por la línea de comandos | Cualquiera con una shell en el contenedor los ve con un `ps`, y se filtran a cualquier diagnóstico que liste procesos. Es así en bolt.diy de origen. Se arregla con `.dev.vars`. |
 | Los proyectos se acumulan en un contenedor | Con `IDLE_TIMEOUT_MS` en 30 min, varios proyectos comparten host y Vite va escalando 5173, 5174, 5175. La etapa 4 (Docker por proyecto) es la solución de fondo. |
 | Unificar la barra de botones | Ver la tabla de abajo — ya no incluye `Publish`, resuelto. |
 | Calidad visual | **Prioridad 2**, después de la base. |
-| Interfaz al estilo Lovable | **Prioridad 3**, lo último. Ver abajo. |
+| Interfaz al estilo Lovable | **Prioridad 3**. La barra superior unificada sigue pendiente; la sensación de agente (preview primero, animación, chat sin lista de archivos) se hizo en el build 211. Ver abajo. |
+| **La construcción depende de la pestaña** | Lo pidió el usuario en el build 210: *"siento que todavía es dependiente de que yo esté viendo la pestaña"*. Las dos fugas medibles están tapadas (§0 sexies), pero el fondo es arquitectura: hoy el navegador es el que orquesta —el stream del modelo llega a la pestaña y la pestaña maneja la cola de acciones contra el runner—, así que cerrarla corta la construcción. La respuesta de fondo es que el servidor conduzca la generación contra el runner y la pestaña sólo mire. Es la tanda grande siguiente. |
 
 ### Interfaz al estilo Lovable (prioridad 3)
 
@@ -1276,12 +1421,20 @@ npx vitest run        # 203 pruebas en 23 archivos
 pnpm build            # remix vite build
 ```
 
-Las nuevas de estas tandas: `runner/src/ready-watcher.spec.mjs` cubre que una segunda conexión a un
+Las nuevas del build 211, todas sin dependencias de la aplicación y por tanto ejecutables aunque
+`pnpm install` falle (ver abajo): `build-progress.spec.ts`, `preview-embedding.spec.ts` y
+`sampler.spec.ts`. Las dos primeras encierran las reglas que costaron caro — que un turno terminado
+sin vista previa no se quede girando, y que cumplir **una** de las dos cabeceras de incrustación
+cuente como fallo y diga cuál falta. Las cabeceras de la vista previa se afirman además en las cuatro
+ramas del enrutado por `Host`: `ready-watcher.spec.mjs` (sitio publicado y proyecto muerto) y
+`remote-preview.spec.ts` (proxy vivo y 404).
+
+De las tandas anteriores: `runner/src/ready-watcher.spec.mjs` cubre que una segunda conexión a un
 proyecto que ya sirve reciba el servidor en el apretón de manos (comprobado que **falla** sin el
 arreglo); `runner/src/ports.spec.mjs` cubre la lectura de direcciones con un `/proc` de mentira,
 porque el real no puede enseñar aquí lo que hay que cubrir; `remote-container.spec.ts` cubre el
-suscriptor tardío desde el lado del navegador. Y dos que no necesitan las dependencias de la
-aplicación, así que se pueden correr sueltas: `tab-suspension.spec.ts` y `dev-server-errors.spec.ts`.
+suscriptor tardío desde el lado del navegador. Y dos más que se pueden correr sueltas:
+`tab-suspension.spec.ts` y `dev-server-errors.spec.ts`.
 
 Las pruebas de integración levantan un **runner real** y hablan con él. Se saltan solas si
 `runner/node_modules/ws` no existe:
@@ -1311,6 +1464,23 @@ npx vitest run --config vitest.temp.config.mjs && rm vitest.temp.config.mjs
 Hace falta el config temporal **dentro de `runner/`**: sin él vitest sube hasta el `vite.config.ts`
 de la raíz, que no puede cargar sin las dependencias de la aplicación. Hoy: **4 archivos, 28
 pruebas.**
+
+**Y las pruebas puras del lado del navegador también**, con un config temporal en la raíz que sólo
+aporta el alias `~`:
+
+```bash
+cat > vitest.temp.config.mjs <<'EOF'
+import { fileURLToPath } from 'node:url';
+export default {
+  resolve: { alias: { '~': fileURLToPath(new URL('./app', import.meta.url)) } },
+  test: { include: ['app/lib/cresova/build-progress.spec.ts', 'app/lib/cresova/preview-embedding.spec.ts', 'app/utils/sampler.spec.ts'] },
+};
+EOF
+npx --yes vitest@2 run --config vitest.temp.config.mjs && rm vitest.temp.config.mjs
+```
+
+Sólo sirve para módulos que no importan nada de la aplicación en tiempo de ejecución, que es
+justamente por lo que la lógica nueva vive en módulos así.
 
 **Y un typecheck parcial del lado TypeScript**, instalando sólo `typescript` y saltándose la
 resolución de módulos:

@@ -264,20 +264,24 @@ describe.skipIf(!RUNNER_READY)('a project running end to end on the runner', () 
   }, 60_000);
 
   /*
-   * The builder is served with `Cross-Origin-Embedder-Policy: require-corp`, which WebContainer
-   * needs. Under it, a cross-origin iframe without this header is blocked before it renders, and
-   * the browser reports it as "refused to connect" — a working preview that reads as a dead server.
+   * Embedding a cross-origin frame under an embedder policy takes two headers, not one, and
+   * shipping only the first is what left this reading as "refused to connect" for a whole round:
+   * the resource policy stops it being blocked as a subresource, and the frame's own embedder
+   * policy stops it being blocked as a nested document. A working preview that reads as a dead
+   * server is the most expensive kind of bug, so both are asserted here.
    */
   it('lets the builder embed the preview in its iframe', async () => {
     const live = await getThroughProxy(`e2e-demo.${PREVIEW_DOMAIN}`);
 
     expect(live.status).toBe(200);
     expect(live.headers['cross-origin-resource-policy']).toBe('cross-origin');
+    expect(live.headers['cross-origin-embedder-policy']).toBe('credentialless');
 
     // the same goes for the page that says a project is gone: unreadable in a frame is unhelpful
     const gone = await getThroughProxy(`nunca-existio.${PREVIEW_DOMAIN}`);
 
     expect(gone.headers['cross-origin-resource-policy']).toBe('cross-origin');
+    expect(gone.headers['cross-origin-embedder-policy']).toBe('credentialless');
   });
 
   it('does not serve a project to a host that names a different one', async () => {

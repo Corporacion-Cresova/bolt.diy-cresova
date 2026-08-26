@@ -7,6 +7,7 @@ import { webcontainer } from '~/lib/webcontainer';
 import type { RemoteContainer, RunnerDiagnostics } from '~/lib/cresova/remote-container';
 import { describeTabSuspension, watchTabSuspension } from '~/lib/cresova/tab-suspension';
 import { describeBrowserErrors, watchBrowserErrors } from '~/lib/cresova/browser-errors';
+import { checkPreviewEmbedding, describePreviewEmbedding, type PreviewEmbedding } from '~/lib/cresova/preview-embedding';
 import versionInfo from '~/version.json';
 
 /*
@@ -62,6 +63,7 @@ function describe(
   diagnostics: RunnerDiagnostics | undefined,
   runnerError: string | undefined,
   terminal: string[],
+  embedding: PreviewEmbedding | undefined,
 ): string {
   const backend = executionBackendStore.get();
   const previews = workbenchStore.previews.get();
@@ -82,6 +84,10 @@ function describe(
 
   if (runnerError) {
     lines.push(`  el VPS falló: ${runnerError}`);
+  }
+
+  if (embedding) {
+    lines.push('', ...describePreviewEmbedding(embedding));
   }
 
   lines.push('', ...describeBrowserErrors());
@@ -157,7 +163,15 @@ export function DiagnosticsButton() {
       // a runner that cannot answer is itself part of the report, not a reason to have none
     }
 
-    const report = describe(diagnostics, runnerError, await terminalTail());
+    /*
+     * The preview the workbench believes in, asked directly. A reading of what the browser gets
+     * beats any amount of reasoning about what the runner sends — the two are separated by a
+     * gateway that could be changing either.
+     */
+    const preview = workbenchStore.previews.get().find((candidate) => candidate.ready) ?? workbenchStore.previews.get()[0];
+    const embedding = preview ? await checkPreviewEmbedding(preview.baseUrl) : undefined;
+
+    const report = describe(diagnostics, runnerError, await terminalTail(), embedding);
 
     try {
       await navigator.clipboard.writeText(report);
