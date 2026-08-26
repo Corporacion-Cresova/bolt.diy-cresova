@@ -113,9 +113,11 @@ describe('waiting for a project server', () => {
  * of the runner gave up minutes later and served its own error page — so the user got a generic 502
  * from a service that had never been consulted, while the runner's own explanation never ran.
  *
- * The header matters as much as the timeout: the builder is served under COEP, so a reply without
- * `Cross-Origin-Resource-Policy` is blocked before it renders. An explanation that cannot be read
- * inside the frame is worth exactly as much as no explanation.
+ * The headers matter as much as the timeout, and there are two of them. Under an embedder policy a
+ * nested document needs both `Cross-Origin-Resource-Policy: cross-origin` and an embedder policy of
+ * its own; satisfying only the first still gets the frame refused. That is why these assertions name
+ * both, on every branch of the Host routing — an explanation that cannot be read inside the frame is
+ * worth exactly as much as no explanation.
  */
 const PORT = 3987;
 const TOKEN = 'runner-token-for-tests-'.padEnd(40, 'x');
@@ -417,6 +419,7 @@ describe('a published site', () => {
     const answer = await get(`${NAME}.${PREVIEW_DOMAIN}`, 20_000);
 
     expect(answer.headers['cross-origin-resource-policy']).toBe('cross-origin');
+    expect(answer.headers['cross-origin-embedder-policy']).toBe('credentialless');
   }, 30_000);
 });
 
@@ -433,6 +436,7 @@ describe('a preview whose server never answers', () => {
     const answer = await get(`${PROJECT_ID}.${PREVIEW_DOMAIN}`, 40_000);
 
     expect(answer.headers['cross-origin-resource-policy']).toBe('cross-origin');
+    expect(answer.headers['cross-origin-embedder-policy']).toBe('credentialless');
   }, 60_000);
 });
 

@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react';
-import { bundledLanguages, codeToHtml, isSpecialLang, type BundledLanguage, type SpecialLanguage } from 'shiki';
+import { createHighlighter, type BundledLanguage, type BundledTheme, type HighlighterGeneric } from 'shiki';
 import { classNames } from '~/utils/classNames';
 import { createScopedLogger } from '~/utils/logger';
 
@@ -7,11 +7,94 @@ import styles from './CodeBlock.module.scss';
 
 const logger = createScopedLogger('CodeBlock');
 
+/**
+ * Every language this block will ever highlight, loaded once and never added to at runtime.
+ *
+ * The closed list is the point, not a limitation. Shiki's `codeToHtml` fetches a grammar on demand,
+ * and some grammars drag in a crowd: `markdown` alone embeds around forty of them, `ruby` included.
+ * One failed chunk among those forty rejects the whole call, so the block rendered nothing at all —
+ * a code fence that looks like it is still loading, forever. Worse, the browser remembers a module
+ * that failed to fetch, so every later block failed instantly without so much as a retry.
+ *
+ * A fence tagged with anything outside this list is highlighted as plain text. That is a fair trade
+ * for a chat that talks about web projects, and it removes the whole class of failure along with a
+ * few dozen downloads per block.
+ */
+const SUPPORTED_LANGUAGES = [
+  'bash',
+  'css',
+  'html',
+  'javascript',
+  'json',
+  'jsx',
+  'python',
+  'scss',
+  'shell',
+  'tsx',
+  'typescript',
+  'yaml',
+] as const;
+
+const ALIASES: Record<string, string> = {
+  js: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  ts: 'typescript',
+  sh: 'shell',
+  zsh: 'shell',
+  yml: 'yaml',
+  py: 'python',
+};
+
+const THEMES = ['light-plus', 'dark-plus'] as const;
+
+type Highlighter = HighlighterGeneric<BundledLanguage, BundledTheme>;
+
+let highlighterPromise: Promise<Highlighter> | undefined;
+
+/**
+ * Built on first use rather than at module scope, and deliberately.
+ *
+ * The other three highlighters in the app are top level `await`s, which is fine for them: they load
+ * one grammar each. Here a failure would take the whole module down with it, and this module is on
+ * the path every chat message renders through. Failing to a plain block beats failing to no chat.
+ */
+function getHighlighter(): Promise<Highlighter> {
+  if (highlighterPromise) {
+    return highlighterPromise;
+  }
+
+  const pending: Promise<Highlighter> = createHighlighter({
+    langs: [...SUPPORTED_LANGUAGES],
+    themes: [...THEMES],
+  }).catch((error) => {
+    // let the next block try again, instead of caching the failure the way the browser caches a module
+    if (highlighterPromise === pending) {
+      highlighterPromise = undefined;
+    }
+
+    throw error;
+  });
+
+  highlighterPromise = pending;
+
+  return pending;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 interface CodeBlockProps {
   className?: string;
   code: string;
-  language?: BundledLanguage | SpecialLanguage;
-  theme?: 'light-plus' | 'dark-plus';
+  language?: string;
+  theme?: (typeof THEMES)[number];
   disableCopy?: boolean;
 }
 
@@ -35,20 +118,36 @@ export const CodeBlock = memo(
     };
 
     useEffect(() => {
-      let effectiveLanguage = language;
+      let cancelled = false;
 
-      if (language && !isSpecialLang(language) && !(language in bundledLanguages)) {
-        logger.warn(`Unsupported language '${language}', falling back to plaintext`);
-        effectiveLanguage = 'plaintext';
+      // the plain version is what shows if highlighting is slow, unavailable, or unsupported for this fence
+      const plain = `<pre class="shiki"><code>${escapeHtml(code)}</code></pre>`;
+
+      const requested = ALIASES[language] ?? language;
+      const supported = (SUPPORTED_LANGUAGES as readonly string[]).includes(requested);
+
+      if (!supported) {
+        setHTML(plain);
+        return undefined;
       }
 
-      logger.trace(`Language = ${effectiveLanguage}`);
+      getHighlighter()
+        .then((highlighter) => {
+          if (!cancelled) {
+            setHTML(highlighter.codeToHtml(code, { lang: requested, theme }));
+          }
+        })
+        .catch((error) => {
+          logger.warn(`Could not highlight '${requested}', showing it as plain text`, error);
 
-      const processCode = async () => {
-        setHTML(await codeToHtml(code, { lang: effectiveLanguage, theme }));
+          if (!cancelled) {
+            setHTML(plain);
+          }
+        });
+
+      return () => {
+        cancelled = true;
       };
-
-      processCode();
     }, [code, language, theme]);
 
     return (

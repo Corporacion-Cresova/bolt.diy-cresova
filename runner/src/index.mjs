@@ -71,16 +71,46 @@ function projectIdFromHost(host = '') {
 /**
  * Lets the builder put a preview inside its iframe.
  *
- * `app/entry.server.tsx` serves the builder with `Cross-Origin-Embedder-Policy: require-corp`,
- * which WebContainer needs. Under that policy every cross-origin subresource the page loads —
- * an iframe included — has to opt in with this header, and a preview served without it is blocked
- * before a single byte is rendered. The browser reports that as "refused to connect", which reads
- * like the server is down when in fact it answered perfectly.
+ * A cross-origin iframe inside a page that sets `Cross-Origin-Embedder-Policy` has to satisfy
+ * **two** conditions, and knowing only the first one cost a whole round of debugging:
+ *
+ * 1. `Cross-Origin-Resource-Policy: cross-origin` — under the embedder's policy the resource's
+ *    CORP defaults to `same-origin`, so a reply without this is blocked as a subresource.
+ * 2. `Cross-Origin-Embedder-Policy` of its own — a nested document must carry a policy compatible
+ *    with its embedder's. A frame that only satisfies (1) is still refused.
+ *
+ * Missing either one is blocked before a single byte renders, and the browser reports it as
+ * "refused to connect": a preview that answered `200` reads exactly like a server that is down.
+ *
+ * `credentialless` and not `require-corp`, deliberately. Under `require-corp` every cross-origin
+ * image inside the generated site would need to send CORP itself, and the photo hosts these sites
+ * use do not: `images.pexels.com` and `picsum.photos` send none (`fonts.gstatic.com` does). That
+ * would trade a blocked frame for a site full of broken images. `credentialless` fetches those
+ * cross-origin resources without credentials instead, which is all a public photo ever needed.
  *
  * Opting in is the runner saying its own previews may be embedded. It carries no credentials and
  * exposes nothing that the preview URL did not already expose to anyone who has it.
  */
-const EMBEDDABLE = { 'cross-origin-resource-policy': 'cross-origin' };
+const EMBEDDABLE = {
+  'cross-origin-resource-policy': 'cross-origin',
+  'cross-origin-embedder-policy': 'credentialless',
+
+  /*
+   * So the builder can measure the two headers above instead of assuming them.
+   *
+   * Every previous round of this bug was lost to reasoning about headers rather than reading the
+   * ones that actually arrived — and they pass through Traefik and a wildcard certificate on the
+   * way, so what this service sends and what the browser receives are not the same claim. The
+   * Diagnóstico button now fetches a preview and prints what it got; without these two it could
+   * not read a single one of them.
+   *
+   * Nothing is being opened up that was not open already: a preview URL serves public pages to
+   * anyone who has it, with no credentials involved, and the dev server behind it already sends
+   * `access-control-allow-origin: *` of its own accord.
+   */
+  'access-control-allow-origin': '*',
+  'access-control-expose-headers': 'cross-origin-embedder-policy, cross-origin-resource-policy',
+};
 
 /**
  * How long a preview request waits on the project's own server before giving up on it.

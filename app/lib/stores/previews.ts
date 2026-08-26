@@ -272,10 +272,18 @@ export class PreviewsStore {
         preview.ready = false;
         this.previews.set([...previews]);
 
-        requestAnimationFrame(() => {
+        /*
+         * A macrotask, not `requestAnimationFrame`. The point of the round trip is to let the
+         * iframe unmount before it is mounted again, which any turn of the event loop gives us —
+         * but `requestAnimationFrame` never fires in a hidden tab, so a refresh that started while
+         * the user was away left `ready` false for good. Everything downstream filters on `ready`,
+         * so coming back to the tab showed no preview at all: the refresh, not the tab, was what
+         * lost it.
+         */
+        setTimeout(() => {
           preview.ready = true;
           this.previews.set([...previews]);
-        });
+        }, 0);
       }
 
       this.#refreshTimeouts.delete(previewId);
