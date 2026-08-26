@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 212 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
+**Última actualización:** build 213 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
 
 ---
 
@@ -13,12 +13,30 @@ Lo primero que hay que saber al abrir una sesión nueva.
 
 ### Lo que espera acción del usuario
 
-**1. Redesplegar `bolt-diy` en EasyPanel.** La insignia del header debe pasar a **build 212**. Esta
-tanda **no toca el runner**, así que ese servicio no hace falta redesplegarlo.
+**1. Redesplegar `bolt-diy` en EasyPanel.** La insignia del header debe pasar a **build 213**. Esta
+tanda **no toca el runner**.
 
-**2. Comprobar que la tarjeta del chat deja de girar cuando el sitio ya está en pie.** Es lo único
-que arregla el build 212, y es un arreglo de un fallo que metí yo en el 211. Ver §5, «una acción
-`start` que corre es un servidor sano».
+**2. Si el bucle vuelve, pulsar Diagnóstico MIENTRAS ocurre.** El informe lleva ahora una sección
+`TURNOS AUTOMÁTICOS` que dice quién pidió cada turno. Es lo que faltó la primera vez y la única
+forma de arreglarlo de raíz. Ver §5, «nadie contaba el total».
+
+### Lo cerrado en el build 213
+
+| Qué | Verificado |
+|---|---|
+| Un tope duro de **8 turnos automáticos por petición**, que no depende de saber qué camino está en bucle | sí, 7 pruebas |
+| El informe dice quién pidió cada turno automático (`artifact-recovery`, `phase 3/5`…) | sí, pruebas |
+| Al agotarse, un aviso en español explica por qué se paró; el usuario puede seguir escribiendo | sí, pruebas |
+
+**Lo que sigue abierto y no hay que olvidar:** la causa del bucle **no está identificada**. Se
+descartaron leyendo el código la recuperación de artefacto (acotada a 1, y su contador sólo se
+reinicia en `sendMessage`), la continuación del servidor (`MAX_RESPONSE_SEGMENTS`, y el turno del
+usuario traía `completion: 1869`, sin corte por longitud) y el `createSampler` del 211 (dos
+instancias en toda la página, sin fuga de listeners). El cortafuegos acota el coste; no cierra el
+fallo.
+
+Y con él sigue abierta **la duplicación del texto al streamear** (`TheThe files wereThe files
+were…`), que no está diagnosticada y no se toca a ciegas: por ese bucle pasa toda la generación.
 
 ### Lo cerrado en el build 212
 
@@ -908,6 +926,40 @@ La solución no fue observar el disco en el servidor — eso obligaría a mandar
 que toca `npm install` para no decir nada útil — sino que el navegador reporte sus propias
 escrituras: es él quien las hace. `remote-container.ts` emite el evento después de que la escritura
 tiene éxito, nunca antes.
+
+### Nadie contaba el total, y por ahí se coló un bucle
+
+Cada mecanismo que se pide un turno a sí mismo está acotado: la recuperación de artefacto permite
+**uno** (`MAX_RECOVERY_ATTEMPTS`), el plan para en `MAX_PHASES = 6`. Y aun así el usuario vio la
+misma respuesta veinte veces seguidas, cada vuelta una llamada pagada a OpenRouter.
+
+Lo que empezó todo fue un error de verdad, y de los conocidos:
+
+```
+Failed to resolve import "./components/AINetwork" from "src/App.tsx". Does the file exist?
+```
+
+El modelo escribió `App.tsx` importando un componente que nunca llegó a crear — la firma del corte
+por límite de salida. El usuario pulsó «Fix this terminal error», y a partir de ahí el builder se
+quedó dando vueltas.
+
+**El agujero no era ninguno de los contadores: era que ninguno contaba el total.** Un presupuesto
+por mecanismo es justo lo que un bucle derrota, porque cada vuelta parece un turno nuevo y correcto.
+
+Por eso `auto-turn-budget.ts` cuenta **turnos automáticos por petición**, sin mirar quién los pide.
+Ocho: seis fases más una recuperación más uno de holgura. Y guarda el motivo de cada uno, que es lo
+que de verdad faltó — veinte vueltas idénticas y ninguna forma de saber quién las pedía.
+
+Dos decisiones que importan:
+
+- **Nunca bloquea a la persona.** Lo que se agota es la licencia del builder para hablar consigo
+  mismo. El usuario puede seguir escribiendo, y justo cuando salta el tope es cuando hace falta.
+- **Se reinicia sólo en `sendMessage`**, el único sitio donde hay una intención humana nueva. El
+  `append()` de la recuperación no pasa por ahí, y ése es exactamente el motivo de que el
+  presupuesto no se recargue solo.
+
+**La causa del bucle sigue sin identificar**, y el arreglo está diseñado para no necesitarla. Si se
+hubiera acotado sólo el mecanismo que ya se entendía, no habría parado éste.
 
 ### Una acción `start` que corre es un servidor **sano**, no uno arrancando
 

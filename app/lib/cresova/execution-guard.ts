@@ -79,7 +79,12 @@ export interface ExecutionGuardContext {
   messages: Message[];
 
   /** Asks the model for the next phase of its own plan. */
-  requestNextPhase: (prompt: string) => void;
+  /**
+   * `label` names the phase for the automatic turn budget's record. The budget exists because a loop
+   * ran twenty times with no way to tell who was asking; a reason that says «next-phase» and nothing
+   * else would leave that gap half open.
+   */
+  requestNextPhase: (prompt: string, label: string) => void;
 }
 
 export type ExecutionGuardOutcome =
@@ -119,7 +124,7 @@ function continueWithoutPreview(
   }
 
   logger.info(`Advancing to phase ${pending.number}/${pending.total} without a live preview`);
-  context.requestNextPhase(phasePrompt(pending));
+  context.requestNextPhase(phasePrompt(pending), `phase ${pending.number}/${pending.total}`);
 
   return 'next-phase';
 }
@@ -304,7 +309,7 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
      */
     if (pending) {
       logger.info(`Advancing to phase ${pending.number}/${pending.total}`);
-      context.requestNextPhase(phasePrompt(pending));
+      context.requestNextPhase(phasePrompt(pending), `phase ${pending.number}/${pending.total}`);
 
       return 'next-phase';
     }
@@ -355,7 +360,7 @@ export async function runExecutionGuard(context: ExecutionGuardContext): Promise
 
   if (pending) {
     logger.info(`Advancing to phase ${pending.number}/${pending.total}`);
-    context.requestNextPhase(phasePrompt(pending));
+    context.requestNextPhase(phasePrompt(pending), `phase ${pending.number}/${pending.total}`);
 
     return 'next-phase';
   }

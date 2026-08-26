@@ -29,6 +29,7 @@ import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
 import { ARTIFACT_RECOVERY_PROMPT, AUTO_START_ANNOTATION, runExecutionGuard } from '~/lib/cresova/execution-guard';
+import { budgetExhaustedAlert, claimAutoTurn, resetAutoTurns } from '~/lib/cresova/auto-turn-budget';
 
 const logger = createScopedLogger('Chat');
 
@@ -273,6 +274,27 @@ export const ChatImpl = memo(
 
       guardedMessageIdRef.current = lastMessage.id;
 
+      /*
+       * The one gate every automatic turn goes through.
+       *
+       * Each mechanism already bounds itself, and a loop still got through: twenty identical turns,
+       * every one of them a paid call. Whatever was asking, nothing was counting the total — so this
+       * counts the total, and stops without needing to know which path went wrong.
+       *
+       * Only what the builder asks itself is cut off. The user can always keep typing, and the alert
+       * says why it went quiet, because the moment this trips is the moment a person is needed.
+       */
+      const askForAutoTurn = (reason: string): boolean => {
+        if (claimAutoTurn(reason)) {
+          return true;
+        }
+
+        logger.warn(`Automatic turn budget exhausted, refusing to request "${reason}"`);
+        workbenchStore.actionAlert.set({ type: 'error', ...budgetExhaustedAlert() });
+
+        return false;
+      };
+
       const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
 
       runExecutionGuard({
@@ -280,6 +302,10 @@ export const ChatImpl = memo(
         userMessage: lastUserMessage ? extractMessageText(lastUserMessage) : '',
         recoveryAttempt: recoveryAttemptsRef.current,
         requestArtifactRecovery: () => {
+          if (!askForAutoTurn('artifact-recovery')) {
+            return;
+          }
+
           recoveryAttemptsRef.current += 1;
           append({
             role: 'user',
@@ -291,7 +317,11 @@ export const ChatImpl = memo(
           setMessages([...messagesRef.current, message]);
         },
         messages,
-        requestNextPhase: (prompt) => {
+        requestNextPhase: (prompt, label) => {
+          if (!askForAutoTurn(label)) {
+            return;
+          }
+
           /*
            * Sent as a user turn because that is what asks the model for more work, and marked
            * hidden so it does not displace the real request when the design kit and the photo
@@ -507,8 +537,9 @@ export const ChatImpl = memo(
 
       runAnimation();
 
-      // a new user request gets a fresh recovery budget
+      // a new user request gets a fresh recovery budget, and a fresh licence to talk to itself
       recoveryAttemptsRef.current = 0;
+      resetAutoTurns();
 
       if (!chatStarted) {
         setFakeLoading(true);
