@@ -74,7 +74,13 @@ export const Artifact = memo(({ artifactId }: ArtifactProps) => {
    */
   const progress = describeBuildProgress({
     actions,
-    streaming,
+    /*
+     * This card speaks for its own turn, not for the site. Both halves are needed: `closed` never
+     * arrives when a response is cut off mid-artifact, and `streaming` on its own is global, so an
+     * old card would start claiming to work again every time a new turn began — which is how two
+     * cards ended up announcing a build at once over a site that was already serving.
+     */
+    turnOpen: !artifact.closed && streaming,
     hasPreview: previews.some((preview) => preview.ready),
   });
 
@@ -84,9 +90,14 @@ export const Artifact = memo(({ artifactId }: ArtifactProps) => {
     ? allActionFinished
       ? 'Proyecto restaurado'
       : 'Restaurando el proyecto…'
-    : progress.stage === 'ready' || (artifact?.closed && !progress.busy)
-      ? 'Sitio construido'
-      : 'Construyendo tu sitio…';
+    : progress.busy
+      ? 'Construyendo tu sitio…'
+      : progress.stage === 'ready'
+        ? 'Sitio construido'
+        : // the row below carries what went wrong; the title only has to stop promising movement
+          ['failed', 'stalled', 'truncated'].includes(progress.stage)
+          ? 'Construcción incompleta'
+          : 'Construcción terminada';
 
   return (
     <>

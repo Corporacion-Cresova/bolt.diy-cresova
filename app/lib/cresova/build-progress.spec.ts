@@ -14,7 +14,11 @@ function start(status: ActionState['status'] = 'running'): ActionState {
   return { type: 'start', content: 'npm run dev', status, abort() {}, executed: true } as unknown as ActionState;
 }
 
-const quiet = { streaming: false, hasPreview: false };
+/** a turn still being written, with nothing serving yet */
+const building = { turnOpen: true, hasPreview: false };
+
+/** a turn that is over */
+const done = { turnOpen: false, hasPreview: false };
 
 describe('describeBuildProgress', () => {
   it('counts the files that are done, not the actions that were emitted', () => {
@@ -23,7 +27,7 @@ describe('describeBuildProgress', () => {
      * Counting raw actions would tell the user "8 de 12" for a build of four files.
      */
     const progress = describeBuildProgress({
-      ...quiet,
+      ...building,
       actions: [file('src/App.tsx'), file('src/main.tsx'), file('src/App.tsx', 'running')],
     });
 
@@ -34,13 +38,45 @@ describe('describeBuildProgress', () => {
   });
 
   it('names the install and the server start rather than the files behind them', () => {
-    const installing = describeBuildProgress({ ...quiet, actions: [file('package.json'), shell()] });
+    const installing = describeBuildProgress({ ...building, actions: [file('package.json'), shell()] });
     expect(installing.stage).toBe('installing');
     expect(installing.message).toContain('dependencias');
 
-    const starting = describeBuildProgress({ ...quiet, actions: [file('package.json'), shell('complete'), start()] });
+    const starting = describeBuildProgress({
+      ...building,
+      actions: [file('package.json'), shell('complete'), start()],
+    });
     expect(starting.stage).toBe('starting');
     expect(starting.message).toContain('servidor');
+  });
+
+  it('stops saying "starting the server" once the server is actually serving', () => {
+    /*
+     * The bug this whole file exists to prevent coming back.
+     *
+     * `action-runner.ts` starts the dev server without blocking and only marks the action complete
+     * when its promise resolves — which is when the process *exits*. A server that works never
+     * exits, so the action sits at `running` forever. Reading that as "still starting" meant the
+     * chat announced "Arrancando el servidor" for as long as the project stayed healthy, with a
+     * live preview sitting right next to it.
+     */
+    const progress = describeBuildProgress({
+      turnOpen: false,
+      hasPreview: true,
+      actions: [file('src/App.tsx'), file('src/main.tsx'), start('running')],
+    });
+
+    expect(progress.stage).toBe('ready');
+    expect(progress.busy).toBe(false);
+    expect(progress.message).toContain('Sitio listo');
+  });
+
+  it('still says "starting" while the turn is open and no preview has arrived', () => {
+    // the case where that message was right, and must survive the fix above
+    const progress = describeBuildProgress({ ...building, actions: [file('package.json'), start('running')] });
+
+    expect(progress.stage).toBe('starting');
+    expect(progress.busy).toBe(true);
   });
 
   it('reports a failed file ahead of whatever ran after it', () => {
@@ -50,7 +86,7 @@ describe('describeBuildProgress', () => {
      * only thing the user can act on.
      */
     const progress = describeBuildProgress({
-      ...quiet,
+      ...building,
       actions: [file('src/App.tsx', 'failed'), shell()],
     });
 
@@ -61,7 +97,7 @@ describe('describeBuildProgress', () => {
 
   it('prefers the runner giving up over any stage still nominally in motion', () => {
     const progress = describeBuildProgress({
-      ...quiet,
+      ...building,
       actions: [file('package.json'), start()],
       serverTimeout: 'el proceso murió',
     });
@@ -70,9 +106,37 @@ describe('describeBuildProgress', () => {
     expect(progress.busy).toBe(false);
   });
 
+  it('calls a turn that ended mid-file incomplete, and stops spinning on it', () => {
+    /*
+     * A response cut off by the output limit leaves its last file action at `pending` for good:
+     * the closing tag never arrives, so nothing ever runs it. Left in the "writing" branch it
+     * pinned the card at "3 de 4" for the rest of the session.
+     */
+    const progress = describeBuildProgress({
+      ...done,
+      actions: [file('a.tsx'), file('b.tsx'), file('c.tsx'), file('d.tsx', 'pending')],
+    });
+
+    expect(progress.stage).toBe('truncated');
+    expect(progress.busy).toBe(false);
+    expect(progress.message).toContain('3 de 4');
+  });
+
+  it('lets a live preview outrank an unfinished file from the same turn', () => {
+    // the site is up; whatever the turn left half-written, it is not still being written
+    const progress = describeBuildProgress({
+      turnOpen: false,
+      hasPreview: true,
+      actions: [file('a.tsx'), file('b.tsx', 'pending')],
+    });
+
+    expect(progress.stage).toBe('ready');
+    expect(progress.busy).toBe(false);
+  });
+
   it('is ready once a preview exists and nothing is still running', () => {
     const progress = describeBuildProgress({
-      streaming: false,
+      turnOpen: false,
       hasPreview: true,
       actions: [file('src/App.tsx'), file('src/main.tsx'), start('complete')],
     });
@@ -83,7 +147,7 @@ describe('describeBuildProgress', () => {
   });
 
   it('says something while the model is still writing and no action exists yet', () => {
-    const progress = describeBuildProgress({ streaming: true, hasPreview: false, actions: [] });
+    const progress = describeBuildProgress({ turnOpen: true, hasPreview: false, actions: [] });
 
     expect(progress.stage).toBe('thinking');
     expect(progress.busy).toBe(true);
@@ -96,7 +160,7 @@ describe('describeBuildProgress', () => {
      * were still working.
      */
     const progress = describeBuildProgress({
-      ...quiet,
+      ...done,
       actions: [file('src/App.tsx'), file('src/main.tsx'), start('complete')],
     });
 
@@ -106,7 +170,7 @@ describe('describeBuildProgress', () => {
   });
 
   it('has nothing to say before a build starts', () => {
-    const progress = describeBuildProgress({ ...quiet, actions: [] });
+    const progress = describeBuildProgress({ ...done, actions: [] });
 
     expect(progress.stage).toBe('idle');
     expect(progress.busy).toBe(false);

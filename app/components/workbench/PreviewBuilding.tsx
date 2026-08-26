@@ -78,7 +78,8 @@ export const PreviewBuilding = memo(() => {
 
   const progress = describeBuildProgress({
     actions,
-    streaming,
+    // this panel covers the whole project rather than one card, so the stream is the only turn there is
+    turnOpen: streaming,
     hasPreview: previews.some((preview) => preview.ready),
     serverTimeout,
   });
@@ -95,7 +96,7 @@ export const PreviewBuilding = memo(() => {
     );
   }
 
-  const trouble = progress.stage === 'failed' || progress.stage === 'stalled';
+  const trouble = ['failed', 'stalled', 'truncated'].includes(progress.stage);
 
   // nothing is moving once the turn is over, so neither should the skeleton
   const shimmer = animate && progress.busy ? 'cresova-shimmer' : '';
@@ -166,7 +167,7 @@ export const PreviewBuilding = memo(() => {
          * server or its port. A build that ended without a preview is therefore still a site that
          * can go online, and this is the moment that is worth knowing.
          */}
-        {(progress.stage === 'written' || progress.stage === 'stalled') && (
+        {['written', 'stalled', 'truncated'].includes(progress.stage) && (
           <span className="text-bolt-elements-textSecondary text-xs max-w-[420px]">
             Los archivos están en el servidor: el sitio se puede publicar aunque la vista previa no
             haya arrancado.
