@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 211 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
+**Última actualización:** build 212 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
 
 ---
 
@@ -13,21 +13,35 @@ Lo primero que hay que saber al abrir una sesión nueva.
 
 ### Lo que espera acción del usuario
 
-**1. Redesplegar `bolt-diy` y `runner` en EasyPanel.** Nada de esto corre en producción hasta ese
-redespliegue. La insignia del header debe pasar a **build 211**; si sigue en un número menor, el
-despliegue no llegó. Ese contador es la única forma fiable de saberlo y estuvo roto hasta el
-build 199 (ver §5). **Los dos servicios**, porque el arreglo de la vista previa está repartido entre
-los dos: uno solo no basta.
+**1. Redesplegar `bolt-diy` en EasyPanel.** La insignia del header debe pasar a **build 212**. Esta
+tanda **no toca el runner**, así que ese servicio no hace falta redesplegarlo.
 
-**2. Comprobar que la vista previa se ve dentro del marco.** La causa está encontrada y es medible
-(§0 quinquies): faltaba la mitad de la cabecera. Si vuelve a fallar, el botón Diagnóstico trae ahora
-una sección nueva, `VISTA PREVIA, VISTA DESDE EL NAVEGADOR`, que dice literalmente qué contestó y si
-se puede incrustar — no hay que volver a deducirlo.
+**2. Comprobar que la tarjeta del chat deja de girar cuando el sitio ya está en pie.** Es lo único
+que arregla el build 212, y es un arreglo de un fallo que metí yo en el 211. Ver §5, «una acción
+`start` que corre es un servidor sano».
 
-**3. Comprobar que el cuelgue de pestaña sigue sin aparecer.** Resuelto en el build 209 (§0 ter):
-era un escaneo cuadrático en `waitTillOscCode`.
+### Lo cerrado en el build 212
 
-### Lo cerrado en el build 211
+| Qué | Verificado |
+|---|---|
+| «Arrancando el servidor» para siempre: una acción `start` viva vuelve a contar como servidor sano, no como paso en curso | sí, 12 pruebas — y comprobado que **4 de ellas fallan** contra el código del 211 |
+| «Escribiendo archivos · 3 de 4» congelado: una vista previa viva gana siempre a una acción que se quedó a medias | sí, mismas pruebas |
+| Dos tarjetas anunciando la misma construcción: cada una habla de **su** turno, no del global | sí, pruebas; no probado en un navegador |
+| Fase `truncated`: un turno cortado por el límite de salida se dice en una línea en vez de girar | sí, pruebas |
+
+### Lo cerrado en el build 211 — y confirmado en producción
+
+**La vista previa se incrusta.** El diagnóstico del 211 lo dijo con todas las letras, que es
+exactamente para lo que se añadió esa sección:
+
+```
+cross-origin-embedder-policy: credentialless
+cross-origin-resource-policy: cross-origin
+el builder exige política de incrustación: no
+se puede incrustar: sí
+```
+
+Tres builds de síntoma, cerrados. Ver §0 quinquies.
 
 | Qué | Verificado |
 |---|---|
@@ -526,6 +540,11 @@ optimizar esto para tener una base más sólida"*.
 **Flujo de trabajo:** *"siempre que hagas cambios fusiona directo con el main"*. Es decir: rama →
 commit → PR → merge a `main`. No dejar trabajo colgando en la rama.
 
+**Y el merge no se pregunta.** El usuario lo repitió, ya con fastidio: *"claro, siempre haz merge,
+¿qué me andas preguntando?"*. Preguntar antes de cada fusión es fricción que él ya autorizó a saltarse
+de una vez y para siempre. Terminar una tanda significa: rama, commit, PR, merge, y **avisar de qué
+hay que redesplegar** — que es lo único que de verdad necesita de él al final.
+
 **Restricciones técnicas:**
 
 - No reescribir bolt.diy. Reutilizar la arquitectura existente.
@@ -889,6 +908,59 @@ La solución no fue observar el disco en el servidor — eso obligaría a mandar
 que toca `npm install` para no decir nada útil — sino que el navegador reporte sus propias
 escrituras: es él quien las hace. `remote-container.ts` emite el evento después de que la escritura
 tiene éxito, nunca antes.
+
+### Una acción `start` que corre es un servidor **sano**, no uno arrancando
+
+La trampa más barata de caer y de las más caras de leer, porque el síntoma dice justo lo contrario
+de lo que pasa.
+
+`action-runner.ts` arranca el servidor de desarrollo **sin bloquear**, a propósito:
+
+```js
+this.#runStartAction(action).then(() => this.#updateAction(actionId, { status: 'complete' }))
+```
+
+Esa promesa se resuelve **cuando el proceso muere**. Un servidor que sirve no muere, así que la
+acción se queda en `status: 'running'` durante toda la vida del proyecto. Leerlo como «todavía está
+arrancando» es leerlo al revés: cuanto más sano está el servidor, más tiempo dura el mensaje.
+
+El código lo sabía y lo decía en `Artifact.tsx`:
+
+```js
+!(action.type === 'start' && action.status === 'running')
+```
+
+Esa línea se perdió al reescribir la tarjeta del chat en el build 211, y el resultado fue el chat
+anunciando «Arrancando el servidor» con la vista previa ya viva al lado, y el usuario preguntando
+—con razón— qué se había roto en la generación. No se había roto nada: el diagnóstico de esa misma
+sesión traía `servidor anunciado: sí`, `contestó en [::1]:5174` y `vistas previas: 1 (lista: sí)`.
+
+Ahora vive en `build-progress.ts` con nombre propio, `isSettledStart`, y una prueba que falla si
+alguien la vuelve a quitar (comprobado: contra el código del 211 fallan 4 de las 12).
+
+**Y la lección de fondo, que es más grande que esta regla:** un hecho terminal —hay vista previa—
+tiene que ganar siempre a una señal en vuelo. La primera versión resolvía las dos cosas en una sola
+cadena de condiciones, así que cualquier acción que se quedara a medias tapaba el hecho de que el
+sitio ya estaba en pie. Ahora son dos ramas: si el turno sigue abierto se nombra lo que está en
+marcha; si terminó, se reporta el desenlace y **nunca** un spinner.
+
+### Una tarjeta habla de su turno, no del sitio
+
+Corolario del anterior, y el motivo de que se vieran **dos** tarjetas construyendo a la vez.
+
+`Artifact.tsx` se dibuja una vez por artefacto y lee `artifact.runner.actions`, que son las acciones
+de **ese turno**. Pero se le pasaba el `streaming` global, así que un artefacto cerrado del turno 1
+se creía en marcha en cuanto el turno 3 empezaba a escribir.
+
+El turno abierto es `!artifact.closed && streaming`, y hacen falta las dos mitades: `closed` no llega
+nunca si la respuesta se corta a mitad de artefacto —`onArtifactClose` no se emite—, así que el fin
+del streaming tiene que cerrar el turno igualmente. Con una sola de las dos, una respuesta truncada
+deja la tarjeta girando para siempre.
+
+De ahí sale también la fase `truncated`: un turno que acaba con acciones de archivo sin cerrar es la
+firma del corte por límite de salida, la causa raíz de §5 más abajo. Antes era un spinner en una fila
+dentro de una lista plegada; ahora se dice en una línea, sin alarma —el turno siguiente suele
+reescribir el archivo— pero sin fingir que se sigue trabajando.
 
 ### Un puerto abierto no es una vista previa que funcione
 
