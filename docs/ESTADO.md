@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 208 · rama `claude/preview-tab-hang-issues-dk3u86`.
+**Última actualización:** build 209 · rama `claude/preview-tab-hang-issues-dk3u86`.
 
 ---
 
@@ -14,24 +14,28 @@ Lo primero que hay que saber al abrir una sesión nueva.
 ### Lo que espera acción del usuario
 
 **1. Redesplegar `bolt-diy` y `runner` en EasyPanel.** Nada de esto corre en producción hasta ese
-redespliegue. La insignia del header debe pasar a **build 208**; si sigue en un número menor, el
+redespliegue. La insignia del header debe pasar a **build 209**; si sigue en un número menor, el
 despliegue no llegó. Ese contador es la única forma fiable de saberlo y estuvo roto hasta el
 build 199 (ver §5).
 
-**2. Volver a pulsar «Diagnóstico» con un proyecto cuya vista previa no aparezca.** El informe dice
-ahora **por qué** falló el sondeo —conexión rechazada frente a aceptada y sin contestar, que son
-fallos opuestos—, en qué direcciones está escuchando el proyecto, y las últimas líneas que imprimió
-el servidor. Ver §0 bis.
+**2. Comprobar que el cuelgue de pestaña desapareció.** La causa está encontrada y arreglada (§0
+ter): era un escaneo cuadrático en `waitTillOscCode`, responsable de **204 de los 242 segundos** de
+hilo bloqueado que midió la última lectura. Si vuelve a colgarse, Diagnóstico ahora nombra la
+función.
 
-**3. Y pulsarlo también tras un cuelgue de pestaña.** La primera lectura ya descartó la hipótesis de
-la avalancha; ahora falta saber **qué función** retiene el hilo, que es lo que añade esta tanda. Ver
-§0 bis.
+### Lo cerrado en el build 209
+
+| Qué | Verificado |
+|---|---|
+| El cuelgue de la pestaña: se quita el escaneo cuadrático duplicado del lector del shell | causa medida en producción; el arreglo es un borrado, no probado aún en un navegador |
+| Un proyecto que compila mal pero sirve deja de ser una página en blanco sin explicación: la alerta lleva el error y el botón «Ask Bolt» | sí, 6 pruebas del detector |
+| El contrato le dice al modelo que `@apply` no funciona con `group`, `peer` ni `dark` | no — hace falta una generación real |
 
 ### Lo cerrado en el build 208
 
 | Qué | Verificado |
 |---|---|
-| El sondeo y el proxy dejan de suponer `127.0.0.1` y usan la dirección que el kernel reporta | sí, pruebas unitarias con un `/proc` de mentira (10 casos) |
+| El sondeo y el proxy dejan de suponer `127.0.0.1` y usan la dirección que el kernel reporta | **sí, confirmado en producción** — el proyecto escuchaba en `[::1]:5173` y la vista previa apareció |
 | El diagnóstico dice **por qué** falló el sondeo, en qué direcciones escucha y qué imprimió el servidor | sí, pruebas del runner |
 | El veredicto del runner corta la espera de la vista previa en vez de dejarla agotar 10 minutos | sí, typecheck; no probado en un navegador |
 | La construcción avanza de fase aunque la vista previa no llegue, si la fase escribió archivos | no probado en ejecución |
@@ -184,7 +188,7 @@ Dos cambios:
   `MAX_PHASES` sigue siendo 6. Publicar tampoco necesita el servidor de desarrollo, así que un sitio
   terminado por este camino se puede poner online igual.
 
-## 0 ter. El cuelgue al volver a la pestaña — medido, no adivinado
+## 0 ter. El cuelgue de la pestaña — resuelto, y no era la pestaña
 
 Lo que dijo el usuario: *"cuando regreso a la pestaña se cuelga... creo que es porque se descarga
 todo a la vez y cuando son muchos recursos da error, porque si me quedo todo el rato con la pestaña
@@ -222,6 +226,44 @@ y vuelve a analizar el markdown de un mensaje que sólo crece — el coste de un
 **cuadrado** de su longitud, y cada render deja estilo, disposición y pintado pendientes, que es
 justo el trabajo que una pestaña oculta no puede quitarse de encima. Es menos trabajo en cualquier
 caso; **no es una afirmación de haber encontrado la causa.**
+
+### La causa, encontrada: un escaneo cuadrático en el lector del shell (build 209)
+
+La segunda lectura la puso encima de la mesa con nombre y apellidos:
+
+```
+tareas largas en toda la sesión: 1258 (242530 ms bloqueado)
+quién retuvo el hilo, de mayor a menor:
+  204109 ms en 785 veces — ReadableStreamDefaultReader.read.then · Header-BL6qiV7W.js
+   26663 ms en 449 veces — MessagePort.onmessage · components-CE_o6jZX.js
+```
+
+**204 segundos en 785 trozos: 260 ms de media por trozo de salida del shell.** Y el culpable estaba
+en `waitTillOscCode`, el bucle que lee la salida del shell esperando la marca de fin de comando:
+
+```js
+buffer += text;                          // nunca se recorta
+const expoUrlMatch = buffer.match(expoUrlRegex);   // recorre TODO el buffer, en cada trozo
+```
+
+Cuadrático en el tamaño de la salida. `npm install` imprime cientos de kilobytes, así que cada trozo
+costaba más que el anterior, y el regex `(exp:\/\/[^\s]+)` sin coincidencia obliga al motor a
+probar desde cada posición.
+
+**Y no hacía falta nada de ello.** `_watchExpoUrlInBackground` ya vigila su propio *tee* del mismo
+stream buscando exactamente la misma URL —y lo hace con el buffer acotado a 2048 caracteres. Alguien
+copió el bloque y en una de las dos copias se perdió el recorte. El arreglo es **borrar la copia**,
+no acotarla.
+
+Detalles que conviene retener:
+
+- **El cuelgue no era de la pestaña en segundo plano.** Pasa mientras el modelo genera y el proyecto
+  instala, se mire o no. Las ventanas «tras volver» de la lectura anterior daban alto simplemente
+  porque coincidían con una generación en curso; en esta lectura, con las vueltas fuera de una
+  generación, dan **0 tareas largas**. La correlación con «cambiar de pestaña» era casualidad, y sin
+  la atribución por función habríamos seguido persiguiéndola.
+- **`longtask` no habría bastado nunca.** Dice que una tarea fue larga, no de quién. Tres lecturas
+  costó llegar aquí y la que lo resolvió fue la que traía el nombre.
 
 ### La primera lectura real, y qué descartó
 
@@ -273,6 +315,48 @@ dos quedaron descartadas en minutos (§ el árbol de archivos). Medir primero es
 desplegar y preguntar.
 
 ---
+
+## 0 quater. Un proyecto que compila mal pero sirve (build 209)
+
+Con la vista previa ya apareciendo, el sitio seguía sin verse **y** publicar fallaba. Una sola causa
+para las dos cosas, y estaba en el proyecto generado, no en el transporte:
+
+```
+[vite] Pre-transform error: [postcss] src/index.css:76:5:
+       @apply should not be used with the 'group' utility
+```
+
+`group` es un marcador de Tailwind, no una utilidad: no genera CSS, así que `@apply group` revienta.
+El servidor de desarrollo arranca igual, **contesta igual**, y el módulo de CSS falla al
+transformarse — con lo que `main.tsx` no puede importarlo y la página sale en blanco. `npm run build`
+muere con el mismo error, y por eso publicar tampoco funcionaba.
+
+Lo importante no es el fallo concreto sino su forma: **todas las señales de arriba leen sano**. El
+sondeo obtiene respuesta, la vista previa se anuncia, el workbench la muestra viva. El motivo estaba
+escrito en la salida del comando, en un panel que nadie tiene abierto.
+
+Dos cambios:
+
+- `dev-server-errors.ts` lee las quejas del propio servidor y el workbench las convierte en la alerta
+  que **ya existía** y que trae el botón «Ask Bolt»: un clic devuelve el error al modelo. Sólo los
+  prefijos que Vite usa para errores de verdad; cualquier cosa más laxa casa con el ruido normal de
+  un install —avisos de auditoría, deprecaciones, browserslist— y una alerta que grita en falso es
+  peor que ninguna.
+- El contrato de ejecución le dice al modelo que `@apply` no admite `group`, `peer` ni `dark`.
+
+Tres cosas que las pruebas encontraron al escribirlo, y que valen como patrón:
+
+1. **Una línea a medias no se reporta.** La salida llega partida donde caiga; un marcador sin final
+   de línea todavía es media frase, y reportarla dejaba al usuario un mensaje truncado *y* silenciaba
+   el completo por duplicado.
+2. **El solape entre trozos tapaba los errores nuevos.** Buscando la primera coincidencia, un error
+   viejo que sigue en el solape gana siempre. Se busca la **última**, que además sale gratis usando
+   `lastIndexOf` con marcadores literales en vez de regex.
+3. **El deduplicado exige un texto estable.** Tomar «todo lo que sigue al marcador» cambia en cada
+   trozo por culpa del solape, así que el mismo error nunca se parece a sí mismo. Se toma la línea.
+
+Y el detector nace con su propia prueba de que no vuelve a ser cuadrático — que es justo el fallo que
+esta misma tanda acaba de borrar del lector del shell.
 
 ## 1. Qué es esto y a dónde va
 
@@ -377,7 +461,8 @@ Todo lo añadido por Cresova vive en carpetas identificables.
 | `remote-container.ts` | `RunnerConnection` (WebSocket con correlación por id) y `RemoteContainer` (forma de WebContainer). |
 | `remote-shell.ts` | El shell compatible con jsh. Ver §5. |
 | `execution-backend.ts` | Elige el backend y expone `executionBackendStore` para la insignia. |
-| `tab-suspension.ts` | Mide qué le pasa a la pestaña mientras está de fondo: si la congelaron, cuánto bloqueó el hilo al volver, cuánto mandó el runner entretanto. Sale en el botón Diagnóstico. |
+| `tab-suspension.ts` | Mide qué le pasa a la pestaña mientras está de fondo: si la congelaron, cuánto bloqueó el hilo al volver, cuánto mandó el runner entretanto, y **qué función** lo retuvo. Sale en el botón Diagnóstico. |
+| `dev-server-errors.ts` | Lee las quejas del servidor de desarrollo en su propia salida. Un proyecto que compila mal sigue sirviendo, así que ninguna otra señal lo nota. |
 
 ### `runner/`
 
@@ -1127,8 +1212,9 @@ Ninguno impide generar y ver un sitio.
 | Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
-| **La pestaña en segundo plano** | Medido: no hay congelación ni avalancha, pero sí 186 s de hilo bloqueado en once minutos. Falta una lectura con la atribución por función. Ver §0 bis. |
-| **El servidor de desarrollo que abre su puerto y no contesta** | Confirmado en producción. Se quitó la suposición de `127.0.0.1` y el sondeo dice ahora por qué falla; falta la lectura que nombre el fallo restante. Ver §0 bis. |
+| ~~La pestaña en segundo plano~~ | **Resuelto en el build 209.** Ni congelación ni avalancha ni segundo plano: un escaneo cuadrático en `waitTillOscCode`, 204 de 242 s. Ver §0 ter. |
+| ~~El servidor que abre su puerto y no contesta~~ | **Resuelto en el build 208 y confirmado en el 209:** escuchaba en `[::1]:5173` y sondeábamos la IPv4. Ver §0 bis. |
+| **Calidad del CSS generado** | `@apply group` rompió un sitio entero. El contrato ya lo prohíbe y el error se convierte en alerta; falta ver si basta con decírselo al modelo. Ver §0 quater. |
 | Verificar lo que se desplegó sin probar | El reintento del stream (`api.chat.ts`), el salto de reproducción (`workbench.ts`) y el `experimental_throttle` del chat. |
 | Vista Preview por defecto | El usuario lo pidió: *"al final lo que me interesa es la preview, no el código"*, dejando la opción. Es decisión de **producto**, no de rendimiento — se midió y el render del código no es la causa de los cuelgues. Parcialmente cubierto: el panel ya salta a la vista previa cuando aparece una URL nueva. |
 | `bindings.sh` pasa los secretos por la línea de comandos | Cualquiera con una shell en el contenedor los ve con un `ps`, y se filtran a cualquier diagnóstico que liste procesos. Es así en bolt.diy de origen. Se arregla con `.dev.vars`. |
@@ -1168,11 +1254,12 @@ npx vitest run        # 203 pruebas en 23 archivos
 pnpm build            # remix vite build
 ```
 
-Las nuevas de esta tanda: `runner/src/ready-watcher.spec.mjs` cubre que una segunda conexión a un
+Las nuevas de estas tandas: `runner/src/ready-watcher.spec.mjs` cubre que una segunda conexión a un
 proyecto que ya sirve reciba el servidor en el apretón de manos (comprobado que **falla** sin el
-arreglo), `remote-container.spec.ts` cubre el mismo caso desde el lado del navegador, y
-`tab-suspension.spec.ts` cubre el informe de la pestaña con un `document` de mentira — no necesita
-las dependencias de la aplicación, así que se puede correr suelta.
+arreglo); `runner/src/ports.spec.mjs` cubre la lectura de direcciones con un `/proc` de mentira,
+porque el real no puede enseñar aquí lo que hay que cubrir; `remote-container.spec.ts` cubre el
+suscriptor tardío desde el lado del navegador. Y dos que no necesitan las dependencias de la
+aplicación, así que se pueden correr sueltas: `tab-suspension.spec.ts` y `dev-server-errors.spec.ts`.
 
 Las pruebas de integración levantan un **runner real** y hablan con él. Se saltan solas si
 `runner/node_modules/ws` no existe:

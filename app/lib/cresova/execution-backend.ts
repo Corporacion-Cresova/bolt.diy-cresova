@@ -1,6 +1,7 @@
 import { atom } from 'nanostores';
 import { createScopedLogger } from '~/utils/logger';
 import { RemoteContainer, RunnerConnection } from './remote-container';
+import { watchDevServerErrors } from './dev-server-errors';
 
 export type ExecutionBackend = 'starting' | 'webcontainer' | 'runner' | 'runner-lost';
 
@@ -46,6 +47,16 @@ export const projectWasAlreadyBuiltStore = atom(false);
  * Kept as a store, not just a log line, so the wait can end the moment the answer is known.
  */
 export const serverTimeoutStore = atom<string | undefined>(undefined);
+
+/**
+ * What the project's own dev server said was wrong with the project.
+ *
+ * A server that compiles badly still serves, so every signal upstream of the browser reads healthy —
+ * the port answers, the preview is announced, the workbench shows it live — and the user gets a
+ * blank page with the reason in a terminal panel they have no reason to open. The workbench turns
+ * this into the alert that already knows how to hand an error back to the model.
+ */
+export const devServerErrorStore = atom<string | undefined>(undefined);
 
 const PROJECT_ID_KEY = 'cresova.projectId';
 
@@ -230,8 +241,28 @@ export async function connectToRunner(): Promise<RemoteContainer | undefined> {
     }
   });
 
-  // a new project, or a retry of this one, starts without the previous verdict hanging over it
+  /*
+   * Read from the command output rather than from the readiness probe, because the probe cannot see
+   * this: the server answers it perfectly well and is wrong about the project, not about serving.
+   */
+  const devServerErrors = watchDevServerErrors();
+
+  connection.on('output', (event) => {
+    if (event.type !== 'output') {
+      return;
+    }
+
+    const failure = devServerErrors.read(event.data);
+
+    if (failure) {
+      logger.warn(`The project's dev server reported an error: ${failure}`);
+      devServerErrorStore.set(failure);
+    }
+  });
+
+  // a new project, or a retry of this one, starts without the previous verdicts hanging over it
   serverTimeoutStore.set(undefined);
+  devServerErrorStore.set(undefined);
 
   try {
     const opened = await withTimeout(connection.connect(), CONNECT_TIMEOUT_MS, 'The runner did not answer in time');

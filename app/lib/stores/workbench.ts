@@ -3,7 +3,11 @@ import type { EditorDocument, ScrollPosition } from '~/components/editor/codemir
 import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
 import { webcontainer } from '~/lib/webcontainer';
-import { executionBackendStore, projectWasAlreadyBuiltStore } from '~/lib/cresova/execution-backend';
+import {
+  devServerErrorStore,
+  executionBackendStore,
+  projectWasAlreadyBuiltStore,
+} from '~/lib/cresova/execution-backend';
 import type { ITerminal } from '~/types/terminal';
 import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
@@ -63,6 +67,28 @@ export class WorkbenchStore {
   artifactIdList: string[] = [];
   #globalExecutionQueue = Promise.resolve();
   constructor() {
+    /*
+     * A dev server that compiles badly still serves, so nothing else here ever notices: the preview
+     * is live, the port answers, and the page is blank. The error only exists in the terminal
+     * output, and this is the alert that already knows how to hand one back to the model.
+     *
+     * Bridged here because this store is the only side that may know both: `execution-backend` is
+     * imported by this file, so it cannot reach back for the alert without a cycle.
+     */
+    devServerErrorStore.listen((failure) => {
+      if (!failure) {
+        return;
+      }
+
+      this.actionAlert.set({
+        type: 'error',
+        title: 'El servidor del proyecto no pudo compilar',
+        description: failure.split('\n')[0],
+        content: failure,
+        source: 'terminal',
+      });
+    });
+
     if (import.meta.hot) {
       import.meta.hot.data.artifacts = this.artifacts;
       import.meta.hot.data.unsavedFiles = this.unsavedFiles;

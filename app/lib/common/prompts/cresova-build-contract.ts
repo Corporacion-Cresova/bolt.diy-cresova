@@ -24,6 +24,14 @@ export const CRESOVA_BUILD_CONTRACT = `
   - Never tell the user to run commands, install packages or open the preview themselves.
   - For a follow-up change, modify only the files that need to change. Do not recreate the project.
 
+  CSS THAT COMPILES:
+  - \`group\`, \`peer\` and \`dark\` are markers, not utilities. They generate no CSS, so \`@apply\`
+    fails on them and the build stops: "@apply should not be used with the 'group' utility". Write
+    them in the element's class attribute, never inside a stylesheet rule.
+  - Everything you put in \`@apply\` must be a utility that produces declarations. If you are not
+    sure a class is one, put it on the element instead. A stylesheet that does not compile serves a
+    blank page from a dev server that otherwise looks perfectly healthy, and stops the build too.
+
   WHEN THE REQUEST IS TOO BIG FOR ONE RESPONSE:
   A response has a hard output limit. A request with many distinct sections will not fit, and a
   truncated response leaves a broken project. When that is the case, open your answer with a plan
