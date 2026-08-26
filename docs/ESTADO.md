@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 213 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
+**Última actualización:** build 214 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
 
 ---
 
@@ -13,12 +13,22 @@ Lo primero que hay que saber al abrir una sesión nueva.
 
 ### Lo que espera acción del usuario
 
-**1. Redesplegar `bolt-diy` en EasyPanel.** La insignia del header debe pasar a **build 213**. Esta
-tanda **no toca el runner**.
+**1. Redesplegar `bolt-diy` en EasyPanel.** La insignia debe pasar a **build 214**. Esta tanda **no
+toca el runner**.
 
-**2. Si el bucle vuelve, pulsar Diagnóstico MIENTRAS ocurre.** El informe lleva ahora una sección
-`TURNOS AUTOMÁTICOS` que dice quién pidió cada turno. Es lo que faltó la primera vez y la única
-forma de arreglarlo de raíz. Ver §5, «nadie contaba el total».
+**2. Comprobar en Diagnóstico que pone `tokens de salida: 64000`.** Si dice «sin declarar», el campo
+nuevo no está llegando y el arreglo es inerte.
+
+**3. Y luego la medición que decide la tanda siguiente:** generar un sitio y **mirar si sigue
+viéndose plano**. Con ocho veces más sitio para escribir, puede que el refinamiento que antes caía
+por el borde ahora quepa. Si sigue plano, el siguiente sospechoso es el modelo (§7), no el prompt.
+
+### Lo cerrado en el build 214
+
+| Qué | Verificado |
+|---|---|
+| Los cuatro modelos declaran su salida real: **8.192 → 64.000** | typecheck; **la medición de verdad es en ejecución** |
+| El tope efectivo sale en el informe, para que no vuelva a ser invisible | no probado en un navegador |
 
 ### Lo cerrado en el build 213
 
@@ -1408,12 +1418,30 @@ proyecto incompleto. Ahora el guardián revisa las acciones fallidas antes que n
 rutas afectadas y no avanza de fase. La lógica de qué decir vive aparte en `action-failures.ts`,
 sin ninguna dependencia de `workbenchStore`, precisamente para poder probarla sin arrancar el runner.
 
-### La causa raíz de casi todos los fallos de generación
+### La causa raíz de casi todos los fallos de generación — y el techo nos lo poníamos nosotros
 
-El modelo tiene que escribir un sitio web entero con **8192 tokens de salida**. Eso fuerza
-continuaciones, que causaban archivos truncados, artefactos duplicados y salida perdida. Cada
-arreglo endureció la maquinaria; lo que quita la presión de verdad es el Cresova Web Starter
-(pendiente) y la ejecución en servidor.
+El modelo tenía que escribir un sitio web entero con **8192 tokens de salida**. Eso forzaba
+continuaciones, que causaban archivos truncados, artefactos duplicados y salida perdida.
+
+El diagnóstico era correcto. **El origen estaba mal atribuido**, y durante muchas tandas.
+
+Ese 8192 no era una limitación de los modelos: era `PROVIDER_COMPLETION_LIMITS.OpenRouter` en
+`app/lib/.server/llm/constants.ts`, una constante heredada de bolt.diy de cuando OpenRouter servía
+sobre todo modelos con ese tope. Consultada la API de OpenRouter, los cuatro modelos de la lista
+curada admiten **384.000** (los dos DeepSeek V4), **235.929** (Qwen3 Coder Next) y **65.536**
+(Qwen3.6 Plus) tokens de salida. Entre 8 y 47 veces más de lo que les dejábamos.
+
+La resolución de `stream-text.ts` ya miraba primero `modelDetails.maxCompletionTokens`; ninguno de
+los cuatro lo declaraba, así que todos caían al valor del proveedor. Ahora los cuatro declaran
+**64.000** — por debajo del techo real del más bajo, así que un número sirve para todos.
+
+**La lección, y van tres:** `PORT`, `127.0.0.1`, y ahora esto. El mismo patrón exacto — **dictar en
+vez de mirar**. Un valor por defecto heredado que nadie vuelve a mirar puede pasar durante meses por
+una limitación de terceros, y encima con una explicación convincente. La contramedida es la de
+siempre: que el número se pueda leer en ejecución. Sale ahora en el informe de Diagnóstico.
+
+Lo que esto **no** arregla por sí solo es la calidad visual: eso hay que medirlo con un sitio real
+antes de invertir en el Cresova Web Starter.
 
 ### Cosas verificadas, no supuestas
 
@@ -1499,7 +1527,8 @@ Ninguno impide generar y ver un sitio.
 | Qué | Notas |
 |---|---|
 | Etapa 4: Docker por proyecto | Aislamiento real entre proyectos + pool precalentado. |
-| Cresova Web Starter | Fase 2 de plantillas. Quita la presión de los 8192 tokens. Aplazado por el usuario. |
+| Cresova Web Starter | **Cambió el motivo en el build 214.** Ya no se justifica por la presión de tokens —ésa se fue al subir el tope a 64.000—, sólo por calidad de diseño. Construirlo **después** de medir si un sitio real sigue viéndose plano. |
+| El modelo, si sigue viéndose plano | Los cuatro de la lista curada son modelos **de programación** («fuerte en coding», «especializado en programación», «Coding Premium»). El kit de diseño avisa en su primera línea de que las reglas solas apenas mueven a un modelo pequeño: se apoya en sus priors. Un modelo entrenado para escribir código correcto produce Tailwind correcto y sin gracia. §2 prohíbe revertir la lista curada, así que es decisión del usuario. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
 | ~~La pestaña en segundo plano~~ | **Resuelto en el build 209.** Ni congelación ni avalancha ni segundo plano: un escaneo cuadrático en `waitTillOscCode`, 204 de 242 s. Ver §0 ter. |
