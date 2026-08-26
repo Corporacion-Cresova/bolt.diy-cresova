@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 209 · rama `claude/preview-tab-hang-issues-dk3u86`.
+**Última actualización:** build 210 · rama `claude/preview-tab-hang-issues-dk3u86`.
 
 ---
 
@@ -14,7 +14,7 @@ Lo primero que hay que saber al abrir una sesión nueva.
 ### Lo que espera acción del usuario
 
 **1. Redesplegar `bolt-diy` y `runner` en EasyPanel.** Nada de esto corre en producción hasta ese
-redespliegue. La insignia del header debe pasar a **build 209**; si sigue en un número menor, el
+redespliegue. La insignia del header debe pasar a **build 210**; si sigue en un número menor, el
 despliegue no llegó. Ese contador es la única forma fiable de saberlo y estuvo roto hasta el
 build 199 (ver §5).
 
@@ -22,6 +22,13 @@ build 199 (ver §5).
 ter): era un escaneo cuadrático en `waitTillOscCode`, responsable de **204 de los 242 segundos** de
 hilo bloqueado que midió la última lectura. Si vuelve a colgarse, Diagnóstico ahora nombra la
 función.
+
+### Lo cerrado en el build 210
+
+| Qué | Verificado |
+|---|---|
+| Un solo botón de diagnóstico: se retira «Debug Log» del header y lo único que aportaba —el historial de la terminal— pasa a «Diagnóstico» | sí, pruebas; no probado en un navegador |
+| Los errores no capturados del navegador se recogen **desde el primer instante** y salen en el informe | sí, 7 pruebas |
 
 ### Lo cerrado en el build 209
 
@@ -463,6 +470,7 @@ Todo lo añadido por Cresova vive en carpetas identificables.
 | `execution-backend.ts` | Elige el backend y expone `executionBackendStore` para la insignia. |
 | `tab-suspension.ts` | Mide qué le pasa a la pestaña mientras está de fondo: si la congelaron, cuánto bloqueó el hilo al volver, cuánto mandó el runner entretanto, y **qué función** lo retuvo. Sale en el botón Diagnóstico. |
 | `dev-server-errors.ts` | Lee las quejas del servidor de desarrollo en su propia salida. Un proyecto que compila mal sigue sirviendo, así que ninguna otra señal lo nota. |
+| `browser-errors.ts` | Recoge las excepciones no capturadas y las promesas rechazadas, siempre, desde que se abre el chat. Sale en el botón Diagnóstico. |
 
 ### `runner/`
 
@@ -810,6 +818,20 @@ Dos decisiones que importan:
 
 No se extendió `debugLogger` (1284 líneas heredadas de bolt.diy): produce un volcado JSON genérico
 que no sabe nada del runner, que es donde estaban todas las respuestas.
+
+**Y en el build 210 se retiró su botón del header**, al leerlo de verdad. Su volcado sale casi vacío
+en una sesión normal, y por diseño: los errores, la consola y la red sólo se capturan cuando alguien
+enciende el modo debug en los ajustes, cosa que nadie hace **antes** del fallo que quiere capturar.
+`generateDebugLog` enciende la captura, recoge y la vuelve a apagar, así que informa de los errores
+del instante en que no pasaba nada. Peor todavía, su bloque de estado del workbench lee
+`window.__bolt_workbench_store`, un global que **no existe en este proyecto**: devuelve siempre los
+mismos valores por defecto —sin vista previa, sin archivos— tenga razón o no. Una lectura que miente
+con confianza es más cara que una que falta.
+
+Lo único suyo que sí se llena es el historial de la terminal, porque `shell.ts` lo alimenta esté el
+modo debug encendido o no. Eso pasó a «Diagnóstico», junto con una captura de errores propia que
+escucha desde que se abre el chat — que es la única forma de atrapar algo que no se reproduce a
+pedido. La descarga completa sigue en el menú de usuario para quien la quiera.
 
 ### El árbol de archivos llevaba el lockfile, y midiendo se descartaron dos teorías
 

@@ -36,37 +36,18 @@ export function HeaderActionButtons({ chatStarted: _chatStarted }: HeaderActionB
        */}
       <DiagnosticsButton />
 
-      {/* Debug Tools */}
-      {shouldShowButtons && (
-        <div className="flex border border-bolt-elements-borderColor rounded-md overflow-hidden text-sm">
-          <button
-            onClick={() =>
-              window.open('https://github.com/stackblitz-labs/bolt.diy/issues/new?template=bug_report.yml', '_blank')
-            }
-            className="rounded-l-md items-center justify-center [&:is(:disabled,.disabled)]:cursor-not-allowed [&:is(:disabled,.disabled)]:opacity-60 px-3 py-1.5 text-xs bg-accent-500 text-white hover:text-bolt-elements-item-contentAccent [&:not(:disabled,.disabled)]:hover:bg-bolt-elements-button-primary-backgroundHover outline-accent-500 flex gap-1.5"
-            title="Report Bug"
-          >
-            <div className="i-ph:bug" />
-            <span>Report Bug</span>
-          </button>
-          <div className="w-px bg-bolt-elements-borderColor" />
-          <button
-            onClick={async () => {
-              try {
-                const { downloadDebugLog } = await import('~/utils/debugLogger');
-                await downloadDebugLog();
-              } catch (error) {
-                console.error('Failed to download debug log:', error);
-              }
-            }}
-            className="rounded-r-md items-center justify-center [&:is(:disabled,.disabled)]:cursor-not-allowed [&:is(:disabled,.disabled)]:opacity-60 px-3 py-1.5 text-xs bg-accent-500 text-white hover:text-bolt-elements-item-contentAccent [&:not(:disabled,.disabled)]:hover:bg-bolt-elements-button-primary-backgroundHover outline-accent-500 flex gap-1.5"
-            title="Download Debug Log"
-          >
-            <div className="i-ph:download" />
-            <span>Debug Log</span>
-          </button>
-        </div>
-      )}
+      {/*
+       * «Debug Log» vivía aquí, y era un segundo botón que contestaba peor a la misma pregunta. Su
+       * volcado sale casi vacío en una sesión normal: los errores, la consola y la red sólo se
+       * capturan si alguien enciende el modo debug en los ajustes, cosa que nadie hace antes de que
+       * ocurra el fallo que quiere capturar. Y su bloque de estado del workbench lee un global que no
+       * existe en este proyecto, así que informaba siempre de lo mismo — sin vista previa y sin
+       * archivos — tuviera o no razón, que es la forma más cara que puede tomar una lectura.
+       *
+       * Lo único que sí se llenaba, el historial de la terminal, lo lleva ahora «Diagnóstico», junto
+       * con los errores del navegador capturados desde el primer instante. Un botón, y que diga la
+       * verdad. La descarga sigue existiendo en el menú de usuario para quien la quiera.
+       */}
     </div>
   );
 }
