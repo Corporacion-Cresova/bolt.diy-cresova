@@ -540,6 +540,11 @@ optimizar esto para tener una base más sólida"*.
 **Flujo de trabajo:** *"siempre que hagas cambios fusiona directo con el main"*. Es decir: rama →
 commit → PR → merge a `main`. No dejar trabajo colgando en la rama.
 
+**Y el merge no se pregunta.** El usuario lo repitió, ya con fastidio: *"claro, siempre haz merge,
+¿qué me andas preguntando?"*. Preguntar antes de cada fusión es fricción que él ya autorizó a saltarse
+de una vez y para siempre. Terminar una tanda significa: rama, commit, PR, merge, y **avisar de qué
+hay que redesplegar** — que es lo único que de verdad necesita de él al final.
+
 **Restricciones técnicas:**
 
 - No reescribir bolt.diy. Reutilizar la arquitectura existente.
