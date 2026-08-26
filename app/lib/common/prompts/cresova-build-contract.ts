@@ -31,6 +31,14 @@ export const CRESOVA_BUILD_CONTRACT = `
   - Everything you put in \`@apply\` must be a utility that produces declarations. If you are not
     sure a class is one, put it on the element instead. A stylesheet that does not compile serves a
     blank page from a dev server that otherwise looks perfectly healthy, and stops the build too.
+  - A NUMBER inside a utility only exists if Tailwind's default scale has it, or if you added it to
+    \`theme.extend\` in this same response. \`duration-350\` broke a finished site: the durations
+    are 75 100 150 200 300 500 700 1000, and 350 is not one of them. The same trap waits in
+    \`w-97\`, \`z-45\`, \`text-17\`. Extending \`borderRadius\` and \`boxShadow\` in the config
+    and then using an invented duration as if you had extended that too is exactly how it happened.
+  - So, inside a stylesheet rule, write PLAIN CSS for any number you chose yourself:
+    \`transition-duration: 350ms;\`, not \`@apply duration-350\`. Keep \`@apply\` for utilities you
+    did not invent. This costs nothing and removes the whole class of failure.
 
   WHEN THE REQUEST IS TOO BIG FOR ONE RESPONSE:
   A response has a hard output limit. A request with many distinct sections will not fit, and a
