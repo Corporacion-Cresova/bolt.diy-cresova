@@ -8,6 +8,7 @@ import type { RemoteContainer, RunnerDiagnostics } from '~/lib/cresova/remote-co
 import { describeTabSuspension, watchTabSuspension } from '~/lib/cresova/tab-suspension';
 import { describeBrowserErrors, watchBrowserErrors } from '~/lib/cresova/browser-errors';
 import { checkPreviewEmbedding, describePreviewEmbedding, type PreviewEmbedding } from '~/lib/cresova/preview-embedding';
+import { describeAutoTurns } from '~/lib/cresova/auto-turn-budget';
 import versionInfo from '~/version.json';
 
 /*
@@ -89,6 +90,13 @@ function describe(
   if (embedding) {
     lines.push('', ...describePreviewEmbedding(embedding));
   }
+
+  /*
+   * Who asked for each turn the builder gave itself. The loop that made this necessary ran twenty
+   * identical laps, every one of them billed, and there was no way to tell which mechanism was
+   * asking — the same «measure it instead of deducing it» that closed the preview bug.
+   */
+  lines.push('', ...describeAutoTurns());
 
   lines.push('', ...describeBrowserErrors());
   lines.push('', ...describeTabSuspension());
