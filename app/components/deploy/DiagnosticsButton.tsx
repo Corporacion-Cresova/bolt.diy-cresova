@@ -10,6 +10,8 @@ import { describeBrowserErrors, watchBrowserErrors } from '~/lib/cresova/browser
 import { checkPreviewEmbedding, describePreviewEmbedding, type PreviewEmbedding } from '~/lib/cresova/preview-embedding';
 import { describeAutoTurns } from '~/lib/cresova/auto-turn-budget';
 import versionInfo from '~/version.json';
+import Cookies from 'js-cookie';
+import { PROVIDER_LIST } from '~/utils/constants';
 
 /*
  * Started from here because this is the button that reads them, and because the header is on screen
@@ -44,6 +46,38 @@ async function terminalTail(): Promise<string[]> {
     // the report is worth more without this section than not at all
     return [];
   }
+}
+
+/**
+ * The output ceiling the next generation will actually work with.
+ *
+ * This is here because an inherited default —`PROVIDER_COMPLETION_LIMITS.OpenRouter = 8192`—
+ * survived many rounds passing for a limitation of the models, and nothing in the running app ever
+ * showed the number. A ceiling nobody can read is a ceiling nobody re-examines.
+ *
+ * Read from the same static list the server resolves against (OpenRouter has no dynamic model list
+ * in this fork), so this is the value, not a guess about it. When a model declares nothing the line
+ * says so, which is precisely the state that hid the problem.
+ */
+function describeCompletionLimit(): string[] {
+  const modelName = Cookies.get('selectedModel');
+  const providerName = Cookies.get('selectedProvider');
+
+  if (!modelName) {
+    return [];
+  }
+
+  const provider = PROVIDER_LIST.find((candidate) => candidate.name === providerName);
+  const model = provider?.staticModels?.find((candidate) => candidate.name === modelName);
+
+  return [
+    `  modelo: ${modelName}${providerName ? ` (${providerName})` : ''}`,
+    `  tokens de salida: ${
+      model?.maxCompletionTokens
+        ? `${model.maxCompletionTokens} (declarado por el modelo)`
+        : 'sin declarar — se usa el valor por defecto del proveedor'
+    }`,
+  ];
 }
 
 const NOT_REPORTED = 'sin dato';
@@ -81,6 +115,7 @@ function describe(
     `  archivos en el proyecto: ${files}`,
     `  vistas previas: ${previews.length}`,
     ...previews.map((preview) => `    ${preview.baseUrl} (lista: ${sí(preview.ready)})`),
+    ...describeCompletionLimit(),
   ];
 
   if (runnerError) {

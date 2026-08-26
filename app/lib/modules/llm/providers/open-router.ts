@@ -4,6 +4,8 @@ import type { IProviderSetting } from '~/types/model';
 import type { LanguageModelV1 } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 
+const COMPLETION_TOKENS = 64000;
+
 export default class OpenRouterProvider extends BaseProvider {
   name = 'OpenRouter';
   getApiKeyLink = 'https://openrouter.ai/settings/keys';
@@ -24,6 +26,26 @@ export default class OpenRouterProvider extends BaseProvider {
    * y nos permite controlar exactamente qué modelos utilizamos.
    */
 
+  /*
+   * Why every model here declares `maxCompletionTokens`.
+   *
+   * Without it the resolution in `stream-text.ts` falls through to
+   * `PROVIDER_COMPLETION_LIMITS.OpenRouter`, a constant inherited from bolt.diy that reads **8192**
+   * — written when OpenRouter mostly served models with that ceiling, and nothing to do with these
+   * four. Checked against OpenRouter's own model API, their real output limits are 384.000
+   * (both DeepSeek V4), 235.929 (Qwen3 Coder Next) and 65.536 (Qwen3.6 Plus).
+   *
+   * So the ceiling that produced every truncated file, every duplicated artifact and every
+   * `App.tsx` importing a component that was never written was **ours**, not theirs. The continuity
+   * doc called it «la causa raíz de casi todos los fallos de generación» and attributed it to the
+   * models. It was a default nobody had looked at again.
+   *
+   * 64.000 and not each model's maximum: it fits under the lowest of the four (Qwen3.6 Plus), so one
+   * number covers them all with no special cases, and it leaves a deliberate ceiling. Raising the
+   * limit costs nothing by itself — only generated tokens are billed, and far fewer continuations
+   * means far fewer full prompt re-sends — but a runaway generation is more expensive in one call
+   * than it used to be. `maxTokenAllowed` below is the **context** window; this is the output.
+   */
   staticModels: ModelInfo[] = [
     /*
      * ==========================================================
@@ -38,6 +60,7 @@ export default class OpenRouterProvider extends BaseProvider {
       label: '⚡ DeepSeek V4 Flash — Recomendado / Económico',
       provider: 'OpenRouter',
       maxTokenAllowed: 1000000,
+      maxCompletionTokens: COMPLETION_TOKENS,
     },
 
     /*
@@ -53,6 +76,7 @@ export default class OpenRouterProvider extends BaseProvider {
       label: '💻 Qwen3 Coder Next — Coding',
       provider: 'OpenRouter',
       maxTokenAllowed: 262144,
+      maxCompletionTokens: COMPLETION_TOKENS,
     },
 
     /*
@@ -68,6 +92,7 @@ export default class OpenRouterProvider extends BaseProvider {
       label: '🧠 Qwen3.6 Plus — Coding Premium',
       provider: 'OpenRouter',
       maxTokenAllowed: 1000000,
+      maxCompletionTokens: COMPLETION_TOKENS,
     },
 
     /*
@@ -83,6 +108,7 @@ export default class OpenRouterProvider extends BaseProvider {
       label: '🔥 DeepSeek V4 Pro — Máxima Calidad',
       provider: 'OpenRouter',
       maxTokenAllowed: 1000000,
+      maxCompletionTokens: COMPLETION_TOKENS,
     },
   ];
 
