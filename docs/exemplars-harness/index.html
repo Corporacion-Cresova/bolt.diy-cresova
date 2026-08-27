@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700&family=Karla:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="tailwind.js"></script>
+<script>
+tailwind.config={theme:{extend:{
+ colors:{bg:'#F7F5F0',surface:'#FFFFFF',ink:'#14322C',muted:'#5B6F69',accent:'#0E6E62','accent-strong':'#0A4F46'},
+ fontFamily:{display:['Bricolage Grotesque','system-ui','sans-serif'],body:['Karla','system-ui','sans-serif']},
+ boxShadow:{raised:'0 1px 2px rgba(20,50,44,.04), 0 8px 24px rgba(20,50,44,.07)'}}}}
+</script>
+<style>body{font-family:Karla,system-ui,sans-serif}h1,h2,h3,.font-display{font-family:'Bricolage Grotesque',system-ui,sans-serif}</style>
+</head>
+<body class="bg-bg text-ink antialiased">
+
+<!-- A · HERO 60/40, foto a sangre derecha -->
+<section id="heroA" class="bg-bg">
+  <div class="grid items-stretch lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+    <div class="flex items-center px-6 py-24 lg:py-32 lg:pl-[max(2.5rem,calc((100vw-1200px)/2))] lg:pr-16">
+      <div class="w-full">
+        <p class="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Roatán · Isla de la Bahía</p>
+        <h1 class="mt-5 max-w-[15ch] font-display font-bold text-ink" style="font-size:clamp(2.5rem,4.4vw,4rem);line-height:1.05;letter-spacing:-0.02em;text-wrap:balance">Bucea el arrecife más grande del Caribe</h1>
+        <p class="mt-6 max-w-[52ch] text-[1.0625rem] leading-relaxed text-muted">Salidas diarias a las 7:30 y 13:00 con instructor PADI, equipo completo y un máximo de seis buzos por lancha.</p>
+        <div class="mt-9 flex flex-wrap items-center gap-x-7 gap-y-4">
+          <a href="#" class="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3.5 text-[0.9375rem] font-semibold text-white transition-colors duration-150 hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Reservar una salida</a>
+          <a href="#" class="group inline-flex items-center gap-1.5 text-[0.9375rem] font-medium text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+            <span class="bg-[linear-gradient(currentColor,currentColor)] bg-[length:0%_1px] bg-no-repeat bg-left-bottom transition-[background-size] duration-150 group-hover:bg-[length:100%_1px]">Ver precios y horarios</span>
+            <span aria-hidden="true">&rarr;</span>
+          </a>
+        </div>
+        <dl class="mt-14 flex flex-wrap gap-x-12 gap-y-6 border-t border-ink/10 pt-8">
+          <div><dt class="text-xs uppercase tracking-[0.12em] text-muted">Desde</dt><dd class="mt-1 font-display text-2xl font-semibold">$85</dd></div>
+          <div><dt class="text-xs uppercase tracking-[0.12em] text-muted">Duración</dt><dd class="mt-1 font-display text-2xl font-semibold">4 h</dd></div>
+          <div><dt class="text-xs uppercase tracking-[0.12em] text-muted">Grupo máximo</dt><dd class="mt-1 font-display text-2xl font-semibold">6</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="relative min-h-[320px] lg:min-h-[70vh]">
+      <img src="img/reef.jpg" alt="Buzo sobre el arrecife" class="absolute inset-0 h-full w-full object-cover">
+    </div>
+  </div>
+</section>
+
+<!-- B · HERO editorial, titular partido sobre foto ancha -->
+<section id="heroB" class="bg-surface border-y border-ink/10">
+  <div class="mx-auto max-w-[1200px] px-6 lg:px-10 py-24 lg:py-32">
+    <p class="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Desde 2011</p>
+    <h1 class="mt-5 max-w-[16ch] font-display font-bold" style="font-size:clamp(2.5rem,6vw,5rem);line-height:1;letter-spacing:-0.025em;text-wrap:balance">Cuatro tours.<br>Ni uno con prisa.</h1>
+    <div class="mt-12 grid gap-10 lg:grid-cols-[minmax(0,8fr)_minmax(0,4fr)] lg:items-end">
+      <img src="img/zipline.jpg" alt="Recorrido de canopy sobre la selva" class="aspect-[7/4] w-full rounded-sm object-cover">
+      <div class="lg:pb-2">
+        <p class="max-w-[38ch] text-[1.0625rem] leading-relaxed text-muted">Grupos de ocho personas como máximo, guía bilingüe y transporte desde tu hotel. Sin filas y sin reloj.</p>
+        <a href="#" class="mt-7 inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3.5 text-[0.9375rem] font-semibold text-white transition-colors duration-150 hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Ver los cuatro tours</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- C · SERVICIOS como lista editorial, no tarjetas -->
+<section id="servicios" class="bg-bg">
+  <div class="mx-auto max-w-[1200px] px-6 lg:px-10 py-24 lg:py-32">
+    <div class="flex flex-wrap items-end justify-between gap-6">
+      <h2 class="max-w-[20ch] font-display font-semibold" style="font-size:clamp(1.75rem,3vw,2.5rem);line-height:1.15;letter-spacing:-0.015em">Lo que hacemos</h2>
+      <p class="max-w-[42ch] text-[0.9375rem] leading-relaxed text-muted">Todos los precios incluyen equipo, seguro y traslado dentro de West End.</p>
+    </div>
+    <ul class="mt-14 border-t border-ink/12">
+      <li class="group border-b border-ink/12"><a href="#" class="grid gap-2 py-8 transition-colors duration-150 hover:bg-ink/[0.02] md:grid-cols-[minmax(0,4fr)_minmax(0,6fr)_auto] md:items-baseline md:gap-10 md:px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+        <h3 class="font-display text-xl font-semibold md:text-2xl">Buceo certificado</h3>
+        <p class="text-[0.9375rem] leading-relaxed text-muted">Dos inmersiones con instructor PADI, tanques, plomos y guía de arrecife.</p>
+        <span class="font-display text-lg font-semibold whitespace-nowrap text-accent">desde $85</span></a></li>
+      <li class="group border-b border-ink/12"><a href="#" class="grid gap-2 py-8 transition-colors duration-150 hover:bg-ink/[0.02] md:grid-cols-[minmax(0,4fr)_minmax(0,6fr)_auto] md:items-baseline md:gap-10 md:px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+        <h3 class="font-display text-xl font-semibold md:text-2xl">Bautismo de mar</h3>
+        <p class="text-[0.9375rem] leading-relaxed text-muted">Tu primera vez bajo el agua, en aguas de tres metros y uno a uno con el instructor.</p>
+        <span class="font-display text-lg font-semibold whitespace-nowrap text-accent">desde $60</span></a></li>
+      <li class="group border-b border-ink/12"><a href="#" class="grid gap-2 py-8 transition-colors duration-150 hover:bg-ink/[0.02] md:grid-cols-[minmax(0,4fr)_minmax(0,6fr)_auto] md:items-baseline md:gap-10 md:px-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+        <h3 class="font-display text-xl font-semibold md:text-2xl">Snorkel al atardecer</h3>
+        <p class="text-[0.9375rem] leading-relaxed text-muted">Dos horas de lancha, chalecos y bebida a bordo. Sale a las 16:30.</p>
+        <span class="font-display text-lg font-semibold whitespace-nowrap text-accent">desde $35</span></a></li>
+    </ul>
+  </div>
+</section>
+
+<!-- D · GALERÍA asimétrica -->
+<section id="galeria" class="bg-surface border-y border-ink/10">
+  <div class="mx-auto max-w-[1200px] px-6 lg:px-10 py-24 lg:py-32">
+    <h2 class="max-w-[20ch] font-display font-semibold" style="font-size:clamp(1.75rem,3vw,2.5rem);line-height:1.15;letter-spacing:-0.015em">Un martes cualquiera</h2>
+    <div class="mt-12 grid gap-4 sm:grid-cols-6 sm:grid-rows-2 sm:h-[560px]">
+      <img src="img/g1.jpg" alt="Salida de la lancha al amanecer" class="h-64 w-full rounded-sm object-cover sm:col-span-4 sm:row-span-2 sm:h-full">
+      <img src="img/g2.jpg"  alt="Equipo listo en cubierta"        class="h-40 w-full rounded-sm object-cover sm:col-span-2 sm:h-full">
+      <img src="img/g3.jpg"  alt="Tortuga sobre el arrecife"        class="h-40 w-full rounded-sm object-cover sm:col-span-2 sm:h-full">
+    </div>
+  </div>
+</section>
+
+<!-- E · TESTIMONIO, una cita grande -->
+<section id="testimonio" class="bg-accent/[0.06]">
+  <div class="mx-auto max-w-[1200px] px-6 lg:px-10 py-24 lg:py-32">
+    <figure class="max-w-[26ch] sm:max-w-[34ch]">
+      <blockquote class="font-display font-semibold text-ink" style="font-size:clamp(1.75rem,3.4vw,2.75rem);line-height:1.2;letter-spacing:-0.015em;text-wrap:balance">
+        <p>“Llevaba diez años sin meterme al agua. Salí pidiendo la segunda inmersión.”</p>
+      </blockquote>
+      <figcaption class="mt-8 flex items-center gap-4">
+        <img src="img/face.jpg" alt="" class="h-12 w-12 rounded-full object-cover">
+        <span class="text-[0.9375rem] leading-tight"><span class="block font-semibold">Marta Sandoval</span><span class="block text-muted">San Pedro Sula · marzo 2026</span></span>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- F · CONTACTO a dos columnas -->
+<section id="contacto" class="bg-bg">
+  <div class="mx-auto max-w-[1200px] px-6 lg:px-10 py-24 lg:py-32 grid gap-14 lg:grid-cols-2 lg:gap-24">
+    <div>
+      <h2 class="max-w-[18ch] font-display font-semibold" style="font-size:clamp(1.75rem,3vw,2.5rem);line-height:1.15;letter-spacing:-0.015em">¿Reservamos?</h2>
+      <p class="mt-5 max-w-[46ch] text-[1.0625rem] leading-relaxed text-muted">Contestamos por WhatsApp en menos de una hora, de 6:00 a 20:00.</p>
+      <form class="mt-9 grid gap-4">
+        <label class="grid gap-2"><span class="text-[0.8125rem] font-medium">Nombre</span>
+          <input type="text" class="rounded-md border border-ink/15 bg-surface px-4 py-3 text-[0.9375rem] outline-none transition-colors duration-150 focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"></label>
+        <label class="grid gap-2"><span class="text-[0.8125rem] font-medium">WhatsApp</span>
+          <input type="tel" class="rounded-md border border-ink/15 bg-surface px-4 py-3 text-[0.9375rem] outline-none transition-colors duration-150 focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"></label>
+        <label class="grid gap-2"><span class="text-[0.8125rem] font-medium">¿Qué tour te interesa?</span>
+          <textarea rows="3" class="rounded-md border border-ink/15 bg-surface px-4 py-3 text-[0.9375rem] outline-none transition-colors duration-150 focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"></textarea></label>
+        <button type="submit" class="mt-2 justify-self-start rounded-md bg-accent px-6 py-3.5 text-[0.9375rem] font-semibold text-white transition-colors duration-150 hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Enviar</button>
+      </form>
+    </div>
+    <div class="rounded-sm bg-surface p-8 shadow-raised lg:p-10">
+      <dl class="grid gap-7">
+        <div><dt class="text-xs uppercase tracking-[0.12em] text-muted">Dónde estamos</dt><dd class="mt-2 text-[1.0625rem] leading-relaxed">Half Moon Bay Road, West End<br>Roatán, Islas de la Bahía</dd></div>
+        <div><dt class="text-xs uppercase tracking-[0.12em] text-muted">Horario</dt><dd class="mt-2 text-[1.0625rem] leading-relaxed">Lunes a domingo, 6:00 – 20:00</dd></div>
+        <div><dt class="text-xs uppercase tracking-[0.12em] text-muted">Teléfono</dt><dd class="mt-2 text-[1.0625rem] leading-relaxed"><a href="#" class="underline decoration-accent decoration-2 underline-offset-4">+504 9000 0000</a></dd></div>
+      </dl>
+      <img src="img/map.jpg" alt="Mapa de la zona de West End" class="mt-8 aspect-[16/9] w-full rounded-sm object-cover">
+    </div>
+  </div>
+</section>
+
+</body></html>
