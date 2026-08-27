@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 216 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
+**Última actualización:** build 217 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
 
 ---
 
@@ -25,6 +25,17 @@ curl -s https://<sitio>.preview.cresova.com/ | grep -i "fonts.googleapis"
 
 **3. Y entonces sí, mirar el sitio con el diseño en sus condiciones**, y decidir si sigue por debajo
 de Lovable. Ésa es la que decide si pasamos a shadcn (§7).
+
+### Lo cerrado en el build 217
+
+| Qué | Verificado |
+|---|---|
+| El modelo **decide antes de escribir**: abre su respuesta con paleta, tipografía, tratamiento, concepto y apuesta | no — hace falta una generación real |
+| Tabla de 6 sectores con paleta cerrada en hex, tipografía y tratamiento | **contraste WCAG calculado**: las 6 pasan AA, el texto AAA |
+| Dos parejas tipográficas nuevas (Cormorant Garamond + Karla, DM Serif Display + DM Sans) | URLs comprobadas contra Google Fonts: 200 y `@font-face` reales |
+| Profundidad y ritmo: las secciones alternan suelo — el arreglo literal de «plano» | no probado |
+| Repertorio de movimiento cerrado, dentro de `prefers-reduced-motion` | no probado |
+| Los clichés actuales de página hecha por IA, por su nombre | no probado |
 
 ### Lo cerrado en el build 216
 
@@ -962,6 +973,39 @@ La solución no fue observar el disco en el servidor — eso obligaría a mandar
 que toca `npm install` para no decir nada útil — sino que el navegador reporte sus propias
 escrituras: es él quien las hace. `remote-container.ts` emite el evento después de que la escritura
 tiene éxito, nunca antes.
+
+### Una guía de diseño para este modelo se escribe en valores, no en principios
+
+Corolario directo de la entrada de abajo, y la regla que ordena todo el kit desde el build 217.
+
+El build 216 midió que el modelo cumple `clamp(2.5rem,5vw,4.5rem)`, `-0.02em` y `96px` al dígito, y
+se salta `max-w-[65ch]` porque estaba dentro de una frase. **Los valores se cumplen; la prosa se
+pierde.**
+
+Eso decide cómo se traen ideas de una guía de diseño buena. Las skills de diseño de Claude Code
+—que, conviene decirlo, viven en `.claude/skills/` y **no tienen ningún efecto sobre lo que el
+constructor genera**: ayudan a quien trabaja sobre este repositorio— están escritas como prosa para
+un modelo con criterio propio. Aquí hay que traducirlas:
+
+| En una skill | Aquí |
+|---|---|
+| «elige neutros, no los heredes» | seis paletas cerradas en hex, contraste verificado |
+| «empareja tipografías deliberadamente» | seis parejas con su `<link>` literal |
+| «reparte la audacia en un solo sitio» | `editorial` vs `sólido`, decidido por el sector |
+| «esboza un plan de diseño antes de escribir» | cinco líneas obligatorias al abrir la respuesta |
+
+Lo que **sí** transfiere tal cual es la forma procedimental: **decidir antes de construir**. Un
+diseño es un conjunto de decisiones tomadas antes y aplicadas con coherencia; sin ese paso, lo que
+sale es la media de los priors del modelo, que es exactamente el aspecto genérico. Por eso el kit
+empieza ahora obligando a cinco líneas de decisión antes del primer archivo.
+
+Y el constraint que hacía corto al kit ya no existe: se escribió con un techo de 8.192 tokens de
+salida y hoy el contexto de entrada es de 1M con un prompt real de ~26k. Cabe un sistema de diseño
+de verdad — siempre que sea tabla y no discurso.
+
+**Lo que quedó fuera a propósito:** copiar el contenido de esas skills literalmente. Están llenas de
+cosas que aquí no existen (CSP de artefactos, temas claro/oscuro por atributo, títulos de galería) y
+meterlas confundiría al modelo en vez de ayudarlo.
 
 ### La tipografía estaba elegida y nunca se cargó
 
