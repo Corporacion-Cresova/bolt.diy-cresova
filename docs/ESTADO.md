@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 215 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
+**Última actualización:** build 216 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
 
 ---
 
@@ -14,11 +14,28 @@ Lo primero que hay que saber al abrir una sesión nueva.
 ### Lo que espera acción del usuario
 
 **1. Redesplegar `bolt-diy` y RECARGAR FUERTE la pestaña** (Ctrl+Shift+R). La insignia debe pasar a
-**build 215**. La recarga fuerte importa: ver §5, «los chunks con hash desaparecen al redesplegar».
+**build 216**. La recarga fuerte importa: ver §5, «los chunks con hash desaparecen al redesplegar».
 
-**2. La medición que lleva dos tandas pendiente:** generar un sitio y **mirar si sigue viéndose
-plano**. No se ha podido hacer todavía porque el sitio salía roto. Si sigue plano con el sitio ya
-compilando, el siguiente sospechoso es el modelo (§7), no el prompt.
+**2. Comprobar que el `index.html` generado lleva el `<link>` de Google Fonts.** Es lo único que
+importa de esta tanda; sin eso, la tipografía sigue muerta. Sobre cualquier sitio publicado:
+
+```bash
+curl -s https://<sitio>.preview.cresova.com/ | grep -i "fonts.googleapis"
+```
+
+**3. Y entonces sí, mirar el sitio con el diseño en sus condiciones**, y decidir si sigue por debajo
+de Lovable. Ésa es la que decide si pasamos a shadcn (§7).
+
+### Lo cerrado en el build 216
+
+| Qué | Verificado |
+|---|---|
+| Las cuatro parejas tipográficas traen su `<link>` literal, con `preconnect` | las cuatro URLs **comprobadas contra Google Fonts**: 200 y `@font-face` reales |
+| El kit termina con una lista de comprobación para lo que se pierde en la prosa | no — hace falta una generación real |
+
+**Y una corrección de lo que yo mismo escribí en el 214:** dije que si el sitio compilaba y aun así
+se veía genérico, el siguiente sospechoso era el modelo. **La medición lo desmiente** — ver §5, «la
+tipografía estaba elegida y nunca se cargó». La lista curada no era el problema.
 
 ### Lo cerrado en el build 215
 
@@ -946,6 +963,64 @@ que toca `npm install` para no decir nada útil — sino que el navegador report
 escrituras: es él quien las hace. `remote-container.ts` emite el evento después de que la escritura
 tiene éxito, nunca antes.
 
+### La tipografía estaba elegida y nunca se cargó
+
+La lección más cara de todas, y la que explica «se ve genérico y plano» entero.
+
+Se miró el CSS compilado de un sitio real publicado (`parnaza`) en vez de teorizar sobre él. Y el
+modelo **estaba cumpliendo el kit con precisión decimal**:
+
+| El kit pide | El sitio tenía |
+|---|---|
+| `clamp(2.5rem, 5vw, 4.5rem)` en el titular | `clamp(2.5rem,5vw,4.5rem)` — exacto |
+| `clamp(1.75rem, 3vw, 2.5rem)` en secciones | `clamp(1.75rem,3vw,2.5rem)` — exacto |
+| `tracking -0.02em` | `letter-spacing:-.02em` |
+| Secciones a 96 / 128 px | `padding: 6rem` y `8rem` |
+| Un par del menú cerrado | `Instrument Sans` + `Public Sans` |
+
+Y aun así se veía mal, por una sola cosa:
+
+```
+font-family: Instrument Sans, system-ui, sans-serif
+```
+
+**Esa fuente no se cargaba en ninguna parte.** Cero apariciones de `fonts.googleapis`,
+`fonts.gstatic`, `@font-face` o `.woff` en el HTML publicado, en el CSS compilado y en el bundle de
+JS. El navegador leía `Instrument Sans`, no la tenía, y caía a `system-ui`.
+
+Todos los sitios generados hasta el build 216 se vieron **con la fuente del sistema**, diera igual
+qué par eligiera el modelo.
+
+Y la culpa era del kit, no del modelo. Decía:
+
+> TYPE PAIRINGS (Google Fonts, pick one, never Inter + Playfair Display):
+
+Los llamaba «Google Fonts», los nombraba, y **nunca decía que hubiera que cargarlos**. El modelo
+obedeció exactamente lo que se le pidió.
+
+**La lección, y van cuatro:** `PORT`, `127.0.0.1`, el techo de 8192, y ahora esto. Siempre lo mismo
+— **algo especificado, nunca verificado, que en silencio no ocurre**. Y siempre con una explicación
+convincente encima que manda la investigación a otro sitio: aquí llegó a acusarse al modelo.
+
+*Una elección de diseño que no se carga es una elección que no existe.*
+
+El corolario práctico, que es lo que se hizo: no dar la regla general («carga la tipografía»), dar
+**la URL literal de cada pareja**, verificada contra Google Fonts antes de escribirla. Mismo motivo
+por el que la lista de iconos de lucide es cerrada — un modelo que compone una URL se inventa los
+pesos; uno que la copia, no.
+
+### El modelo cumple los números y se salta la prosa
+
+Corolario del anterior, medido en el mismo CSS. El kit pide una medida de lectura —`max-w-[65ch]`,
+«los párrafos a todo el ancho se leen como sin terminar»— y **no aparecía por ninguna parte**,
+mientras que todos los valores numéricos concretos sí estaban.
+
+El patrón es claro: lo que está en forma de valor (`clamp(...)`, `-0.02em`, `96px`) se cumple; lo
+que está en forma de prosa dentro de setenta líneas densas se pierde.
+
+Por eso el kit termina ahora con una lista corta de comprobación, en imperativo, sólo de lo que se
+ve de un vistazo en el archivo terminado. Lo que ya funcionaba se deja como está.
+
 ### Una utilidad de Tailwind que parece real y no existe
 
 `@apply group` fue la primera versión de esta trampa y decírselo al modelo bastó. Ésta es la
@@ -1589,7 +1664,7 @@ Ninguno impide generar y ver un sitio.
 |---|---|
 | Etapa 4: Docker por proyecto | Aislamiento real entre proyectos + pool precalentado. |
 | Cresova Web Starter | **Cambió el motivo en el build 214.** Ya no se justifica por la presión de tokens —ésa se fue al subir el tope a 64.000—, sólo por calidad de diseño. Construirlo **después** de medir si un sitio real sigue viéndose plano. |
-| El modelo, si sigue viéndose plano | Los cuatro de la lista curada son modelos **de programación** («fuerte en coding», «especializado en programación», «Coding Premium»). El kit de diseño avisa en su primera línea de que las reglas solas apenas mueven a un modelo pequeño: se apoya en sus priors. Un modelo entrenado para escribir código correcto produce Tailwind correcto y sin gracia. §2 prohíbe revertir la lista curada, así que es decisión del usuario. |
+| ~~El modelo, si sigue viéndose plano~~ | **Descartado por medición en el build 216.** El modelo cumple el kit con precisión decimal; lo que fallaba era que la tipografía elegida nunca se cargaba. Si tras el 216 sigue por debajo de Lovable, el escalón siguiente es **componer con componentes reales** (`vite-shadcn`, ya declarada en `constants.ts` y ya cacheada en `public/templates/`), no cambiar de modelo. |
 | Galería de plantillas | El usuario dijo *"eso para más adelante"*. |
 | Cerrar los límites de §6 | `textSearch` y los errores de la vista previa son los que quedan. |
 | ~~La pestaña en segundo plano~~ | **Resuelto en el build 209.** Ni congelación ni avalancha ni segundo plano: un escaneo cuadrático en `waitTillOscCode`, 204 de 242 s. Ver §0 ter. |

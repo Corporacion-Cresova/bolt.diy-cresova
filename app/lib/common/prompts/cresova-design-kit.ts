@@ -14,11 +14,33 @@ export const CRESOVA_DESIGN_KIT = `
   Pick from these instead of inventing defaults. Choosing one combination and applying it
   consistently beats mixing.
 
-  TYPE PAIRINGS (Google Fonts, pick one, never Inter + Playfair Display):
+  TYPE PAIRINGS. Pick one, never Inter + Playfair Display. Naming the family in CSS is only half of
+  it: a family that is not loaded falls straight through to the system font, and the page then looks
+  like every other unstyled page no matter how good the rest of the design is. That happened, to
+  every site, for a long time.
+
+  So COPY the matching <link> into index.html, in <head>, verbatim. Do not compose the URL yourself
+  and do not change the weights: these four are verified to resolve.
+
   - Sober / corporate: Instrument Sans (display) + Public Sans (body)
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
   - Warm / local trade: Bricolage Grotesque (display) + Karla (body)
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700&family=Karla:wght@400;500;600&display=swap" rel="stylesheet">
+
   - Editorial / premium: Fraunces (display) + Work Sans (body)
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
   - Technical / clean: Archivo (display) + Source Sans 3 (body)
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
 
   TOKENS (define once as CSS custom properties or Tailwind theme values, then never hardcode):
   - Spacing scale: 4 8 12 16 24 32 48 64 96 128 160
@@ -83,5 +105,16 @@ export const CRESOVA_DESIGN_KIT = `
 
   FLOATING WHATSAPP: fixed bottom-right, 56px, accent background, lucide MessageCircle icon,
   aria-label in the page language, href https://wa.me/NUMERO.
+
+  BEFORE YOU FINISH, check these against the files you just wrote. Everything above that is a number
+  gets followed reliably; these are the ones that get lost in the prose, and each one is visible at a
+  glance in the finished page:
+  - The font <link> is in index.html. Without it the whole type section above did nothing.
+  - Long text has a reading measure (max-w-[65ch] or similar). Paragraphs running the full container
+    width are the fastest way to look unfinished.
+  - The hero photo has real height (min-h-[70vh]) and object-cover.
+  - At least three photos from <cresova_images> are used, the hero among them.
+  - More than one radius and more than one section padding across the page. Everything identical is
+    the tell that gives a template away.
 </cresova_design_kit>
 `;
