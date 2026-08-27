@@ -3,7 +3,7 @@
 Documento de continuidad. Si una sesión de trabajo se corta, esto es lo que hace falta leer para
 retomar sin volver a deducirlo todo.
 
-**Última actualización:** build 217 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
+**Última actualización:** build 218 · rama `claude/cresova-builder-diagnostic-2oqiv6`.
 
 ---
 
@@ -25,6 +25,14 @@ curl -s https://<sitio>.preview.cresova.com/ | grep -i "fonts.googleapis"
 
 **3. Y entonces sí, mirar el sitio con el diseño en sus condiciones**, y decidir si sigue por debajo
 de Lovable. Ésa es la que decide si pasamos a shadcn (§7).
+
+### Lo cerrado en el build 218
+
+| Qué | Verificado |
+|---|---|
+| Seis secciones trabajadas como ejemplar, donde el kit tenía que decir «nunca» | **renderizadas y miradas**, a 1440px y a 390px |
+| El banco de pruebas queda en el repositorio para poder volver a mirar | sí, se usa |
+| Dos héroes deliberadamente opuestos, contra el riesgo de que los copie tal cual | no probado — es la comprobación clave del despliegue |
 
 ### Lo cerrado en el build 217
 
@@ -973,6 +981,48 @@ La solución no fue observar el disco en el servidor — eso obligaría a mandar
 que toca `npm install` para no decir nada útil — sino que el navegador reporte sus propias
 escrituras: es él quien las hace. `remote-container.ts` emite el evento después de que la escritura
 tiene éxito, nunca antes.
+
+### Un ejemplar es el valor definitivo
+
+La conclusión a la que lleva la entrada de abajo, llevada hasta el final.
+
+Si el modelo cumple los valores y pierde la prosa, entonces la forma más fuerte de decirle algo no
+es una regla mejor redactada: es **una instancia de lo que se le pide**. Un ejemplar no describe lo
+que es bueno, lo es.
+
+Y el criterio de dónde escribirlos no fue «las secciones más vistosas», fue **donde el kit ha tenido
+que escribir un "nunca"**: las tarjetas en vez de lista, los cuatro cuadrados iguales, el carrusel,
+el héroe centrado. Cada «nunca» es una confesión de que el instinto del modelo va hacia el sitio
+equivocado, y de que la prosa lleva tandas sin corregirlo.
+
+**El riesgo, que es real y hay que vigilar:** que los copie literalmente y todos los sitios salgan
+iguales. Tres cosas lo sujetan, y las tres son estructurales, no decorativas:
+
+1. **Dos héroes opuestos.** Si hay dos respuestas buenas y contrarias a la misma pregunta, no hay
+   «la» respuesta que reproducir. Enseña el nivel, no la disposición.
+2. **Anotados.** Con el porqué de cada decisión al lado, se leen como lección; sin él, como
+   plantilla.
+3. **Colores por nombre de token**, nunca en hex, para que la tabla de sectores del 217 siga
+   mandando en vez de pelearse con el ejemplar.
+
+Si tras el despliegue dos sitios del mismo sector salen clonados, el riesgo se materializó y toca
+aflojar: menos ejemplares, o más contrarios entre sí.
+
+### Se renderizaron antes de escribirlos, y por eso son distintos de lo que iban a ser
+
+El primer intento tenía dos fallos que **no se ven leyendo el código**: el titular del héroe A se
+partía en cinco líneas —la columna era demasiado estrecha para su propio `clamp()`— y la foto que
+debía sangrar al borde derecho se quedaba dentro del contenedor, es decir, hacía justo lo que el kit
+prohíbe. Los dos se encontraron mirando la captura.
+
+Enviar un ejemplar que nadie ha visto es enseñarle al modelo a producir algo que nadie ha visto. Por
+eso el banco de pruebas (`docs/exemplars-harness/`) se queda en el repositorio en vez de un puñado
+de capturas: una captura envejece en silencio, la capacidad de volver a mirar no.
+
+Un detalle del montaje que costó dos intentos y conviene no repetir: **Chromium no hereda
+`HTTPS_PROXY`**. Sin pasarle `proxy` explícitamente, el CDN de Tailwind no carga y la página sale
+sin un solo estilo — que la primera vez se leyó como «el diseño está roto» cuando lo roto era el
+banco de pruebas.
 
 ### Una guía de diseño para este modelo se escribe en valores, no en principios
 

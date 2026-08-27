@@ -6,6 +6,7 @@ import type { IProviderSetting } from '~/types/model';
 import { PromptLibrary } from '~/lib/common/prompt-library';
 import { CRESOVA_BUILD_CONTRACT } from '~/lib/common/prompts/cresova-build-contract';
 import { CRESOVA_DESIGN_KIT } from '~/lib/common/prompts/cresova-design-kit';
+import { CRESOVA_SECTION_EXEMPLARS } from '~/lib/common/prompts/cresova-section-exemplars';
 import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
 import { allowedHTMLElements } from '~/utils/markdown';
@@ -236,6 +237,13 @@ export async function streamText(props: {
     if (lastUserMessage && detectBuildIntent(lastUserMessage.content)) {
       logger.info('Cresova design kit injected for a build request');
       systemPrompt = `${systemPrompt}\n${CRESOVA_DESIGN_KIT}`;
+
+      /*
+       * The worked sections go behind the same gate as the kit, for the same reason: they are the
+       * most expensive thing in this prompt and they only earn it while a site is being created.
+       * On a follow-up edit the standard already lives in the project's own code.
+       */
+      systemPrompt = `${systemPrompt}\n${CRESOVA_SECTION_EXEMPLARS}`;
 
       const query = buildPhotoQuery(lastUserMessage.content);
       const photos = await fetchPhotoCatalog(query, serverEnv?.PEXELS_API_KEY || process.env.PEXELS_API_KEY);
