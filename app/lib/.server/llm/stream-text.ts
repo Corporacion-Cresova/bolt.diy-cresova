@@ -11,7 +11,7 @@ import { CRESOVA_SECTORIAL_EXEMPLARS } from '~/lib/common/prompts/cresova-sector
 import { CRESOVA_MOTION_RECIPES } from '~/lib/common/prompts/cresova-motion-recipes';
 import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
-import { generateFluxCatalog, composeImageBriefs } from '~/lib/.server/images/flux';
+import { generateOpenRouterCatalog, composeImageBriefs } from '~/lib/.server/images/openrouter-images';
 import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { createScopedLogger } from '~/utils/logger';
@@ -106,7 +106,7 @@ function renderPhotoCatalog(photos: CatalogPhoto[]): string {
   copying the URL character for character, and pick the one that fits each section.
 
 ${photos.map((photo, index) => {
-  const tag = photo.source === 'flux' ? '[AI] ' : photo.source === 'picsum' ? '[placeholder] ' : '';
+  const tag = photo.source === 'openrouter' ? '[AI] ' : photo.source === 'picsum' ? '[placeholder] ' : '';
   return `  ${index + 1}. ${tag}${photo.url}\n     depicts: ${photo.alt}`;
 }).join('\n')}
 
@@ -278,26 +278,28 @@ export async function streamText(props: {
       const query = buildPhotoQuery(lastUserMessage.content);
 
       /*
-       * The photo catalog used to be Pexels only. With Flux enabled, the runtime first asks
-       * Flux for a small set of purpose-built images for this specific build (hero, gallery,
-       * about, context) and then asks Pexels to top up. Flux images land first so the model
-       * sees them at the top of the list and prefers them in the hero and gallery, where the
-       * consistency gain matters most. If Flux is disabled, or the API key is missing, or every
-       * generation fails, this collapses to the old behaviour: Pexels only, no fall-through
-       * ever breaks a build.
+       * The photo catalog used to be Pexels only. With the image switch enabled, the runtime
+       * first asks OpenRouter (using a dedicated image API key, separate from the LLM key so
+       * the image spend is visible on its own billing line) for a small set of purpose-built
+       * images for this specific build (hero, gallery, about, context) and then asks Pexels
+       * to top up. Generated images land first so the model sees them at the top of the
+       * list and prefers them in the hero and gallery, where the consistency gain matters
+       * most. If the switch is off, or the API key is missing, or every generation fails,
+       * this collapses to the old behaviour: Pexels only, no fall-through ever breaks a
+       * build.
        */
-      const fluxEnabled = (serverEnv?.CRESOVA_FLUX_ENABLED || process.env.CRESOVA_FLUX_ENABLED) === 'true';
-      const fluxKey = serverEnv?.REPLICATE_API_TOKEN || process.env.REPLICATE_API_TOKEN;
+      const imagesEnabled = (serverEnv?.CRESOVA_IMAGES_ENABLED || process.env.CRESOVA_IMAGES_ENABLED) === 'true';
+      const imagesKey = serverEnv?.OPENROUTER_IMAGES_KEY || process.env.OPENROUTER_IMAGES_KEY;
       let combined: CatalogPhoto[] = [];
 
-      if (fluxEnabled) {
+      if (imagesEnabled) {
         const briefs = composeImageBriefs(query, lastUserMessage.content);
-        const fluxPhotos = await generateFluxCatalog({
+        const generatedPhotos = await generateOpenRouterCatalog({
           prompts: briefs,
           sector: query,
-          apiKey: fluxKey,
+          apiKey: imagesKey,
         });
-        combined = combined.concat(fluxPhotos);
+        combined = combined.concat(generatedPhotos);
       }
 
       const pexelsPhotos = await fetchPhotoCatalog(query, serverEnv?.PEXELS_API_KEY || process.env.PEXELS_API_KEY);
@@ -305,7 +307,7 @@ export async function streamText(props: {
 
       logger.info(
         `Photo catalog for "${query}": ${combined.length} image(s) ` +
-          `(${combined.filter((p) => p.source === 'flux').length} AI, ${combined.filter((p) => p.source === 'pexels').length} stock)`,
+          `(${combined.filter((p) => p.source === 'openrouter').length} AI, ${combined.filter((p) => p.source === 'pexels').length} stock)`,
       );
 
       systemPrompt = `${systemPrompt}\n${renderPhotoCatalog(combined)}`;
