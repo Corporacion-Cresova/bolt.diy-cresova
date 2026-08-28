@@ -221,7 +221,6 @@ export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): P
  * $0.25 without a proportional quality jump.
  */
 export function composeImageBriefs(sector: string, request: string): FluxImagePrompt[] {
-  const safeSector = sector.toLowerCase();
   const safeRequest = request.replace(/[<>]/g, '').slice(0, 280);
 
   return [

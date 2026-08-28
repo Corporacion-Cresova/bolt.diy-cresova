@@ -12,6 +12,7 @@ import { CRESOVA_MOTION_RECIPES } from '~/lib/common/prompts/cresova-motion-reci
 import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
 import { generateOpenRouterCatalog, composeImageBriefs } from '~/lib/.server/images/openrouter-images';
+import { detectSector } from '~/lib/cresova/sector-detector';
 import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { createScopedLogger } from '~/utils/logger';
@@ -293,10 +294,18 @@ export async function streamText(props: {
       let combined: CatalogPhoto[] = [];
 
       if (imagesEnabled) {
-        const briefs = composeImageBriefs(query, lastUserMessage.content);
+        /*
+         * Detect the sector from the user's request so the image prompt uses the right
+         * palette, mood and composition cues. Without this, the same generic 6-brief
+         * set was being used for every request, regardless of whether the user asked
+         * for a hotel, a clinic or a workshop. detectSector() picks the closest row
+         * in the design-kit's sector table.
+         */
+        const sector = detectSector(lastUserMessage.content);
+        const briefs = composeImageBriefs(sector, lastUserMessage.content);
         const generatedPhotos = await generateOpenRouterCatalog({
           prompts: briefs,
-          sector: query,
+          sector,
           apiKey: imagesKey,
         });
         combined = combined.concat(generatedPhotos);
