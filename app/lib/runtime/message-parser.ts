@@ -10,6 +10,16 @@ const ARTIFACT_ACTION_TAG_CLOSE = '</boltAction>';
 const BOLT_QUICK_ACTIONS_OPEN = '<bolt-quick-actions>';
 const BOLT_QUICK_ACTIONS_CLOSE = '</bolt-quick-actions>';
 
+/**
+ * Default cap on the number of distinct messageIds the parser keeps state for.
+ *
+ * Continuations (the same messageId arriving in chunks because the response hit
+ * the token limit) are the only reason to keep state across parse() calls. A
+ * cap of 10 covers the realistic case of one continuation per turn across
+ * the last few turns, while keeping the Map from accumulating without bound.
+ */
+const DEFAULT_MAX_TRACKED_MESSAGES = 10;
+
 const logger = createScopedLogger('MessageParser');
 
 export interface ArtifactCallbackData extends BoltArtifactData {
@@ -45,6 +55,19 @@ type ElementFactory = (props: ElementFactoryProps) => string;
 export interface StreamingMessageParserOptions {
   callbacks?: ParserCallbacks;
   artifactElement?: ElementFactory;
+
+  /**
+   * Maximum number of distinct messageIds to keep state for. Older entries are
+   * evicted as new ones arrive, in LRU order (oldest-first).
+   *
+   * The parser keeps state per messageId only to support continuations: when a
+   * single model response is split across chunks because it hit the token limit,
+   * the second chunk re-uses the first's state and folds into the same
+   * artifactId. A long session does not need hundreds of these — a small cap
+   * (default 10) covers the realistic case of one continuation per turn, while
+   * keeping the Map from growing without bound.
+   */
+  maxTrackedMessages?: number;
 }
 
 interface MessageState {
@@ -91,8 +114,17 @@ function cleanEscapedTags(content: string) {
 export class StreamingMessageParser {
   #messages = new Map<string, MessageState>();
   #artifactCounter = 0;
+  #maxTrackedMessages: number;
 
-  constructor(private _options: StreamingMessageParserOptions = {}) {}
+  constructor(private _options: StreamingMessageParserOptions = {}) {
+    /*
+     * The cap lives on the instance so different consumers (different parsers
+     * in the same process) can pick their own cap. The default covers the
+     * realistic case of one continuation per turn; tests can override to 0 or
+     * much higher.
+     */
+    this.#maxTrackedMessages = _options.maxTrackedMessages ?? DEFAULT_MAX_TRACKED_MESSAGES;
+  }
 
   parse(messageId: string, input: string) {
     let state = this.#messages.get(messageId);
@@ -109,6 +141,35 @@ export class StreamingMessageParser {
       };
 
       this.#messages.set(messageId, state);
+
+      /*
+       * LRU bound: when the Map exceeds the cap, evict the oldest entries.
+       * Insertion order in Map is the order of set() calls, so iterating
+       * keys() gives us the oldest first. The just-inserted entry is the
+       * newest, so it stays.
+       */
+      if (this.#messages.size > this.#maxTrackedMessages) {
+        const excess = this.#messages.size - this.#maxTrackedMessages;
+        let removed = 0;
+
+        /*
+         * Map.keys() iterates in insertion order, which is the order in
+         * which messages were first seen. The first `excess` keys are the
+         * oldest; deleting them leaves the most recent messageIds.
+         */
+        const oldestKeys: string[] = [];
+        for (const key of this.#messages.keys()) {
+          if (oldestKeys.length >= excess) {
+            break;
+          }
+          oldestKeys.push(key);
+        }
+
+        for (const key of oldestKeys) {
+          this.#messages.delete(key);
+          removed++;
+        }
+      }
     }
 
     let output = '';
@@ -425,6 +486,19 @@ export class StreamingMessageParser {
 
   reset() {
     this.#messages.clear();
+  }
+
+  /**
+   * Returns the number of distinct messageIds the parser is currently tracking.
+   *
+   * Exposed publicly for tests and for diagnostics from the workbench. The
+   * parser keeps state per messageId only to support continuations (a chunked
+   * model response arriving in two pieces), so a healthy value is "however
+   * many continuations are in flight, plus one" — anything larger than that
+   * is a memory leak that this accessor makes visible.
+   */
+  getTrackedMessageCount(): number {
+    return this.#messages.size;
   }
 
   #parseActionTag(input: string, actionOpenIndex: number, actionEndIndex: number) {
