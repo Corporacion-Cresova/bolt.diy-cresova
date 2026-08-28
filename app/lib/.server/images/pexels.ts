@@ -8,6 +8,7 @@ const REQUEST_TIMEOUT_MS = 8000;
 export interface CatalogPhoto {
   url: string;
   alt: string;
+  source?: 'pexels' | 'flux' | 'picsum' | 'openrouter';
 }
 
 interface PexelsPhoto {
