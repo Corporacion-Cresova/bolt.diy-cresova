@@ -11,6 +11,7 @@ import { CRESOVA_SECTORIAL_EXEMPLARS } from '~/lib/common/prompts/cresova-sector
 import { CRESOVA_MOTION_RECIPES } from '~/lib/common/prompts/cresova-motion-recipes';
 import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
+import { generateFluxCatalog, composeImageBriefs } from '~/lib/.server/images/flux';
 import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { createScopedLogger } from '~/utils/logger';
@@ -93,12 +94,21 @@ function renderPhotoCatalog(photos: CatalogPhoto[]): string {
 `;
   }
 
+  /*
+   * When photos are mixed (some Flux, some Pexels), we mark each one so the model can tell
+   * them apart. In practice it does not change what the model does with them — both kinds
+   * resolve and both kinds belong in the page — but it keeps the log readable and lets a
+   * future regression test pin which slots are which.
+   */
   return `
 <cresova_images>
   These photo URLs were fetched for this request and are known to work. Use them verbatim,
   copying the URL character for character, and pick the one that fits each section.
 
-${photos.map((photo, index) => `  ${index + 1}. ${photo.url}\n     depicts: ${photo.alt}`).join('\n')}
+${photos.map((photo, index) => {
+  const tag = photo.source === 'flux' ? '[AI] ' : photo.source === 'picsum' ? '[placeholder] ' : '';
+  return `  ${index + 1}. ${tag}${photo.url}\n     depicts: ${photo.alt}`;
+}).join('\n')}
 
   Rules:
   - NEVER invent a different Pexels or Unsplash URL, and never edit these ones. An invented photo
@@ -108,6 +118,8 @@ ${photos.map((photo, index) => `  ${index + 1}. ${photo.url}\n     depicts: ${ph
     https://picsum.photos/seed/SLUG/WIDTH/HEIGHT.
   - Always set width and height or aspect-ratio on the img, and write the alt text in the page
     language using the description above.
+  - [AI] tagged images were generated specifically for this build and share a consistent mood
+    and palette; prefer them for the hero and the gallery. [placeholder] is a fallback only.
 </cresova_images>
 `;
 }
@@ -264,10 +276,39 @@ export async function streamText(props: {
       systemPrompt = `${systemPrompt}\n${CRESOVA_MOTION_RECIPES}`;
 
       const query = buildPhotoQuery(lastUserMessage.content);
-      const photos = await fetchPhotoCatalog(query, serverEnv?.PEXELS_API_KEY || process.env.PEXELS_API_KEY);
 
-      logger.info(`Photo catalog for "${query}": ${photos.length} image(s)`);
-      systemPrompt = `${systemPrompt}\n${renderPhotoCatalog(photos)}`;
+      /*
+       * The photo catalog used to be Pexels only. With Flux enabled, the runtime first asks
+       * Flux for a small set of purpose-built images for this specific build (hero, gallery,
+       * about, context) and then asks Pexels to top up. Flux images land first so the model
+       * sees them at the top of the list and prefers them in the hero and gallery, where the
+       * consistency gain matters most. If Flux is disabled, or the API key is missing, or every
+       * generation fails, this collapses to the old behaviour: Pexels only, no fall-through
+       * ever breaks a build.
+       */
+      const fluxEnabled = (serverEnv?.CRESOVA_FLUX_ENABLED || process.env.CRESOVA_FLUX_ENABLED) === 'true';
+      const fluxKey = serverEnv?.REPLICATE_API_TOKEN || process.env.REPLICATE_API_TOKEN;
+      let combined: CatalogPhoto[] = [];
+
+      if (fluxEnabled) {
+        const briefs = composeImageBriefs(query, lastUserMessage.content);
+        const fluxPhotos = await generateFluxCatalog({
+          prompts: briefs,
+          sector: query,
+          apiKey: fluxKey,
+        });
+        combined = combined.concat(fluxPhotos);
+      }
+
+      const pexelsPhotos = await fetchPhotoCatalog(query, serverEnv?.PEXELS_API_KEY || process.env.PEXELS_API_KEY);
+      combined = combined.concat(pexelsPhotos);
+
+      logger.info(
+        `Photo catalog for "${query}": ${combined.length} image(s) ` +
+          `(${combined.filter((p) => p.source === 'flux').length} AI, ${combined.filter((p) => p.source === 'pexels').length} stock)`,
+      );
+
+      systemPrompt = `${systemPrompt}\n${renderPhotoCatalog(combined)}`;
     }
   }
 
