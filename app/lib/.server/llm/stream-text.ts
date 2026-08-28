@@ -7,6 +7,8 @@ import { PromptLibrary } from '~/lib/common/prompt-library';
 import { CRESOVA_BUILD_CONTRACT } from '~/lib/common/prompts/cresova-build-contract';
 import { CRESOVA_DESIGN_KIT } from '~/lib/common/prompts/cresova-design-kit';
 import { CRESOVA_SECTION_EXEMPLARS } from '~/lib/common/prompts/cresova-section-exemplars';
+import { CRESOVA_SECTORIAL_EXEMPLARS } from '~/lib/common/prompts/cresova-sectorial-exemplars';
+import { CRESOVA_MOTION_RECIPES } from '~/lib/common/prompts/cresova-motion-recipes';
 import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
 import { allowedHTMLElements } from '~/utils/markdown';
@@ -244,6 +246,22 @@ export async function streamText(props: {
        * On a follow-up edit the standard already lives in the project's own code.
        */
       systemPrompt = `${systemPrompt}\n${CRESOVA_SECTION_EXEMPLARS}`;
+
+      /*
+       * Sector-specific exemplars sit next to the original six (which are turismo). The original
+       * file stays — it has density the model needs — and the sectorial file adds salud,
+       * gastronomía, oficios and comercio so the model has density for non-turismo requests too.
+       * Same gate, same cost decision: only on the first build of a new site.
+       */
+      systemPrompt = `${systemPrompt}\n${CRESOVA_SECTORIAL_EXEMPLARS}`;
+
+      /*
+       * Motion recipes are the "page that surprises" layer. The design kit caps motion at one
+       * reveal in the hero; these six recipes are the rest of what an editorial site does, and
+       * they are picked at most once or twice per page. They go behind the same gate because
+       * they cost tokens and they only earn them while a site is being created.
+       */
+      systemPrompt = `${systemPrompt}\n${CRESOVA_MOTION_RECIPES}`;
 
       const query = buildPhotoQuery(lastUserMessage.content);
       const photos = await fetchPhotoCatalog(query, serverEnv?.PEXELS_API_KEY || process.env.PEXELS_API_KEY);

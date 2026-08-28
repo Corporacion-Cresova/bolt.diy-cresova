@@ -102,8 +102,13 @@ export const CRESOVA_DESIGN_KIT = `
   - Elevation: at most two shadows in the whole page, both soft and low-opacity. No glow.
   - Container: 1200px max, 24px gutter mobile, 40px desktop.
 
-  TYPE SCALE (the single biggest tell of a generated page is timid type):
-  - Hero headline: clamp(2.5rem, 5vw, 4.5rem), line-height 1.05, tracking -0.02em, weight 600-700.
+  TYPE SCALE (the single biggest tell of a generated page is timid type — type that fits):
+  - Hero headline: clamp(2.75rem, 7vw, 6.5rem), line-height 1.0–1.05, tracking -0.025em, weight 600-700.
+    This is a CEILING, not a floor. The Ciao Energy, MONOLOG and PP Neue Montreal sites all break
+    past 6rem on the headline. The old ceiling was 4.5rem and pages looked timid by comparison;
+    6.5rem is the new bottom of «editorial». If the section can hold more, hold more.
+  - Display number (statistic, year, single count): clamp(4.5rem, 12vw, 9rem), tracking -0.03em.
+    One per page. This is the moment a number feels big.
   - Section heading: clamp(1.75rem, 3vw, 2.5rem), line-height 1.15.
   - Body: 1.0625rem, line-height 1.6. Small print: 0.875rem.
   - Never more than two weights of the display face on one page.
