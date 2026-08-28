@@ -97,9 +97,9 @@ export function describeBuildProgress(input: BuildProgressInput): BuildProgress 
   const filesTotal = files.length;
   const filesPending = filesTotal - filesDone;
 
-  const failedPaths = deduped
+  const failedPaths: string[] = deduped
     .filter((action) => action.status === 'failed')
-    .map((action) => ('filePath' in action ? action.filePath : action.type));
+    .map((action): string => ('filePath' in action && action.filePath ? action.filePath : action.type));
 
   const running = (type: ActionState['type']) =>
     deduped.some((action) => action.type === type && action.status === 'running' && !isSettledStart(action));
