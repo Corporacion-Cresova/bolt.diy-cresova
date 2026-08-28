@@ -101,8 +101,8 @@ export class ActionRunner {
   onDeployAlert?: (alert: DeployAlert) => void;
   buildOutput?: { path: string; exitCode: number; output: string };
 
-  /** Actions already run, so a continued response repeating them does not run them twice. */
-  #executedSignatures = new Set<string>();
+  /** Actions already run, so a continued response repeating them does not run them twice. Keyed by messageId. */
+  #executedSignaturesByMessage = new Map<string, Set<string>>();
 
   constructor(
     webcontainerPromise: Promise<WebContainer>,
@@ -171,7 +171,7 @@ export class ActionRunner {
   }
 
   async runAction(data: ActionCallbackData, isStreaming: boolean = false) {
-    const { actionId } = data;
+    const { actionId, messageId } = data;
     const action = this.actions.get()[actionId];
 
     if (!action) {
@@ -186,7 +186,7 @@ export class ActionRunner {
       return; // No return value here
     }
 
-    if (!isStreaming && this.#isRepeatOfAnExecutedAction(data.action)) {
+    if (!isStreaming && this.#isRepeatOfAnExecutedAction(data.action, messageId)) {
       logger.info(`[Cresova Builder] Skipping a repeated ${data.action.type} action`);
       this.#updateAction(actionId, { ...action, ...data.action, status: 'complete', executed: true });
 
@@ -211,16 +211,28 @@ export class ActionRunner {
   /**
    * A continued response often repeats every action emitted so far. Re-running them means
    * reinstalling dependencies, rewriting identical files and restarting a healthy dev server,
-   * so an action identical to one already run is treated as done.
+   * so an action identical to one already run within the SAME message is treated as done.
+   *
+   * The dedupe is keyed by messageId, not global. A global set would skip the legitimate
+   * `npm install` from the user's follow-up message because the signature matched the
+   * one from the first build, and would skip every `npm run dev` after the first because
+   * the start action always has identical content. That is the bug that broke follow-ups.
    */
-  #isRepeatOfAnExecutedAction(action: BoltAction): boolean {
+  #isRepeatOfAnExecutedAction(action: BoltAction, messageId: string): boolean {
+    let signatures = this.#executedSignaturesByMessage.get(messageId);
+
+    if (!signatures) {
+      signatures = new Set<string>();
+      this.#executedSignaturesByMessage.set(messageId, signatures);
+    }
+
     const signature = `${action.type}:${'filePath' in action ? action.filePath : ''}:${action.content}`;
 
-    if (this.#executedSignatures.has(signature)) {
+    if (signatures.has(signature)) {
       return true;
     }
 
-    this.#executedSignatures.add(signature);
+    signatures.add(signature);
 
     return false;
   }
