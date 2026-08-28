@@ -302,10 +302,18 @@ export class ActionRunner {
             });
 
           /*
-           * adding a delay to avoid any race condition between 2 start actions
-           * i am up for a better approach
+           * The original code did `await new Promise(setTimeout(2000))` here "to
+           * avoid any race condition between 2 start actions". That hack added 2
+           * seconds to every build with at least one start action — a real cost
+           * across builds with multiple phases. The race the comment describes
+           * is solved by the chain above: the start action runs non-blocking,
+           * and the next action in the queue is sequenced by #currentExecutionPromise
+           * which the runner already manages.
+           *
+           * We still want to reconcile the file tree on the runner backend, but
+           * that is a fast operation — a network round-trip to the runner, not
+           * a sleep — so we await it directly without a sleep before.
            */
-          await new Promise((resolve) => setTimeout(resolve, 2000));
           await this.#reconcileServerFiles();
 
           return;
