@@ -49,63 +49,46 @@ export default class OpenRouterProvider extends BaseProvider {
   staticModels: ModelInfo[] = [
     /*
      * ==========================================================
-     * 1. DEEPSEEK V4 FLASH
-     * Principal recomendado para uso diario.
-     * Muy económico, rápido y fuerte en coding/agentes.
-     * 1M tokens de contexto.
+     * 1. CLAUDE 4.5 SONNET — DISEÑO & TASTE
+     * El MEJOR en CSS, layout, tipografía, animaciones.
+     * Usar para: landing pages, diseño visual, UI polish.
+     * Más caro pero vale la pena para trabajo de "taste".
+     * 200K tokens de contexto.
      * ==========================================================
      */
     {
-      name: 'deepseek/deepseek-v4-flash',
-      label: '⚡ DeepSeek V4 Flash — Recomendado / Económico',
+      name: 'anthropic/claude-4.5-sonnet',
+      label: '🎨 Claude 4.5 Sonnet — Diseño & Taste',
       provider: 'OpenRouter',
-      maxTokenAllowed: 1000000,
-      maxCompletionTokens: COMPLETION_TOKENS,
+      maxTokenAllowed: 200000,
+      maxCompletionTokens: 64000,
     },
 
     /*
      * ==========================================================
-     * 2. QWEN3 CODER NEXT
-     * Especializado específicamente en programación,
-     * tool use y agentes de código.
-     * 262K tokens de contexto.
-     * ==========================================================
-     */
-    {
-      name: 'qwen/qwen3-coder-next',
-      label: '💻 Qwen3 Coder Next — Coding',
-      provider: 'OpenRouter',
-      maxTokenAllowed: 262144,
-      maxCompletionTokens: COMPLETION_TOKENS,
-    },
-
-    /*
-     * ==========================================================
-     * 3. QWEN 3.6 PLUS
-     * Para proyectos complejos, frontend, razonamiento
-     * y trabajo sobre repositorios grandes.
-     * 1M tokens de contexto.
-     * ==========================================================
-     */
-    {
-      name: 'qwen/qwen3.6-plus',
-      label: '🧠 Qwen3.6 Plus — Coding Premium',
-      provider: 'OpenRouter',
-      maxTokenAllowed: 1000000,
-      maxCompletionTokens: COMPLETION_TOKENS,
-    },
-
-    /*
-     * ==========================================================
-     * 4. DEEPSEEK V4 PRO
-     * Modelo de máxima capacidad de DeepSeek.
-     * Para tareas realmente difíciles y refactors grandes.
-     * 1M tokens de contexto.
+     * 2. DEEPSEEK V4 PRO — BACKEND / CALIDAD
+     * Coding serio, lógica, refactors grandes, sistemas.
+     * Default Cresova. 1M tokens de contexto.
      * ==========================================================
      */
     {
       name: 'deepseek/deepseek-v4-pro',
-      label: '🔥 DeepSeek V4 Pro — Máxima Calidad',
+      label: '🚀 DeepSeek V4 Pro — Backend (calidad)',
+      provider: 'OpenRouter',
+      maxTokenAllowed: 1000000,
+      maxCompletionTokens: COMPLETION_TOKENS,
+    },
+
+    /*
+     * ==========================================================
+     * 3. DEEPSEEK V4 FLASH — BACKEND / RÁPIDO
+     * Iteraciones rápidas, fixes chicos, chat diario.
+     * 10x más barato que Pro. 1M tokens de contexto.
+     * ==========================================================
+     */
+    {
+      name: 'deepseek/deepseek-v4-flash',
+      label: '⚡ DeepSeek V4 Flash — Backend (rápido)',
       provider: 'OpenRouter',
       maxTokenAllowed: 1000000,
       maxCompletionTokens: COMPLETION_TOKENS,
