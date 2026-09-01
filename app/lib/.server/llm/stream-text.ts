@@ -15,6 +15,7 @@ import { generateOpenRouterCatalog, composeImageBriefs } from '~/lib/.server/ima
 import { detectSector } from '~/lib/cresova/sector-detector';
 import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
+import { trackGeneration } from '~/lib/modules/llm/cost-tracker';
 import { createScopedLogger } from '~/utils/logger';
 import { createFilesContext, extractPropertiesFromMessage } from './utils';
 import { discussPrompt } from '~/lib/common/prompts/discuss-prompt';
@@ -468,5 +469,17 @@ export async function streamText(props: {
     ),
   );
 
-  return await _streamText(streamParams);
+  return await _streamText({
+    ...streamParams,
+    onFinish: ({ usage }) => {
+      // Track the cost of this generation for internal monitoring
+      if (usage) {
+        trackGeneration(
+          modelDetails.name,
+          usage.promptTokens || 0,
+          usage.completionTokens || 0,
+        );
+      }
+    },
+  });
 }
