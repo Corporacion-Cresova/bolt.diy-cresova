@@ -245,37 +245,29 @@ export async function streamText(props: {
     systemPrompt = `${systemPrompt}\n${CRESOVA_BUILD_CONTRACT}`;
 
     /*
-     * The concrete design kit is only worth its tokens when a site is being created. On follow-up
-     * edits the choices already live in the code, so re-sending the menu just costs money.
+     * Cresova Design Kit — SIEMPRE en modo build.
+     *
+     * Antes estas 78KB de instrucciones de diseño estaban detrás de detectBuildIntent(),
+     * un regex frágil que fallaba en reconocer solicitudes válidas (ej: "una web para mi
+     * taller" sin verbo explícito). El resultado: Claude generaba sin guía de diseño y la
+     * calidad era inaceptable comparada con Lovable.
+     *
+     * El costo en tokens (13KB design kit + 65KB ejemplares) es insignificante contra
+     * el costo de una generación de mala calidad que hay que rehacer. Claude 4.5 Sonnet
+     * y DeepSeek V4 tienen 200K+ tokens de contexto — esto no los llena ni al 40%.
+     *
+     * En follow-up edits el kit igual ayuda: mantiene al modelo dentro de las decisiones
+     * de diseño ya tomadas en lugar de inventar variaciones inconsistentes.
      */
+    logger.info('Cresova design kit injected for build mode');
+    systemPrompt = `${systemPrompt}\n${CRESOVA_DESIGN_KIT}`;
+    systemPrompt = `${systemPrompt}\n${CRESOVA_SECTION_EXEMPLARS}`;
+    systemPrompt = `${systemPrompt}\n${CRESOVA_SECTORIAL_EXEMPLARS}`;
+    systemPrompt = `${systemPrompt}\n${CRESOVA_MOTION_RECIPES}`;
+
     const lastUserMessage = findUserRequest(processedMessages);
 
-    if (lastUserMessage && detectBuildIntent(lastUserMessage.content)) {
-      logger.info('Cresova design kit injected for a build request');
-      systemPrompt = `${systemPrompt}\n${CRESOVA_DESIGN_KIT}`;
-
-      /*
-       * The worked sections go behind the same gate as the kit, for the same reason: they are the
-       * most expensive thing in this prompt and they only earn it while a site is being created.
-       * On a follow-up edit the standard already lives in the project's own code.
-       */
-      systemPrompt = `${systemPrompt}\n${CRESOVA_SECTION_EXEMPLARS}`;
-
-      /*
-       * Sector-specific exemplars sit next to the original six (which are turismo). The original
-       * file stays — it has density the model needs — and the sectorial file adds salud,
-       * gastronomía, oficios and comercio so the model has density for non-turismo requests too.
-       * Same gate, same cost decision: only on the first build of a new site.
-       */
-      systemPrompt = `${systemPrompt}\n${CRESOVA_SECTORIAL_EXEMPLARS}`;
-
-      /*
-       * Motion recipes are the "page that surprises" layer. The design kit caps motion at one
-       * reveal in the hero; these six recipes are the rest of what an editorial site does, and
-       * they are picked at most once or twice per page. They go behind the same gate because
-       * they cost tokens and they only earn them while a site is being created.
-       */
-      systemPrompt = `${systemPrompt}\n${CRESOVA_MOTION_RECIPES}`;
+    if (lastUserMessage) {
 
       const query = buildPhotoQuery(lastUserMessage.content);
 
