@@ -49,11 +49,23 @@ export default class OpenRouterProvider extends BaseProvider {
   staticModels: ModelInfo[] = [
     /*
      * ==========================================================
-     * 1. CLAUDE 4.5 SONNET — DISEÑO & TASTE
-     * El MEJOR en CSS, layout, tipografía, animaciones.
-     * Usar para: landing pages, diseño visual, UI polish.
-     * Más caro pero vale la pena para trabajo de "taste".
-     * 200K tokens de contexto.
+     * 1. QWEN 3.8 MAX — DISEÑO FRONTEND
+     * Empatado con Claude Opus 5 Max en WebDev Arena Frontend.
+     * 60% más barato que Claude. Mejor calidad/precio para diseño.
+     * ==========================================================
+     */
+    {
+      name: 'qwen/qwen3.8-max',
+      label: '🔥 Qwen 3.8 Max — Diseño Frontend',
+      provider: 'OpenRouter',
+      maxTokenAllowed: 131072,
+      maxCompletionTokens: COMPLETION_TOKENS,
+    },
+
+    /*
+     * ==========================================================
+     * 2. CLAUDE 4.5 SONNET — DISEÑO & TASTE
+     * Respaldo premium para diseño visual.
      * ==========================================================
      */
     {
@@ -66,8 +78,21 @@ export default class OpenRouterProvider extends BaseProvider {
 
     /*
      * ==========================================================
-     * 2. DEEPSEEK V4 PRO — BACKEND / CALIDAD
-     * Coding serio, lógica, refactors grandes, sistemas.
+     * 3. TENCENT HY4 — CALIDAD/PRECIO
+     * Ranking #6 Frontend, 1M contexto, diseñado para coding agents.
+     * ==========================================================
+     */
+    {
+      name: 'tencent/hy4-preview',
+      label: '💎 Tencent Hy4 — Calidad/Precio',
+      provider: 'OpenRouter',
+      maxTokenAllowed: 1000000,
+      maxCompletionTokens: COMPLETION_TOKENS,
+    },
+
+    /*
+     * ==========================================================
+     * 4. DEEPSEEK V4 PRO — BACKEND / CALIDAD
      * Default Cresova. 1M tokens de contexto.
      * ==========================================================
      */
