@@ -49,14 +49,14 @@ export default class OpenRouterProvider extends BaseProvider {
   staticModels: ModelInfo[] = [
     /*
      * ==========================================================
-     * 1. QWEN 3.8 MAX — DISEÑO FRONTEND
-     * Empatado con Claude Opus 5 Max en WebDev Arena Frontend.
-     * 60% más barato que Claude. Mejor calidad/precio para diseño.
+     * 1. QWEN 3.8 27B — DISEÑO FRONTEND
+     * Modelo denso sin razonamiento forzado. Buena calidad de código.
+     * Sin el overhead de "thinking" que vacía los tokens de output.
      * ==========================================================
      */
     {
-      name: 'qwen/qwen3.8-max',
-      label: '🔥 Qwen 3.8 Max — Diseño Frontend',
+      name: 'qwen/qwen3.8-27b',
+      label: '🔥 Qwen 3.8 27B — Diseño Frontend',
       provider: 'OpenRouter',
       maxTokenAllowed: 131072,
       maxCompletionTokens: COMPLETION_TOKENS,
