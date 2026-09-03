@@ -36,7 +36,15 @@ export const PROVIDER_COMPLETION_LIMITS: Record<string, number> = {
  * These models use internal reasoning tokens and have different API parameter requirements
  */
 export function isReasoningModel(modelName: string): boolean {
-  const result = /^(o1|o3|gpt-5)/i.test(modelName);
+  /*
+   * Models that separate "thinking" tokens from "completion" tokens.
+   * These need maxCompletionTokens (not maxTokens) in the API call so the
+   * thinking budget doesn't cannibalise the visible output.
+   *
+   * - o1, o3, gpt-5 (OpenAI reasoning models)
+   * - qwen/qwen3.8-* (Qwen reasoning models — default_enabled + xhigh effort)
+   */
+  const result = /^(o1|o3|gpt-5|qwen\/qwen3\.8)/i.test(modelName);
 
   // DEBUG: Test regex matching
   console.log(`REGEX TEST: "${modelName}" matches reasoning pattern: ${result}`);

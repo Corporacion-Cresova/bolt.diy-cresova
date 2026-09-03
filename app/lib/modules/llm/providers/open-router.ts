@@ -50,16 +50,17 @@ export default class OpenRouterProvider extends BaseProvider {
     /*
      * ==========================================================
      * 1. QWEN 3.8 27B — DISEÑO FRONTEND
-     * Modelo denso sin razonamiento forzado. Buena calidad de código.
-     * Sin el overhead de "thinking" que vacía los tokens de output.
+     * Modelo denso con razonamiento opcional (default xhigh).
+     * Al detectarlo como reasoning model, el thinking no
+     * canibaliza los tokens de output.
      * ==========================================================
      */
     {
       name: 'qwen/qwen3.8-27b',
       label: '🔥 Qwen 3.8 27B — Diseño Frontend',
       provider: 'OpenRouter',
-      maxTokenAllowed: 131072,
-      maxCompletionTokens: COMPLETION_TOKENS,
+      maxTokenAllowed: 1000000,
+      maxCompletionTokens: 131072,
     },
 
     /*
