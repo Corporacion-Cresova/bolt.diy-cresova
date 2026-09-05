@@ -60,20 +60,20 @@ export const CRESOVA_BUILD_CONTRACT = `
   - Build FASE 1 in this same response. You will be asked for the next phase automatically, so do
     not ask the user to continue and do not stop to check in.
 
-  PERF — HOVERS, ANIMATIONS AND LAYOUT (these are the most common sources of lag):
-  - Use `transition-transform` or `transition-opacity`, NEVER `transition-all`. Animating all
-    forces layout recalculation on every frame and is the #1 cause of janky hover responses.
-  - Every element that scales, moves or rotates on hover needs `will-change: transform` on its
-    class (or `transform: translateZ(0)` as a lighter alternative). Without it the browser paints
-    the element anew each time instead of promoting it to the GPU.
-  - `backdrop-filter: blur()` is expensive. At most one instance per page (a nav backdrop, never
-    on every card). On mobile each extra blur adds measurable scrolling lag.
-  - Decorative background blurs (`blur-3xl` / `blur-xl`) floating behind content must have
-    `will-change: opacity` or `transform: translateZ(0)` so they render on a composited layer
-    instead of repainting behind every scroll frame.
-  - Never animate `box-shadow` on hover — it forces a repaint. Start with the shadow present and
-    only animate `translateY(-2px)`.
-  - Every `<img>` needs explicit `width` and `height` attributes. Without them the browser cannot
-    reserve space, causing cumulative layout shift (CLS) that makes scrolling feel sluggish.
+  PERF: ANIMATIONS AND HOVER PERFORMANCE:
+  - Use transition-transform or transition-opacity, NEVER transition-all. Animating all properties
+    forces the browser to recalculate layout on every frame and is the most common cause of jank.
+  - Every element that scales, moves or rotates on hover needs will-change: transform on its class
+    (or transform: translateZ(0) as a lighter alternative). Without it the browser paints the
+    element from scratch each time instead of promoting it to the GPU.
+  - backdrop-filter: blur() is expensive. Use it at most once per page (a nav backdrop, never on
+    every card). On mobile each extra blur adds measurable scrolling lag.
+  - Decorative background blurs floating behind content must have will-change: opacity or
+    transform: translateZ(0) so they render on a composited layer instead of repainting behind
+    every scroll frame.
+  - Never animate box-shadow on hover: it forces a repaint. Start with the shadow already present
+    and only animate translateY(-2px).
+  - Every img element needs explicit width and height attributes. Without them the browser cannot
+    reserve space, causing cumulative layout shift that makes scrolling feel sluggish.
 </cresova_execution_contract>
 `;
