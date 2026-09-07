@@ -332,9 +332,20 @@ export const Workbench = memo(
       setSelectedView('preview');
     }, [activePreviewUrl]);
 
+    /*
+     * The code panel is mounted even while the preview is the one on screen (the three views slide,
+     * they do not unmount), so this used to mirror every file into the editor on every write of a
+     * build nobody was watching in Code. Our users almost never open Code at all, and the ones who
+     * do open it after the site is built. Syncing only while that view is the visible one keeps it
+     * exactly as fresh for them and takes the work off the critical path of a generation.
+     */
     useEffect(() => {
+      if (selectedView !== 'code' && selectedView !== 'diff') {
+        return;
+      }
+
       workbenchStore.setDocuments(files);
-    }, [files]);
+    }, [files, selectedView]);
 
     const onEditorChange = useCallback<OnEditorChange>((update) => {
       workbenchStore.setCurrentDocumentContent(update.content);

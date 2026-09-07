@@ -29,6 +29,7 @@ import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { useMCPStore } from '~/lib/stores/mcp';
 import type { LlmErrorAlertType } from '~/types/actions';
 import { ARTIFACT_RECOVERY_PROMPT, AUTO_START_ANNOTATION, runExecutionGuard } from '~/lib/cresova/execution-guard';
+import { CONTINUE_PROMPT } from '~/lib/common/prompts/prompts';
 import { budgetExhaustedAlert, claimAutoTurn, resetAutoTurns } from '~/lib/cresova/auto-turn-budget';
 
 const logger = createScopedLogger('Chat');
@@ -310,6 +311,18 @@ export const ChatImpl = memo(
           append({
             role: 'user',
             content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${ARTIFACT_RECOVERY_PROMPT}`,
+            annotations: ['hidden'],
+          });
+        },
+        assistantMessage: extractMessageText(lastMessage),
+        requestContinuation: () => {
+          if (!askForAutoTurn('artifact-continuation')) {
+            return;
+          }
+
+          append({
+            role: 'user',
+            content: `[Model: ${model}]\n\n[Provider: ${provider.name}]\n\n${CONTINUE_PROMPT}`,
             annotations: ['hidden'],
           });
         },

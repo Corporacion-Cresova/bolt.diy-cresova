@@ -32,32 +32,51 @@ export class EditorStore {
     }
   }
 
+  /**
+   * Mirrors the project's files into editor documents.
+   *
+   * This runs once per file write while a build streams, so it rebuilt a whole new document object
+   * for every file in the project — the starter template included — ten times a second, and handed
+   * every subscriber a map in which nothing was reference-equal to what it had before. That is what
+   * made a long generation lock the tab. Now an unchanged file keeps the exact object it already
+   * had, and a pass in which nothing changed does not touch the store at all.
+   */
   setDocuments(files: FileMap) {
     const previousDocuments = this.documents.value;
+    const nextDocuments: EditorDocuments = {};
+    let changed = false;
 
-    this.documents.set(
-      Object.fromEntries<EditorDocument>(
-        Object.entries(files)
-          .map(([filePath, dirent]) => {
-            if (dirent === undefined || dirent.type !== 'file') {
-              return undefined;
-            }
+    for (const [filePath, dirent] of Object.entries(files)) {
+      if (dirent === undefined || dirent.type !== 'file') {
+        continue;
+      }
 
-            const previousDocument = previousDocuments?.[filePath];
+      const previousDocument = previousDocuments?.[filePath];
 
-            return [
-              filePath,
-              {
-                value: dirent.content,
-                filePath,
-                isBinary: dirent.isBinary, // Add this line
-                scroll: previousDocument?.scroll,
-              },
-            ] as [string, EditorDocument];
-          })
-          .filter(Boolean) as Array<[string, EditorDocument]>,
-      ),
-    );
+      if (
+        previousDocument &&
+        previousDocument.value === dirent.content &&
+        previousDocument.isBinary === dirent.isBinary
+      ) {
+        nextDocuments[filePath] = previousDocument;
+        continue;
+      }
+
+      changed = true;
+      nextDocuments[filePath] = {
+        value: dirent.content,
+        filePath,
+        isBinary: dirent.isBinary,
+        scroll: previousDocument?.scroll,
+      };
+    }
+
+    // a file that disappeared also has to reach the store
+    if (!changed && Object.keys(nextDocuments).length === Object.keys(previousDocuments ?? {}).length) {
+      return;
+    }
+
+    this.documents.set(nextDocuments);
   }
 
   setSelectedFile(filePath: string | undefined) {

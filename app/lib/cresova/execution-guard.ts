@@ -85,9 +85,16 @@ export interface ExecutionGuardContext {
    * else would leave that gap half open.
    */
   requestNextPhase: (prompt: string, label: string) => void;
+
+  /** Raw content of the assistant message that just finished streaming. */
+  assistantMessage: string;
+
+  /** Asks the model to pick the response up where it was cut off. */
+  requestContinuation: () => void;
 }
 
 export type ExecutionGuardOutcome =
+  | 'continuing'
   | 'next-phase'
   | 'idle'
   | 'artifact-recovery'
@@ -231,10 +238,37 @@ async function waitForPreview(timeoutMs: number, giveUp?: () => boolean): Promis
  * Every step reuses the existing Bolt machinery (artifacts, action runner, previews store);
  * the guard only fills in the steps the model left out.
  */
+/**
+ * Whether the turn was cut off in the middle of its artifact.
+ *
+ * The server continues a response that stops on the completion limit, but two things end a turn
+ * without that hook: the five-segment ceiling, and a stream that errors mid-response. Both leave an
+ * artifact that was opened and never closed — some files written, the rest missing — and the guard
+ * used to sail straight past it into the preview flow, because a truncated turn does have actions.
+ * The user was left with half a site and no way to ask for the other half.
+ */
+export function isTruncatedArtifact(assistantMessage: string): boolean {
+  const opened = (assistantMessage.match(/<boltArtifact/g) ?? []).length;
+  const closed = (assistantMessage.match(/<\/boltArtifact>/g) ?? []).length;
+
+  return opened > closed;
+}
+
 export async function runExecutionGuard(context: ExecutionGuardContext): Promise<ExecutionGuardOutcome> {
   const { assistantMessageId, userMessage, recoveryAttempt } = context;
 
   await workbenchStore.waitForPendingActions();
+
+  if (isTruncatedArtifact(context.assistantMessage)) {
+    /*
+     * Bounded by the automatic turn budget on the caller's side: a model that keeps truncating
+     * would otherwise ask itself to continue forever, which is the loop that budget exists for.
+     */
+    logger.warn('The response was cut off mid-artifact, asking the model to continue');
+    context.requestContinuation();
+
+    return 'continuing';
+  }
 
   const actions = getTurnActions(assistantMessageId);
   const fileActions = actions.filter((action) => action.type === 'file');
