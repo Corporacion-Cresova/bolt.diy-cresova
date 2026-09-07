@@ -8,6 +8,28 @@ interface Props {
   postMessage: (message: string) => void;
 }
 
+/**
+ * How the "Ask Bolt" button hands an error to the model.
+ *
+ * The fence used to be tagged `sh` for a terminal error, which told the model the text WAS a shell
+ * script. Handed a PostCSS failure it did the obedient thing and ran it:
+ * `export CI=true FORCE_COLOR=0 && Pre-transform error: ...`, and the shell answered
+ * `border-ink/10: not found`. So the one button meant to fix a broken build spent its turn
+ * re-running the error message. It is output, and saying so is what points the model at the code
+ * that produced it.
+ */
+function describeErrorForModel(isPreview: boolean, content: string): string {
+  const source = isPreview ? 'el navegador' : 'el servidor de desarrollo';
+
+  return (
+    `Esto lo devolvió ${source}. Es SALIDA, no un comando ni código para ejecutar: ` +
+    `arreglá el archivo del proyecto que lo provoca.\n` +
+    '```text\n' +
+    content +
+    '\n```\n'
+  );
+}
+
 export default function ChatAlert({ alert, clearAlert, postMessage }: Props) {
   const { description, content, source } = alert;
 
@@ -69,11 +91,7 @@ export default function ChatAlert({ alert, clearAlert, postMessage }: Props) {
             >
               <div className={classNames(' flex gap-2')}>
                 <button
-                  onClick={() =>
-                    postMessage(
-                      `*Fix this ${isPreview ? 'preview' : 'terminal'} error* \n\`\`\`${isPreview ? 'js' : 'sh'}\n${content}\n\`\`\`\n`,
-                    )
-                  }
+                  onClick={() => postMessage(describeErrorForModel(isPreview, content))}
                   className={classNames(
                     `px-2 py-1.5 rounded-md text-sm font-medium`,
                     'bg-bolt-elements-button-primary-background',
