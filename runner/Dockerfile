@@ -1,8 +1,15 @@
 FROM node:22-bookworm-slim
 
-# git is needed by some npm dependencies; ca-certificates for https registries
+# git is needed by some npm dependencies; ca-certificates for https registries.
+#
+# chromium is here to photograph a published site: its own CLI takes the screenshot
+# (--headless --screenshot), so nothing in package.json depends on it and a runner whose image
+# somehow lacks it still publishes — it just publishes without a picture. fonts-liberation and
+# fonts-noto-color-emoji matter more than they look: without them every screenshot renders in a
+# fallback face and the thumbnails misrepresent the very typography the design kit chose.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates git \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates git chromium fonts-liberation fonts-noto fonts-noto-color-emoji \
   && update-ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 

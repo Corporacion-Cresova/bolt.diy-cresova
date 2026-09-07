@@ -19,6 +19,119 @@ import {
  */
 const BUILD_OUTPUT_DIRS = ['dist', 'build', 'out', 'output', '.next', 'public'];
 
+/*
+ * How a published site gets its picture.
+ *
+ * Chromium's own CLI takes the screenshot, so there is no Playwright, no Puppeteer and no npm
+ * dependency here at all — the binary is in the image and this spawns it.
+ *
+ * The URL is the trick worth explaining. The published site is served by host, not by path
+ * (`<name>.preview.cresova.com`), and its built assets are absolute (`/assets/index-x.js`), so
+ * serving it under a path prefix to reach it locally would break every one of them. Instead
+ * Chromium is told to resolve that hostname to this container: the Host header carries the label
+ * the router needs, the asset paths stay absolute and correct, and nothing leaves the machine — no
+ * DNS, no TLS, no round trip out through the proxy and back.
+ *
+ * 1200x630 is the size social cards are cropped to, so the same file serves the dashboard
+ * thumbnail and the og:image without a second capture.
+ */
+const SHOT_WIDTH = 1200;
+const SHOT_HEIGHT = 630;
+const SHOT_TIMEOUT_MS = 30_000;
+const CHROMIUM_BINARIES = ['chromium', 'chromium-browser', 'google-chrome'];
+
+export const THUMBNAIL_FILE = 'og.png';
+
+async function captureScreenshot({ url, outputPath, port }) {
+  const args = [
+    '--headless=new',
+    '--no-sandbox',
+    '--disable-gpu',
+    '--disable-dev-shm-usage',
+    '--hide-scrollbars',
+    `--host-resolver-rules=MAP *:${port} 127.0.0.1:${port}`,
+    `--window-size=${SHOT_WIDTH},${SHOT_HEIGHT}`,
+
+    // gives the SPA time to mount, fetch its fonts and paint before the shutter, without a sleep
+    '--virtual-time-budget=8000',
+    `--screenshot=${outputPath}`,
+    url,
+  ];
+
+  for (const binary of CHROMIUM_BINARIES) {
+    const exitCode = await new Promise((resolve) => {
+      let child;
+
+      try {
+        child = spawn(binary, args, { stdio: 'ignore' });
+      } catch {
+        resolve('missing');
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        resolve('timeout');
+      }, SHOT_TIMEOUT_MS);
+
+      child.on('error', () => {
+        clearTimeout(timer);
+        resolve('missing');
+      });
+      child.on('exit', (code) => {
+        clearTimeout(timer);
+        resolve(code);
+      });
+    });
+
+    if (exitCode === 'missing') {
+      continue;
+    }
+
+    if (exitCode === 0 && existsSync(outputPath)) {
+      return true;
+    }
+
+    console.warn(`Screenshot with ${binary} did not produce a file (exit ${exitCode})`);
+
+    return false;
+  }
+
+  console.warn('No chromium binary available, publishing without a thumbnail');
+
+  return false;
+}
+
+/**
+ * Points a published page's social card at the screenshot next to it.
+ *
+ * Only fills what the page does not already declare: a site that wrote its own og:image knows
+ * better than we do.
+ */
+function withSocialCard(html, { imageUrl, pageUrl }) {
+  if (/property=["']og:image["']/i.test(html)) {
+    return html;
+  }
+
+  const title = html.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim() ?? '';
+  const description = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)?.[1]?.trim() ?? '';
+
+  const tags = [
+    `<meta property="og:image" content="${imageUrl}">`,
+    '<meta property="og:image:width" content="1200">',
+    '<meta property="og:image:height" content="630">',
+    '<meta name="twitter:card" content="summary_large_image">',
+    `<meta property="og:url" content="${pageUrl}">`,
+    '<meta property="og:type" content="website">',
+    title ? `<meta property="og:title" content="${title}">` : '',
+    description ? `<meta property="og:description" content="${description}">` : '',
+  ]
+    .filter(Boolean)
+    .join('\n    ');
+
+  return html.includes('</head>') ? html.replace('</head>', `    ${tags}\n  </head>`) : html;
+}
+
 const PORT_RANGE_START = 41000;
 const PORT_RANGE_END = 41999;
 const KILL_GRACE_MS = 4000;
@@ -195,6 +308,7 @@ export class ProjectManager {
     root,
     publishedRoot,
     previewDomain,
+    port,
     onEvent,
     readyGraceAfterExitMs = READY_GRACE_AFTER_EXIT_MS,
     readyCeilingMs = READY_CEILING_MS,
@@ -202,6 +316,9 @@ export class ProjectManager {
     this.root = root;
     this.publishedRoot = publishedRoot;
     this.previewDomain = previewDomain;
+
+    // the port this runner's own HTTP server listens on: the screenshot loads the site through it
+    this.port = port;
     this.onEvent = onEvent;
     this.readyGraceAfterExitMs = readyGraceAfterExitMs;
     this.readyCeilingMs = readyCeilingMs;
@@ -370,7 +487,49 @@ export class ProjectManager {
     await rename(tempDir, finalDir);
     console.log(`Published ${projectId} as ${name}`);
 
-    return { url: this.publishedUrl(name) };
+    const thumbnailUrl = await this.#captureThumbnail(name, finalDir);
+
+    return { url: this.publishedUrl(name), thumbnailUrl };
+  }
+
+  /**
+   * Takes the published site's picture and leaves it inside the published directory.
+   *
+   * It goes in there rather than beside it on purpose: that directory is already served publicly
+   * and already outlives both the runner restarting and the project being reaped, so the picture
+   * inherits the one lifetime in this system that matches what it is for. The dashboard reads it
+   * over the same URL the social card does.
+   *
+   * Never lets a failure reach the caller. A publish that worked must not be reported as failed
+   * because the screenshot did not come out.
+   */
+  async #captureThumbnail(name, publishedDir) {
+    const pageUrl = this.publishedUrl(name);
+
+    try {
+      const localUrl = `http://${name}.${this.previewDomain}:${this.port}/`;
+      const outputPath = join(publishedDir, THUMBNAIL_FILE);
+
+      const captured = await captureScreenshot({ url: localUrl, outputPath, port: this.port });
+
+      if (!captured) {
+        return undefined;
+      }
+
+      const indexPath = join(publishedDir, 'index.html');
+
+      if (existsSync(indexPath)) {
+        const html = await readFile(indexPath, 'utf8');
+        await writeFile(indexPath, withSocialCard(html, { imageUrl: `${pageUrl}/${THUMBNAIL_FILE}`, pageUrl }));
+      }
+
+      console.log(`Captured thumbnail for ${name}`);
+
+      return `${pageUrl}/${THUMBNAIL_FILE}`;
+    } catch (error) {
+      console.warn(`Thumbnail for ${name} failed, publishing anyway:`, error?.message ?? error);
+      return undefined;
+    }
   }
 
   /**

@@ -23,7 +23,12 @@ export const ProjectCard = memo(({ chat, onDelete }: ProjectCardProps) => {
       )}
     >
       <a href={`/chat/${chat.urlId}`} className="block" aria-label={`Abrir ${chat.description}`}>
-        <PreviewThumbnail seed={chat.id} title={chat.description} label="Proyecto" />
+        <PreviewThumbnail
+          seed={chat.id}
+          title={chat.description}
+          label={chat.publishedUrl ? 'Publicado' : 'Proyecto'}
+          imageUrl={chat.thumbnailUrl}
+        />
         <div className="p-3 space-y-1">
           <h3 className="text-sm font-semibold text-bolt-elements-textPrimary truncate pr-6">{chat.description}</h3>
           <div className="flex items-center gap-1.5 text-xs text-bolt-elements-textTertiary">

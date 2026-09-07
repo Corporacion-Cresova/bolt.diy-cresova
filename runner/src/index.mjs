@@ -46,6 +46,7 @@ const projects = new ProjectManager({
   root: PROJECT_ROOT,
   publishedRoot: PUBLISHED_ROOT,
   previewDomain: PREVIEW_DOMAIN,
+  port: PORT,
   onEvent(projectId, event) {
     for (const socket of sockets.get(projectId) ?? []) {
       if (socket.readyState === socket.OPEN) {

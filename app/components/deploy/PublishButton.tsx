@@ -7,6 +7,8 @@ import { executionBackendStore } from '~/lib/cresova/execution-backend';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { webcontainer } from '~/lib/webcontainer';
 import type { RemoteContainer } from '~/lib/cresova/remote-container';
+import { rememberPublishedSite } from '~/lib/cresova/published-thumbnails';
+import { chatId } from '~/lib/persistence';
 
 /** The same shape the runner itself checks: `isValidPublishName`, minus the `cresova-` rule the user cannot hit by typing normally. */
 function sanitizePublishName(input: string): string {
@@ -58,7 +60,13 @@ export function PublishButton() {
 
     try {
       const container = await webcontainer;
-      const { url } = await (container as unknown as RemoteContainer).publish(sanitized);
+      const { url, thumbnailUrl } = await (container as unknown as RemoteContainer).publish(sanitized);
+
+      /*
+       * The runner photographs the site it just published; remembering it here is what lets the
+       * projects gallery show the real page instead of the synthetic card it falls back to.
+       */
+      rememberPublishedSite(chatId.get(), { url, thumbnailUrl });
       setPublishedUrl(url);
       toast.success('Sitio publicado');
     } catch (error) {

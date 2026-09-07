@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { getAll, deleteById } from './db';
 import { db } from './useChatHistory';
+import { getPublishedSites } from '~/lib/cresova/published-thumbnails';
 
 /**
  * A finished (or in-progress) build, as shown in the projects rail and the
@@ -13,6 +14,12 @@ export interface RecentChatSummary {
   urlId: string;
   description: string;
   timestamp: string;
+
+  /** Screenshot of the published site, when this project has one. */
+  thumbnailUrl?: string;
+
+  /** Where the published site lives, when this project has been published. */
+  publishedUrl?: string;
 }
 
 interface UseRecentChatsOptions {
@@ -24,6 +31,8 @@ export function useRecentChats({ limit }: UseRecentChatsOptions = {}) {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
+    const publishedSites = getPublishedSites();
+
     if (!db) {
       setLoading(false);
       return;
@@ -35,7 +44,18 @@ export function useRecentChats({ limit }: UseRecentChatsOptions = {}) {
           .filter((item): item is typeof item & { urlId: string; description: string } =>
             Boolean(item.urlId && item.description),
           )
-          .map(({ id, urlId, description, timestamp }) => ({ id, urlId, description, timestamp }))
+          .map(({ id, urlId, description, timestamp }) => {
+            const published = publishedSites[id];
+
+            return {
+              id,
+              urlId,
+              description,
+              timestamp,
+              thumbnailUrl: published?.thumbnailUrl,
+              publishedUrl: published?.url,
+            };
+          })
           .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp)),
       )
       .then((list) => setChats(limit ? list.slice(0, limit) : list))
