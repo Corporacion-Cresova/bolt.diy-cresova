@@ -55,6 +55,7 @@ export class WorkbenchStore {
   artifacts: Artifacts = import.meta.hot?.data.artifacts ?? map({});
 
   showWorkbench: WritableAtom<boolean> = import.meta.hot?.data.showWorkbench ?? atom(false);
+
   /*
    * The preview, not the code. "Al final lo que me interesa es la preview, no el código" — and a
    * builder that opens on source reads like a code editor that happens to generate, rather than a

@@ -21,8 +21,10 @@ import {
 
 describe('the motion recipes block', () => {
   it('ships exactly the six promised recipes in the headline and supporting tiers', () => {
-    // The block names its tiers. If we add a recipe we update this test, and the model only
-    // sees a block whose tier count matches its own declaration.
+    /*
+     * The block names its tiers. If we add a recipe we update this test, and the model only
+     * sees a block whose tier count matches its own declaration.
+     */
     expect(CRESOVA_MOTION_RECIPES).toContain('STICKY GROW');
     expect(CRESOVA_MOTION_RECIPES).toContain('QUIET MARQUEE');
     expect(CRESOVA_MOTION_RECIPES).toContain('COUNTING NUMBER');
@@ -60,8 +62,11 @@ describe('the motion recipes block', () => {
      * 30% is the difference between «I see it moving» and «I feel depth».
      */
     expect(MOTION_PARALLAX).toContain('30');
-    // Make sure it is not 30% of the viewport vs 30% of the section — the math must be on
-    // the rect relative to (vh + rect.height), not relative to the document.
+
+    /*
+     * Make sure it is not 30% of the viewport vs 30% of the section — the math must be on
+     * the rect relative to (vh + rect.height), not relative to the document.
+     */
     expect(MOTION_PARALLAX).toMatch(/vh\s*\+\s*rect\.height/);
   });
 
@@ -97,7 +102,14 @@ describe('the motion recipes block', () => {
      * hex, the model would copy that hex into every generated site and the sector palette
      * would stop deciding anything.
      */
-    const recipes = [MOTION_STICKY_GROW, MOTION_MARQUEE, MOTION_COUNT, MOTION_PARALLAX, MOTION_LINE_REVEAL, MOTION_IMAGE_HOVER];
+    const recipes = [
+      MOTION_STICKY_GROW,
+      MOTION_MARQUEE,
+      MOTION_COUNT,
+      MOTION_PARALLAX,
+      MOTION_LINE_REVEAL,
+      MOTION_IMAGE_HOVER,
+    ];
     const hexPattern = /#[0-9A-Fa-f]{6}\b/g;
 
     for (const recipe of recipes) {
@@ -124,7 +136,14 @@ describe('the motion recipes block', () => {
      * a package the generated site may not have is a recipe the model has to refactor, and a
      * refactored recipe is a recipe the model has misunderstood.
      */
-    const recipes = [MOTION_STICKY_GROW, MOTION_MARQUEE, MOTION_COUNT, MOTION_PARALLAX, MOTION_LINE_REVEAL, MOTION_IMAGE_HOVER];
+    const recipes = [
+      MOTION_STICKY_GROW,
+      MOTION_MARQUEE,
+      MOTION_COUNT,
+      MOTION_PARALLAX,
+      MOTION_LINE_REVEAL,
+      MOTION_IMAGE_HOVER,
+    ];
     const importPattern = /\bimport\s+\{?[^}]*\}?\s+from\s+['"][^'"]+['"]/;
 
     for (const recipe of recipes) {

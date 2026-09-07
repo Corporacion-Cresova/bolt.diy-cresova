@@ -107,10 +107,12 @@ function renderPhotoCatalog(photos: CatalogPhoto[]): string {
   These photo URLs were fetched for this request and are known to work. Use them verbatim,
   copying the URL character for character, and pick the one that fits each section.
 
-${photos.map((photo, index) => {
-  const tag = photo.source === 'openrouter' ? '[AI] ' : photo.source === 'picsum' ? '[placeholder] ' : '';
-  return `  ${index + 1}. ${tag}${photo.url}\n     depicts: ${photo.alt}`;
-}).join('\n')}
+${photos
+  .map((photo, index) => {
+    const tag = photo.source === 'openrouter' ? '[AI] ' : photo.source === 'picsum' ? '[placeholder] ' : '';
+    return `  ${index + 1}. ${tag}${photo.url}\n     depicts: ${photo.alt}`;
+  })
+  .join('\n')}
 
   Rules:
   - NEVER invent a different Pexels or Unsplash URL, and never edit these ones. An invented photo
@@ -396,8 +398,21 @@ export async function streamText(props: {
     );
   }
 
-  // Use maxCompletionTokens for reasoning models (o1, GPT-5), maxTokens for traditional models
-  const tokenParams = isReasoning ? { maxCompletionTokens: safeMaxTokens } : { maxTokens: safeMaxTokens };
+  /*
+   * `maxTokens` for every model, reasoning ones included.
+   *
+   * `maxCompletionTokens` is a field of the OpenAI *HTTP API*, not an option of the AI SDK: the
+   * SDK's call settings only know `maxTokens` (ai@4.3.16). Passing the other name meant the SDK
+   * silently dropped it AND never received a limit, so the request went out with no output cap and
+   * fell back to the provider's default — a few hundred tokens on OpenRouter. On a reasoning model
+   * the thinking pass eats that budget whole and the visible answer comes back empty, which is why
+   * Qwen 3.8 stopped after the template's base files while Claude (not matched by
+   * isReasoningModel) built fine on the same prompt.
+   *
+   * The reasoning budget still has to fit inside this ceiling; that is what the large
+   * maxCompletionTokens declared per model in the provider registry is sizing.
+   */
+  const tokenParams = { maxTokens: safeMaxTokens };
 
   // Filter out unsupported parameters for reasoning models
   const filteredOptions =
@@ -458,7 +473,7 @@ export async function streamText(props: {
       {
         hasTemperature: 'temperature' in streamParams,
         hasMaxTokens: 'maxTokens' in streamParams,
-        hasMaxCompletionTokens: 'maxCompletionTokens' in streamParams,
+        maxTokens: safeMaxTokens,
         paramKeys: Object.keys(streamParams).filter((key) => !['model', 'messages', 'system'].includes(key)),
         streamParams: Object.fromEntries(
           Object.entries(streamParams).filter(([key]) => !['model', 'messages', 'system'].includes(key)),
@@ -474,11 +489,7 @@ export async function streamText(props: {
     onFinish: ({ usage }) => {
       // Track the cost of this generation for internal monitoring
       if (usage) {
-        trackGeneration(
-          modelDetails.name,
-          usage.promptTokens || 0,
-          usage.completionTokens || 0,
-        );
+        trackGeneration(modelDetails.name, usage.promptTokens || 0, usage.completionTokens || 0);
       }
     },
   });

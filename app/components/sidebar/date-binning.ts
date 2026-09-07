@@ -1,3 +1,4 @@
+import { es } from 'date-fns/locale';
 import { format, isAfter, isThisWeek, isThisYear, isToday, isYesterday, subDays } from 'date-fns';
 import type { ChatHistoryItem } from '~/lib/persistence';
 
@@ -31,29 +32,29 @@ export function binDates(_list: ChatHistoryItem[]) {
 
 function dateCategory(date: Date) {
   if (isToday(date)) {
-    return 'Today';
+    return 'Hoy';
   }
 
   if (isYesterday(date)) {
-    return 'Yesterday';
+    return 'Ayer';
   }
 
   if (isThisWeek(date)) {
     // e.g., "Mon" instead of "Monday"
-    return format(date, 'EEE');
+    return format(date, 'EEE', { locale: es });
   }
 
   const thirtyDaysAgo = subDays(new Date(), 30);
 
   if (isAfter(date, thirtyDaysAgo)) {
-    return 'Past 30 Days';
+    return 'Últimos 30 días';
   }
 
   if (isThisYear(date)) {
     // e.g., "Jan" instead of "January"
-    return format(date, 'LLL');
+    return format(date, 'LLL', { locale: es });
   }
 
   // e.g., "Jan 2023" instead of "January 2023"
-  return format(date, 'LLL yyyy');
+  return format(date, 'LLL yyyy', { locale: es });
 }
