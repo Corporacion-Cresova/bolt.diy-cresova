@@ -115,6 +115,15 @@ ${photos
   .join('\n')}
 
   Rules:
+  - The "depicts" line is what the photo ACTUALLY SHOWS. Never place a photo under a name it does
+    not depict. A catalog that labels a picture of a clothing rack "AirPods Pro Max", or a liquor
+    shelf "special offer", destroys the page's credibility faster than any design mistake, and it
+    is the single thing a client notices first. If nothing in this list depicts the thing you are
+    naming — a specific product, a dish, a team member — do NOT reach for the closest photo: leave
+    that slot solid, or use a lettermark or an icon. An honest empty slot beats a wrong photo.
+  - So put these photos where they honestly fit: the hero, the ambience and context sections, the
+    gallery. Product and menu items usually have nothing truthful here, and that is fine.
+  - Use each photo once. The same picture in the hero and again in a card reads as a placeholder.
   - NEVER invent a different Pexels or Unsplash URL, and never edit these ones. An invented photo
     id returns 404 and leaves a hole in the page.
   - source.unsplash.com is discontinued and must never be used.

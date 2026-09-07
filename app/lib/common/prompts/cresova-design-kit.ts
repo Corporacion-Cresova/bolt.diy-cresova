@@ -151,6 +151,10 @@ export const CRESOVA_DESIGN_KIT = `
   - Contact: two columns, form or WhatsApp action on one side, hours and service area on the other.
   - Footer: business data, navigation, legal line.
 
+  IMAGE WEIGHT: every photo below the fold gets loading="lazy". The catalog serves photos around
+  600KB each, and a page that ships four megabytes of them is unusable on the mobile data most of
+  these clients browse on — the hero is the only image worth loading eagerly.
+
   IMAGE PLACEMENT: the hero photo carries the page, so give it real height (min 70vh on desktop)
   and an object-cover fit so it never stretches. Use a photo from <cresova_images> in the hero and
   in at least two more sections: a page with one lonely image looks unfinished. A section with no
@@ -172,6 +176,11 @@ export const CRESOVA_DESIGN_KIT = `
   - Placeholder copy. Write real, specific Spanish copy for this business and this sector, with
     concrete numbers, real service names and a real service area. "Lorem ipsum", "Your Company"
     or "Servicio 1" are worse than an empty section.
+  - Inventing another country. These are Honduran businesses: unless the client says otherwise,
+    prices are lempiras (L 1,250), phones are +504 with eight digits, and the cities are
+    Tegucigalpa, San Pedro Sula, La Ceiba, Comayagua, Choluteca, Roatán. A page that quotes pesos
+    and lists Guadalajara and Monterrey is not a page this client can show anyone, however good
+    the rest of it looks — and it is the default a model falls into when nobody says where it is.
   - The same radius, the same shadow and the same padding on every single element.
 
   And the looks that currently read as «made by an AI» at a glance. These are not ugly; they are
