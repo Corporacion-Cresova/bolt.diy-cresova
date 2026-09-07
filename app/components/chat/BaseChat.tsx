@@ -8,7 +8,8 @@ import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { Workbench } from '~/components/workbench/Workbench.client';
 import { ProjectsPanel } from '~/components/projects-panel/ProjectsPanel';
-import { $projects, $templates, addProject, type ProjectInfo, type TemplateInfo } from '~/lib/stores/projects-store';
+import { ProjectsRail } from '~/components/projects-panel/ProjectsRail';
+import type { TemplateInfo } from '~/lib/stores/projects-store';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
 import { Messages } from './Messages.client';
@@ -20,7 +21,6 @@ import { ImportButtons } from '~/components/chat/chatExportAndImport/ImportButto
 import { ExamplePrompts } from '~/components/chat/ExamplePrompts';
 import GitCloneButton from './GitCloneButton';
 import type { ProviderInfo } from '~/types/model';
-import StarterTemplates from './StarterTemplates';
 import type { ActionAlert, SupabaseAlert, DeployAlert, LlmErrorAlertType } from '~/types/actions';
 import DeployChatAlert from '~/components/deploy/DeployAlert';
 import ChatAlert from './ChatAlert';
@@ -291,6 +291,20 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     };
 
+    const focusPrompt = () => {
+      textareaRef?.current?.focus();
+      textareaRef?.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+
+    /*
+     * Templates seed the prompt instead of sending it: their text expects the user to
+     * append the client's details ("el negocio que te voy a describir") before building.
+     */
+    const applyTemplate = (template: TemplateInfo) => {
+      handleInputChange?.({ target: { value: template.prompt } } as React.ChangeEvent<HTMLTextAreaElement>);
+      focusPrompt();
+    };
+
     const handleFileUpload = () => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -490,21 +504,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
                     handleSendMessage?.(event, messageInput);
                   })}
-                {!chatStarted && <StarterTemplates />}
+                {!chatStarted && (
+                  <div className="w-full max-w-5xl mx-auto px-4 lg:px-6">
+                    <ClientOnly>
+                      {() => <ProjectsPanel onSelectTemplate={applyTemplate} onNewProject={focusPrompt} />}
+                    </ClientOnly>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-          <ProjectsPanel
-            onSelectProject={(project) => {
-              sendMessage?.({} as any, project.prompt);
-            }}
-            onSelectTemplate={(template) => {
-              sendMessage?.({} as any, template.prompt);
-            }}
-            onNewProject={() => {
-              /* Users can just start typing */
-            }}
-          />
+          {!chatStarted && <ClientOnly>{() => <ProjectsRail onNewProject={focusPrompt} />}</ClientOnly>}
           <ClientOnly>
             {() => (
               <Workbench chatStarted={chatStarted} isStreaming={isStreaming} setSelectedElement={setSelectedElement} />

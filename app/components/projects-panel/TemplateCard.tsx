@@ -1,7 +1,7 @@
 import { memo } from 'react';
-import { motion } from 'framer-motion';
 import { classNames } from '~/utils/classNames';
 import type { TemplateInfo } from '~/lib/stores/projects-store';
+import { PreviewThumbnail } from './PreviewThumbnail';
 
 interface TemplateCardProps {
   template: TemplateInfo;
@@ -10,39 +10,29 @@ interface TemplateCardProps {
 
 export const TemplateCard = memo(({ template, onSelect }: TemplateCardProps) => {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={classNames(
-        'group relative rounded-lg border border-bolt-elements-borderColor',
-        'bg-bolt-elements-surface-secondary/50 hover:bg-bolt-elements-surface-secondary',
-        'transition-transform duration-150 will-change-transform cursor-pointer overflow-hidden',
-        'hover:border-electric-violet/30 hover:shadow-lg hover:shadow-electric-violet/10',
-        'hover:-translate-y-0.5',
-      )}
+    <button
       onClick={() => onSelect(template)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onSelect(template)}
+      className={classNames(
+        'group relative text-left rounded-lg overflow-hidden w-full',
+        'border border-bolt-elements-borderColor hover:border-accent-500/50',
+        'bg-bolt-elements-background-depth-2',
+        'transition-transform duration-150 will-change-transform hover:-translate-y-0.5',
+      )}
     >
-      {/* Template preview */}
-      <div className="aspect-video w-full bg-gradient-to-br from-electric-violet/10 to-electric-blue/10 flex items-center justify-center">
-        <svg className="w-10 h-10 text-electric-violet/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-        </svg>
+      <PreviewThumbnail
+        seed={template.id}
+        title={template.name}
+        label={template.category}
+        imageUrl={template.thumbnailUrl}
+      />
+      <div className="p-3 space-y-1">
+        <h3 className="text-sm font-semibold text-bolt-elements-textPrimary truncate">{template.name}</h3>
+        <p className="text-xs text-bolt-elements-textSecondary line-clamp-2">{template.description}</p>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-accent-500 pt-1">
+          Usar plantilla
+          <span className="i-ph:arrow-right" />
+        </span>
       </div>
-
-      {/* Info */}
-      <div className="p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-soft-white">{template.name}</h3>
-          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-electric-violet/20 text-electric-violet">
-            {template.category}
-          </span>
-        </div>
-        <p className="text-xs text-muted-gray line-clamp-2">{template.description}</p>
-        <p className="text-[10px] text-muted-gray/40">Creado: {template.createdAt}</p>
-      </div>
-    </motion.div>
+    </button>
   );
 });
