@@ -41,7 +41,7 @@ export function ProjectsPanel({ onSelectTemplate, onNewProject }: ProjectsPanelP
                 'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-theme',
                 activeTab === tab.id
                   ? 'bg-bolt-elements-background-depth-1 text-bolt-elements-textPrimary font-medium shadow-xs'
-                  : 'text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary',
+                  : 'bg-transparent text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary',
               )}
             >
               <span className={classNames(tab.icon, 'text-base')} />
@@ -59,8 +59,7 @@ export function ProjectsPanel({ onSelectTemplate, onNewProject }: ProjectsPanelP
           onClick={onNewProject}
           className={classNames(
             'flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg font-medium transition-theme',
-            'bg-bolt-elements-button-primary-background hover:bg-bolt-elements-button-primary-backgroundHover',
-            'text-bolt-elements-button-primary-text',
+            'bg-accent-600 hover:bg-accent-700 text-white',
           )}
         >
           <span className="i-ph:plus text-base" />
@@ -111,7 +110,10 @@ function EmptyState({ text, action }: { text: string; action?: { label: string; 
     <div className="py-12 text-center rounded-lg border border-dashed border-bolt-elements-borderColor">
       <p className="text-sm text-bolt-elements-textSecondary">{text}</p>
       {action && (
-        <button onClick={action.onClick} className="mt-2 text-sm font-medium text-accent-500 hover:text-accent-600">
+        <button
+          onClick={action.onClick}
+          className="mt-2 bg-transparent text-sm font-medium text-accent-500 hover:text-accent-600"
+        >
           {action.label}
         </button>
       )}

@@ -8,6 +8,7 @@ import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { Workbench } from '~/components/workbench/Workbench.client';
 import { ProjectsPanel } from '~/components/projects-panel/ProjectsPanel';
+import { ProjectsRail } from '~/components/projects-panel/ProjectsRail';
 import type { TemplateInfo } from '~/lib/stores/projects-store';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
@@ -515,6 +516,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               </div>
             </div>
           </div>
+          {!chatStarted && <ClientOnly>{() => <ProjectsRail onNewProject={focusPrompt} />}</ClientOnly>}
           <ClientOnly>
             {() => (
               <Workbench chatStarted={chatStarted} isStreaming={isStreaming} setSelectedElement={setSelectedElement} />

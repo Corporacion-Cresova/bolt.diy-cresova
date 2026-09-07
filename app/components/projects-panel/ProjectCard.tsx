@@ -39,7 +39,7 @@ export const ProjectCard = memo(({ chat, onDelete }: ProjectCardProps) => {
           onDelete(chat.id);
         }}
         className={classNames(
-          'absolute bottom-3 right-2 p-1 rounded',
+          'absolute bottom-3 right-2 p-1 rounded bg-transparent',
           'opacity-0 group-hover:opacity-100 focus:opacity-100',
           'text-bolt-elements-textTertiary hover:text-red-500 hover:bg-red-500/10',
         )}
