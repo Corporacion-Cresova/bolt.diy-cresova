@@ -1,12 +1,18 @@
 import React from 'react';
 
+/*
+ * These are the first thing a new user clicks, so they double as a demo of what the builder is for.
+ * The upstream bolt.diy set (todo apps, space invaders, "a mobile app about bolt.diy") demoed the
+ * wrong product in the wrong language: every real request here is a client site for a Honduran
+ * business. Each one names a sector from <cresova_design_kit> so the generated page inherits that
+ * row's palette and type instead of the model's defaults.
+ */
 const EXAMPLE_PROMPTS = [
-  { text: 'Create a mobile app about bolt.diy' },
-  { text: 'Build a todo app in React using Tailwind' },
-  { text: 'Build a simple blog using Astro' },
-  { text: 'Create a cookie consent form using Material UI' },
-  { text: 'Make a space invaders game' },
-  { text: 'Make a Tic Tac Toe game in html, css and js only' },
+  { text: 'Crea el sitio de un taller mecánico en San Pedro Sula, con servicios, zona de cobertura y WhatsApp' },
+  { text: 'Crea la página de un eco-resort en Copán: habitaciones, tours y reservas por WhatsApp' },
+  { text: 'Crea el sitio de una clínica dental: especialidades, equipo con credenciales y agenda de citas' },
+  { text: 'Crea el catálogo de una ferretería con productos, precios y pedido por WhatsApp' },
+  { text: 'Crea la página de un restaurante con menú por categorías, galería y reservas' },
 ];
 
 export function ExamplePrompts(sendMessage?: { (event: React.UIEvent, messageInput?: string): void | undefined }) {
