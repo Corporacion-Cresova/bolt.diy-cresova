@@ -27,9 +27,18 @@ export default {
         body: ['var(--font-body)', 'system-ui', 'sans-serif'],
       },
 
+      /*
+       * The display weight is a decision of the sector row, not a constant. 300 at 9rem is what
+       * makes a jewellery page read as expensive; 800 condensed is what makes a workshop read as
+       * strong. Using 600 for both is how they end up looking like the same page.
+       */
+      fontWeight: {
+        heading: 'var(--weight-display)',
+      },
+
       /* The scale the design kit asks for, so timid type is not reachable by accident. */
       fontSize: {
-        hero: ['clamp(2.75rem, 7vw, 6.5rem)', { lineHeight: '1.02', letterSpacing: '-0.025em' }],
+        hero: ['clamp(3rem, 9vw, 10rem)', { lineHeight: '0.98', letterSpacing: '-0.025em' }],
         display: ['clamp(4.5rem, 12vw, 9rem)', { lineHeight: '1', letterSpacing: '-0.03em' }],
         section: ['clamp(1.75rem, 3vw, 2.5rem)', { lineHeight: '1.15', letterSpacing: '-0.015em' }],
         body: ['1.0625rem', { lineHeight: '1.6' }],
