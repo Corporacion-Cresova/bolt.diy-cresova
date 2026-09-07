@@ -49,15 +49,14 @@ export default class OpenRouterProvider extends BaseProvider {
   staticModels: ModelInfo[] = [
     /*
      * ==========================================================
-     * 1. QWEN 3.8 27B — DISEÑO FRONTEND
-     * Modelo denso con razonamiento opcional (default xhigh).
-     * Al detectarlo como reasoning model, el thinking no
-     * canibaliza los tokens de output.
+     * 1. QWEN 3.8 FLASH — DISEÑO FRONTEND
+     * Modelo multimodal de razonamiento ligero. Sin overhead
+     * pesado de thinking. Ideal para iteraciones rápidas.
      * ==========================================================
      */
     {
-      name: 'qwen/qwen3.8-27b',
-      label: '🔥 Qwen 3.8 27B — Diseño Frontend',
+      name: 'qwen/qwen3.8-flash',
+      label: '🔥 Qwen 3.8 Flash — Diseño Frontend',
       provider: 'OpenRouter',
       maxTokenAllowed: 1000000,
       maxCompletionTokens: 131072,
@@ -80,7 +79,9 @@ export default class OpenRouterProvider extends BaseProvider {
     /*
      * ==========================================================
      * 3. TENCENT HY4 — CALIDAD/PRECIO
-     * Ranking #6 Frontend, 1M contexto, diseñado para coding agents.
+     * Ranking #6 Frontend, 1M contexto. Diseñado para coding.
+     * Se detecta como reasoning model para evitar que el
+     * thinking canibalice tokens de output.
      * ==========================================================
      */
     {
@@ -88,7 +89,7 @@ export default class OpenRouterProvider extends BaseProvider {
       label: '💎 Tencent Hy4 — Calidad/Precio',
       provider: 'OpenRouter',
       maxTokenAllowed: 1000000,
-      maxCompletionTokens: COMPLETION_TOKENS,
+      maxCompletionTokens: 131072,
     },
 
     /*
