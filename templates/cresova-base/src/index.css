@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * The six sector palettes of the Cresova design kit, verified as sets.
+ *
+ * Pick the row that matches the business, paste its six values into :root, and delete the rest.
+ * Never mix two rows: their contrast was checked together, not across.
+ *
+ * turismo, aventura, hotelería   247 245 240 / 255 255 255 / 20 50 44   / 91 111 105 / 14 110 98  / 10 79 70
+ * gastronomía, café, catering    250 247 242 / 255 255 255 / 42 33 24   / 107 93 77  / 122 46 46  / 90 31 31
+ * belleza, bienestar             248 247 245 / 255 255 255 / 30 38 34   / 95 107 100 / 47 107 84  / 34 80 63
+ * comercio, tienda, retail       250 248 244 / 255 255 255 / 36 29 20   / 107 96 82  / 164 86 10  / 124 64 8
+ * oficios, construcción          245 246 248 / 255 255 255 / 22 29 38   / 86 98 112  / 44 85 120  / 30 60 86
+ * salud, legal, profesional      247 247 245 / 255 255 255 / 20 25 43   / 86 94 117  / 30 58 110  / 20 40 77
+ */
+:root {
+  --bg: 247 245 240;
+  --surface: 255 255 255;
+  --ink: 20 50 44;
+  --muted: 91 111 105;
+  --accent: 14 110 98;
+  --accent-strong: 10 79 70;
+
+  /* must match the <link> in index.html — a family that is not loaded falls through silently */
+  --font-display: 'Bricolage Grotesque';
+  --font-body: 'Karla';
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-ink font-body text-body antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display text-balance;
+  }
+
+  /*
+   * One rule instead of remembering it on every control. The design kit asks for a visible focus
+   * ring everywhere, and a page that removes it is failing people who navigate by keyboard.
+   */
+  :focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-accent;
+  }
+}
+
+@layer utilities {
+  /* the whole motion repertoire: a card lift and a link underline, nothing else */
+  .lift {
+    @apply transition-[transform,box-shadow] duration-150 will-change-transform hover:-translate-y-0.5 hover:shadow-raised;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lift {
+      @apply transition-none hover:translate-y-0;
+    }
+  }
+}

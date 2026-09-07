@@ -2,6 +2,7 @@ import ignore from 'ignore';
 import type { ProviderInfo } from '~/types/model';
 import type { Template } from '~/types/template';
 import { STARTER_TEMPLATES } from './constants';
+import { detectBuildIntent } from '~/lib/cresova/build-intent';
 
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
 You are an experienced developer who helps people choose the best starter template for their projects.
@@ -82,8 +83,23 @@ const parseSelectedTemplate = (llmOutput: string): { template: string; title: st
   }
 };
 
+export const CRESOVA_BASE_TEMPLATE = 'Cresova Base';
+
 export const selectStarterTemplate = async (options: { message: string; model: string; provider: ProviderInfo }) => {
   const { message, model, provider } = options;
+
+  /*
+   * A request to build a site does not need a model to choose its starting point: it is always this
+   * one. Asking anyway cost an LLM round trip before the build even began, and answered "Vite
+   * React" — a bare starter with no design system, which is where the generated look came from.
+   *
+   * Anything that is not a site request still goes through the picker below, which is what the rest
+   * of the upstream list is for.
+   */
+  if (detectBuildIntent(message)) {
+    return { template: CRESOVA_BASE_TEMPLATE, title: '' };
+  }
+
   const requestBody = {
     message,
     model,

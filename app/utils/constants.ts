@@ -32,6 +32,28 @@ PROVIDER_LIST.forEach((provider) => {
 // starter Templates
 
 export const STARTER_TEMPLATES: Template[] = [
+  /*
+   * The base every Cresova site starts from.
+   *
+   * It sits first because it is the answer for almost every request this builder gets: a site for a
+   * Honduran business. The rest of the list is upstream's, kept for the rare request that is not
+   * one of those.
+   *
+   * What it buys is the difference between composing and inventing. A bare starter makes the model
+   * write every button, card and section from raw utility classes, and that is where the tells come
+   * from — a different padding per block, a radius per element, no focus states, four sections on
+   * one ground. Here those decisions are already code, so they cannot be got wrong; the model fills
+   * in the client.
+   */
+  {
+    name: 'Cresova Base',
+    label: 'Cresova Base',
+    description:
+      'Base de Cresova: Vite + React + Tailwind con el design kit ya aplicado — paletas por sector, escala tipográfica y secciones listas (hero, servicios, galería, testimonio, contacto)',
+    githubRepo: 'Corporacion-Cresova/cresova-base',
+    tags: ['cresova', 'landing', 'sitio', 'web', 'react', 'vite', 'tailwind'],
+    icon: 'i-bolt:react',
+  },
   {
     name: 'Expo App',
     label: 'Expo App',

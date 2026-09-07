@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+
+    /*
+     * Deliberately off, and this is not laziness.
+     *
+     * With them on, `tsc -b` turns an unused import into a build failure, and publishing a
+     * finished site died on exactly that: two unused props and one unused import in files nobody
+     * had touched. A half-written variable is a lint concern; it is not worth refusing to ship a
+     * site a client is waiting for.
+     */
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}
