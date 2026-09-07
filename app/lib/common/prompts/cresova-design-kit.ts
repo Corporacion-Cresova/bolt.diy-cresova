@@ -95,7 +95,34 @@ export const CRESOVA_DESIGN_KIT = `
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 
-  TOKENS (define once as CSS custom properties or Tailwind theme values, then never hardcode):
+  TOKENS. Every worked example below writes \`bg-surface\`, \`text-ink\`, \`border-ink/10\`,
+  \`text-accent\`. Those class names only exist if you PUT THEM IN \`tailwind.config.js\` in this
+  same response. Defining the palette as CSS custom properties instead does not make them exist:
+  PostCSS then fails with «The \`border-ink/10\` class does not exist», the stylesheet does not
+  compile, and the dev server serves a blank page while looking perfectly healthy. That has already
+  happened to a finished site. And the opacity suffixes (\`/10\`, \`/15\`) only work on a colour
+  that lives in this config, which is the other half of the same trap.
+
+  So copy this shape, with the hex values of your sector's row:
+
+  // tailwind.config.js
+  export default {
+    content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+    theme: {
+      extend: {
+        colors: {
+          bg: '#F7F5F0',
+          surface: '#FFFFFF',
+          ink: '#14322C',
+          muted: '#5B6F69',
+          accent: '#0E6E62',
+          'accent-strong': '#0A4F46',
+        },
+      },
+    },
+  };
+
+  The rest of the tokens (define once, then never hardcode):
   - Spacing scale: 4 8 12 16 24 32 48 64 96 128 160
   - Radii: 0 for bands and images, 6px for inputs and buttons, 12px only for elevated panels.
     Do not round everything to the same value.

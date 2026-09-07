@@ -104,6 +104,19 @@ export class ActionRunner {
   /** Actions already run, so a continued response repeating them does not run them twice. Keyed by messageId. */
   #executedSignaturesByMessage = new Map<string, Set<string>>();
 
+  /*
+   * The dev server this runner already started, if it is still up.
+   *
+   * The per-message dedupe below deliberately lets a follow-up re-run its actions, which is right
+   * for `npm install` and for rewriting a file — but a start action is not idempotent. Every
+   * follow-up carrying `npm run dev` spawned ANOTHER Vite, which then took the next free port:
+   * 5173, then 5174, then 5175. The preview points at the first one, so from the user's side the
+   * site simply stopped updating and eventually stopped answering, with three servers competing
+   * over the same project. The contract already tells the model not to restart a running server;
+   * this is the runtime making that true regardless of whether it listens.
+   */
+  #runningStartCommand?: string;
+
   constructor(
     webcontainerPromise: Promise<WebContainer>,
     getShellTerminal: () => BoltShell,
@@ -276,6 +289,17 @@ export class ActionRunner {
           break;
         }
         case 'start': {
+          if (this.#runningStartCommand !== undefined) {
+            logger.info(
+              `Dev server already running ("${this.#runningStartCommand}"), skipping "${action.content.trim()}"`,
+            );
+            this.#updateAction(actionId, { status: 'complete' });
+
+            break;
+          }
+
+          this.#runningStartCommand = action.content.trim();
+
           // making the start app non blocking
 
           this.#runStartAction(action)
@@ -285,6 +309,8 @@ export class ActionRunner {
                 return;
               }
 
+              // the server is down, so the next start action is a real restart and must run
+              this.#runningStartCommand = undefined;
               this.#updateAction(actionId, { status: 'failed', error: 'Action failed' });
               logger.error(`[${action.type}]:Action failed\n\n`, err);
 

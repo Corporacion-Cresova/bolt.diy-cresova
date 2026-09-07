@@ -155,13 +155,18 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       }
     }, [expoUrl]);
 
+    /*
+     * `data` going back to undefined is how a finished turn says "there is no progress any more"
+     * (Chat.client clears it in onFinish), and the old guard skipped exactly that case: the panel
+     * kept the last list it was given, so "Generating Response" stayed on screen from the first
+     * prompt of the session onwards. A turn that dies without onFinish — the freeze — left it there
+     * for good.
+     */
     useEffect(() => {
-      if (data) {
-        const progressList = data.filter(
-          (x) => typeof x === 'object' && (x as any).type === 'progress',
-        ) as ProgressAnnotation[];
-        setProgressAnnotations(progressList);
-      }
+      const progressList = (data ?? []).filter(
+        (x) => typeof x === 'object' && (x as any).type === 'progress',
+      ) as ProgressAnnotation[];
+      setProgressAnnotations(progressList);
     }, [data]);
     useEffect(() => {
       console.log(transcript);
