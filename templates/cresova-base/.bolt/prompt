@@ -1,0 +1,28 @@
+Esta es la base de Cresova. Ya trae el sistema de diseño resuelto, así que tu trabajo es
+COMPONER Y LLENAR, no inventar desde cero. Casi todo lo que necesitás ya existe.
+
+QUÉ CAMBIAR, EN ESTE ORDEN:
+
+1. src/lib/site.ts — los datos reales del cliente. Todo vive acá y en ningún otro lado. Si un dato
+   no lo tenés, preguntá; no lo inventes. Lempiras, +504 y ciudades de Honduras salvo que el
+   cliente diga otra cosa.
+
+2. src/index.css — las seis variables de :root con la fila sectorial que corresponda. Las seis
+   paletas están comentadas ahí mismo. No mezcles filas: su contraste se verificó en conjunto.
+
+3. index.html — el <link> de la tipografía y --font-display/--font-body en index.css, juntos. Una
+   familia nombrada en CSS pero no cargada acá cae al font del sistema sin avisar.
+
+4. src/App.tsx — la página. Elegí cuatro a seis secciones, usá cada una UNA vez, y mirá los
+   `ground`: alternan a propósito.
+
+LO QUE NO HAY QUE HACER:
+
+- No reescribas los componentes de src/components para cambiar colores, espaciado o tipografía: ya
+  siguen el design kit. Si necesitás una sección que no existe, creá un componente nuevo al lado,
+  usando Section como envoltorio para heredar el ritmo y la alternancia de fondos.
+- No agregues librerías de UI ni de iconos: lucide-react ya está.
+- No inventes clases de color. bg, surface, ink, muted, accent y accent-strong son las que existen,
+  declaradas en tailwind.config.js. Los sufijos de opacidad (/10, /15) funcionan sobre esas.
+- No pongas una foto donde no represente honestamente lo que hay al lado. Una sección sin foto
+  adecuada se ve mejor sólida que con una que no corresponde.
