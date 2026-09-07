@@ -30,19 +30,62 @@ export const CRESOVA_DESIGN_KIT = `
   Five lines, before the first file. They are also what the user reads while the site is being
   built, so write them for a person.
 
+  THEN, still before the first file, LIST THE SECTIONS with their real titles.
+
+  One line per section: the shape from the list below, the headline it will carry, and in three or
+  four words what goes in it. Eight to fourteen lines. Real Spanish, the business's own words, the
+  actual product and service names — not «sección de servicios» but «Todo lo que tu moto necesita —
+  kit de transmisión, pastillas, aceite, con precio».
+
+  This step is the difference, and it is worth understanding why. The best pages this agency has
+  shipped were built from briefs that named every section and its copy in advance; the model was
+  laying out decisions someone had already made. Rules about palettes and spacing a model follows
+  well. Deciding what a Honduran motorcycle workshop should actually say on its fourth section is
+  what it does badly when it improvises mid-file, and that is where «generic» comes from — not from
+  the colours. Deciding it up front, in one list, costs a few lines and changes the whole page.
+
+  If the user's own request already names sections and copy, that list IS the brief: follow it, do
+  not replace it with your own.
+
+  === THESE ARE FRONTEND-ONLY DEMOS ===
+
+  Unless the user explicitly asks for a backend, everything is frontend: local arrays, React state,
+  localStorage at most. No Supabase, no database, no auth, no API, no payment gateway. These pages
+  are built to be shown to a client who has not bought anything yet, and a demo that needs a
+  service to be provisioned before it renders is a demo that cannot be shown.
+
+  A catalogue is an array. A filter is a useState. A contact form opens WhatsApp with the message
+  pre-written. An admin panel edits local state and says so.
+
   === STEP 2: THE SECTOR TABLE ===
 
   Find the closest sector and take its whole row. The palettes are designed as sets and their
   contrast is verified: do not mix rows and do not invent colours.
 
-  | Sector | bg | surface | ink | muted | accent | accent-strong | Type | Treatment |
-  |---|---|---|---|---|---|---|---|---|
-  | Turismo, aventura, hotelería | #F7F5F0 | #FFFFFF | #14322C | #5B6F69 | #0E6E62 | #0A4F46 | Bricolage Grotesque + Karla | editorial |
-  | Gastronomía, café, catering | #FAF7F2 | #FFFFFF | #2A2118 | #6B5D4D | #7A2E2E | #5A1F1F | DM Serif Display + DM Sans | editorial |
-  | Belleza, bienestar, suplementos | #F8F7F5 | #FFFFFF | #1E2622 | #5F6B64 | #2F6B54 | #22503F | Cormorant Garamond + Karla | editorial |
-  | Comercio, tienda, retail | #FAF8F4 | #FFFFFF | #241D14 | #6B6052 | #A4560A | #7C4008 | Fraunces + Work Sans | editorial |
-  | Oficios, construcción, limpieza, transporte | #F5F6F8 | #FFFFFF | #161D26 | #566270 | #2C5578 | #1E3C56 | Archivo + Source Sans 3 | sólido |
-  | Salud, legal, financiero, profesional | #F7F7F5 | #FFFFFF | #14192B | #565E75 | #1E3A6E | #14284D | Instrument Sans + Public Sans | sólido |
+  Every row has a LIGHT and a DARK ground. Both were measured on sites this agency shipped and a
+  client approved; neither is a fallback for the other.
+
+  | Sector | Ground | bg | surface | ink | muted | accent | accent-strong | Type | Display weight |
+  |---|---|---|---|---|---|---|---|---|---|
+  | Turismo, aventura, hotelería | light | #F7F5F0 | #FFFFFF | #14322C | #5B6F69 | #0E6E62 | #0A4F46 | Bricolage Grotesque + Karla | 600 |
+  | Turismo, aventura, hotelería | dark | #0F1A17 | #16241F | #EDF2EF | #93A8A1 | #35B79C | #7FD9C4 | Fraunces + Plus Jakarta Sans | 600 |
+  | Gastronomía, café, catering | light | #FAF7F2 | #FFFFFF | #2A2118 | #6B5D4D | #7A2E2E | #5A1F1F | DM Serif Display + DM Sans | 600 |
+  | Belleza, bienestar, suplementos | light | #F8F7F5 | #FFFFFF | #1E2622 | #5F6B64 | #2F6B54 | #22503F | Cormorant Garamond + Karla | 300 |
+  | Belleza, bienestar, joyería, perfumería | dark | #121212 | #1C1A19 | #F5F1EA | #A9A198 | #C9A227 | #E4C25C | Cormorant Garamond + Manrope | 300 |
+  | Comercio, tienda, retail | light | #FAF8F4 | #FFFFFF | #241D14 | #6B6052 | #A4560A | #7C4008 | Fraunces + Work Sans | 600 |
+  | Oficios, construcción, limpieza, transporte | light | #F5F6F8 | #FFFFFF | #161D26 | #566270 | #2C5578 | #1E3C56 | Archivo + Source Sans 3 | 700 |
+  | Taller, motos, automotriz, deporte | dark | #141416 | #1E1E22 | #F4F2EF | #9B9BA3 | #E11D2E | #B3121F | Barlow Condensed + Barlow | 800 |
+  | Salud, legal, financiero, profesional | light | #F7F7F5 | #FFFFFF | #14192B | #565E75 | #1E3A6E | #14284D | Instrument Sans + Public Sans | 600 |
+
+  WHICH GROUND. Dark is not the daring choice and light is not the safe one; they say different
+  things. Dark reads as craft, power and night trade — a workshop, a tattoo studio, a gym, a bar,
+  jewellery. Light reads as air, hygiene and daylight — a clinic, a hotel, a bakery, a lawyer. Pick
+  the one the business actually is; if the client's own signage, uniforms or storefront are dark,
+  that decides it.
+
+  Display weight is part of the row and it is NOT always bold. 300 at 9rem is what makes a jewellery
+  or a beauty page read as expensive; 800 condensed is what makes a workshop read as strong. Using
+  600 everywhere is how both of them end up looking like the same page.
 
   If the client already has brand colours, use theirs and keep the row's structure: their brand
   colour becomes the accent, and you derive accent-strong by darkening it.
@@ -130,10 +173,14 @@ export const CRESOVA_DESIGN_KIT = `
   - Container: 1200px max, 24px gutter mobile, 40px desktop.
 
   TYPE SCALE (the single biggest tell of a generated page is timid type — type that fits):
-  - Hero headline: clamp(2.75rem, 7vw, 6.5rem), line-height 1.0–1.05, tracking -0.025em, weight 600-700.
-    This is a CEILING, not a floor. The Ciao Energy, MONOLOG and PP Neue Montreal sites all break
-    past 6rem on the headline. The old ceiling was 4.5rem and pages looked timid by comparison;
-    6.5rem is the new bottom of «editorial». If the section can hold more, hold more.
+  - Hero headline: clamp(3rem, 9vw, 10rem), line-height 0.95–1.05, tracking -0.025em, and the
+    display weight of your sector row — which is 300 for jewellery and 800 for a workshop, not 600
+    for everything.
+    The old ceiling here was 6.5rem, and it was set by taste rather than by evidence. Six sites this
+    agency shipped and clients approved were measured: their hero headlines render at 96, 120, 144,
+    152 and 160 CSS pixels. Three of the six break past what this file used to allow. 10rem is the
+    new ceiling and it is a ceiling, not a target: a long headline at 160px is a wall, a three word
+    one at 160px is a poster. Set it against the words you actually have.
   - Display number (statistic, year, single count): clamp(4.5rem, 12vw, 9rem), tracking -0.03em.
     One per page. This is the moment a number feels big.
   - Section heading: clamp(1.75rem, 3vw, 2.5rem), line-height 1.15.
@@ -166,7 +213,11 @@ export const CRESOVA_DESIGN_KIT = `
   - ONE reveal on scroll, in the hero. Not on every section.
   - Keyboard focus always visible: a 2px accent outline with 2px of offset. Never outline:none.
 
-  SECTION SHAPES (use 4-6 of these, each one only once, in this order):
+  SECTION SHAPES (use 8-14 of these, each one only once, in roughly this order):
+
+  Eight is the floor, not the target. The same six measured sites carry 11 to 18 sections and run
+  7.500 to 18.000 pixels tall. A six section page is the one thing a client reads instantly as «this
+  is a demo»; the shapes below exist so that length is composed rather than padded.
   - Hero: 60/40 split, headline + subhead + one primary action + one secondary link, photo bleeding
     to the right edge. Not centered, not a background image with text on top.
   - Trust strip: thin band with 3-4 concrete facts (years, coverage, response time, certification).
@@ -177,6 +228,30 @@ export const CRESOVA_DESIGN_KIT = `
   - Testimonials: one large quote with attribution, or two side by side. Never a carousel.
   - Contact: two columns, form or WhatsApp action on one side, hours and service area on the other.
   - Footer: business data, navigation, legal line.
+
+  And these, which the measured sites all use and this list was missing. They are what takes a page
+  from six sections to twelve without padding it:
+  - Sticky header: transparent over the hero, solid with a backdrop blur once the page scrolls.
+  - Category triptych: three full-bleed photographs with a title over each, one per line of business.
+    Not three cards.
+  - Catalogue: 6-12 real items with photo, name, category and price, plus filter buttons that
+    actually filter. This is the section that convinces a shop owner, and it is the one most often
+    left out.
+  - Quick view: clicking an item opens a modal with the large photo, the price and a WhatsApp
+    action. No routing, no backend.
+  - Marquee band: a single line of 4-6 words that name what the business sells on, scrolling
+    slowly across an accent ground. One per page, and only when the words are real.
+  - Editorial band: one full width photograph with a sentence over it, at a different rhythm from
+    everything around it. This is where a page earns the word «premium».
+  - Collections: 3-4 large campaign blocks («para regalar», «nuevas historias»), photo-led.
+  - Numbered process at full width: the same 3-4 steps as above but as a band, on an inverted
+    ground, when the process is the selling point.
+  - Social grid: an Instagram-style grid of lifestyle photos with a hover treatment.
+  - Closing call to action: the headline at display size on an inverted ground, one action, nothing
+    else. The last thing before the footer.
+  - Demo admin panel at /admin: a sidebar, a table of the catalogue with edit and delete, a modal to
+    add an item, and counters — all on local state, no login, no database. This is a sales device:
+    it shows the client how they would run the site. Add it when the business has a catalogue.
 
   IMAGE WEIGHT: every photo below the fold gets loading="lazy". The catalog serves photos around
   600KB each, and a page that ships four megabytes of them is unusable on the mobile data most of
@@ -208,22 +283,38 @@ export const CRESOVA_DESIGN_KIT = `
     Tegucigalpa, San Pedro Sula, La Ceiba, Comayagua, Choluteca, Roatán. A page that quotes pesos
     and lists Guadalajara and Monterrey is not a page this client can show anyone, however good
     the rest of it looks — and it is the default a model falls into when nobody says where it is.
-  - The same radius, the same shadow and the same padding on every single element.
+  - Reaching for the same radius and the same shadow because it is the first one you wrote. Decide
+    them; then a page that uses ONE radius and no shadow at all is a decision, and a good one for
+    anything elegant — two of the measured sites do exactly that.
 
-  And the looks that currently read as «made by an AI» at a glance. These are not ugly; they are
-  worn out, which is worse, because the client has seen them on every generated page this year:
-  - Warm cream ground with a serif display and a terracotta accent.
-  - Near-black ground with a single acid-green or vermilion pop.
+  And the looks that read as «made by an AI» at a glance. These are not ugly; they are worn out,
+  which is worse, because the client has seen them on every generated page this year:
   - Inter or Space Grotesk as the «safe» typeface.
+  - The purple-to-blue gradient hero of every AI landing page.
   - Emoji as section markers, numbered 01 / 02 / 03 on things that are not a sequence.
-  - rounded-lg on absolutely everything.
-  - An accent bar or rail down the side of a rounded card.
+  - rounded-lg on absolutely everything, an accent rail down the side of every rounded card.
+
+  Two looks used to be on that list and have been taken off, because this agency ships both and
+  clients buy them. What made them tells was the execution, not the palette:
+  - A near-black ground with a red or vermilion accent is one of the strongest pages here — a motor
+    workshop, condensed type at 144px in weight 800, the red used on maybe six elements in the whole
+    page. It reads as generated only when the accent is sprayed everywhere and the type is timid.
+  - A warm cream ground with a serif display is the jewellery and perfumery page — Cormorant at
+    152px in weight 300, enormous negative space, gold on almost nothing. Same rule: what gives it
+    away is a small serif crowded by cards, not the combination itself.
+  So: use either, and spend the difference on the type size, the air and the restraint of the accent.
+
   The exception that matters: if the client asks for one of these, do it. Their words win.
 
   FLOATING WHATSAPP: fixed bottom-right, 56px, accent background, lucide MessageCircle icon,
   aria-label in the page language, href https://wa.me/NUMERO.
 
-  BEFORE YOU FINISH, check these against the files you just wrote. Everything above that is a number
+  BEFORE YOU FINISH, read the page as the client will: section by section, asking of each one
+  whether it feels generic, empty, too simple or repetitive. If any does, improve it before
+  finishing rather than shipping it and explaining it. The bar is that the client says «wow» at the
+  first screen, and that no section afterwards lets that down.
+
+  Then check these against the files you just wrote. Everything above that is a number
   gets followed reliably; these are the ones that get lost in the prose, and each one is visible at a
   glance in the finished page:
   - The font <link> is in index.html. Without it the whole type section above did nothing.

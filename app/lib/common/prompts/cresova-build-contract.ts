@@ -61,8 +61,13 @@ export const CRESOVA_BUILD_CONTRACT = `
     not ask the user to continue and do not stop to check in.
 
   PERF: ANIMATIONS AND HOVER PERFORMANCE:
-  - Use transition-transform or transition-opacity, NEVER transition-all. Animating all properties
-    forces the browser to recalculate layout on every frame and is the most common cause of jank.
+  - Name the properties you animate: transition-[transform,box-shadow], transition-colors,
+    transition-opacity. \`transition-all\` is the lazy version of the same line and it is worth
+    avoiding, but be clear about why: it makes the browser watch every animatable property, and the
+    cost only becomes jank when one of them affects layout — width, height, padding, top.
+    So this is a performance habit, not a look. Six sites this agency shipped use \`transition-all\`
+    on hundreds of elements and none of them look worse for it. Do not rewrite a working page to
+    remove it, and never spend a follow-up turn on that instead of on what the user asked.
   - Every element that scales, moves or rotates on hover needs will-change: transform on its class
     (or transform: translateZ(0) as a lighter alternative). Without it the browser paints the
     element from scratch each time instead of promoting it to the GPU.
