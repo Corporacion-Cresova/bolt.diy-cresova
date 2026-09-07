@@ -8,8 +8,7 @@ import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { Workbench } from '~/components/workbench/Workbench.client';
 import { ProjectsPanel } from '~/components/projects-panel/ProjectsPanel';
-import { ProjectsRail } from '~/components/projects-panel/ProjectsRail';
-import type { TemplateInfo } from '~/lib/stores/projects-store';
+import { renderTemplateReference, type TemplateInfo } from '~/lib/stores/projects-store';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
 import { Messages } from './Messages.client';
@@ -146,6 +145,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const [transcript, setTranscript] = useState('');
     const [isModelLoading, setIsModelLoading] = useState<string | undefined>('all');
     const [progressAnnotations, setProgressAnnotations] = useState<ProgressAnnotation[]>([]);
+    const [referenceTemplate, setReferenceTemplate] = useState<TemplateInfo | null>(null);
     const expoUrl = useStore(expoUrlAtom);
     const [qrModalOpen, setQrModalOpen] = useState(false);
 
@@ -272,7 +272,19 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
     const handleSendMessage = (event: React.UIEvent, messageInput?: string) => {
       if (sendMessage) {
-        sendMessage(event, messageInput);
+        /*
+         * The reference goes in front of the user's own brief, and only on the message that starts
+         * the build: once the site exists, its code carries those decisions and re-sending them
+         * only costs tokens.
+         */
+        const written = messageInput ?? input;
+        const withReference =
+          referenceTemplate && !chatStarted && written.trim()
+            ? `${renderTemplateReference(referenceTemplate)}\n\n${written}`
+            : messageInput;
+
+        sendMessage(event, withReference);
+        setReferenceTemplate(null);
         setSelectedElement?.(null);
 
         if (recognition) {
@@ -297,11 +309,12 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     };
 
     /*
-     * Templates seed the prompt instead of sending it: their text expects the user to
-     * append the client's details ("el negocio que te voy a describir") before building.
+     * A template is picked up as a reference, not as text to edit. Filling the prompt box with the
+     * template's prose left the user rewriting someone else's paragraph instead of describing their
+     * client; now the box stays theirs and the reference rides along with whatever they write.
      */
     const applyTemplate = (template: TemplateInfo) => {
-      handleInputChange?.({ target: { value: template.prompt } } as React.ChangeEvent<HTMLTextAreaElement>);
+      setReferenceTemplate(template);
       focusPrompt();
     };
 
@@ -442,6 +455,23 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                   {llmErrorAlert && <LlmErrorAlert alert={llmErrorAlert} clearAlert={() => clearLlmErrorAlert?.()} />}
                 </div>
                 {progressAnnotations && <ProgressCompilation data={progressAnnotations} />}
+                {referenceTemplate && !chatStarted && (
+                  <div className="flex items-center gap-2 self-start max-w-full px-3 py-1.5 rounded-full border border-accent-500/30 bg-accent-500/10 text-sm">
+                    <span className="i-ph:squares-four text-accent-500 shrink-0" />
+                    <span className="text-bolt-elements-textSecondary shrink-0">Referencia:</span>
+                    <span className="font-medium text-bolt-elements-textPrimary truncate">
+                      {referenceTemplate.name}
+                    </span>
+                    <button
+                      onClick={() => setReferenceTemplate(null)}
+                      className="bg-transparent text-bolt-elements-textTertiary hover:text-bolt-elements-textPrimary shrink-0"
+                      title="Quitar referencia"
+                      aria-label="Quitar referencia"
+                    >
+                      <span className="i-ph:x text-sm" />
+                    </button>
+                  </div>
+                )}
                 <ChatBox
                   isModelSettingsCollapsed={isModelSettingsCollapsed}
                   setIsModelSettingsCollapsed={setIsModelSettingsCollapsed}
@@ -514,7 +544,6 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               </div>
             </div>
           </div>
-          {!chatStarted && <ClientOnly>{() => <ProjectsRail onNewProject={focusPrompt} />}</ClientOnly>}
           <ClientOnly>
             {() => (
               <Workbench chatStarted={chatStarted} isStreaming={isStreaming} setSelectedElement={setSelectedElement} />

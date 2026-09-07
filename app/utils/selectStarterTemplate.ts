@@ -257,12 +257,32 @@ ${file.content}
   const templatePromptFile = files.filter((x) => x.path.startsWith('.bolt')).find((x) => x.name == 'prompt');
 
   if (templatePromptFile) {
-    userMessage = `
+    /*
+     * The upstream templates ship a `.bolt/prompt` telling the model to "use stock photos from
+     * unsplash ... only valid URLs you know exist". It arrives as a USER message, so it outweighs
+     * the system prompt, and it contradicts the photo catalog the server injects as
+     * <cresova_images>. The model then writes Unsplash ids from memory, most of which no longer
+     * resolve, and the page ships with broken images.
+     *
+     * What is worth keeping in that file is the line naming which libraries the template already
+     * has (shadcn/ui, lucide-react), so drop the photo instructions and keep the rest.
+     */
+    const templateInstructions = templatePromptFile.content
+      .split('\n')
+      .filter((line) => !/unsplash|stock photo/i.test(line))
+      .join('\n')
+      .trim();
+
+    if (templateInstructions) {
+      userMessage = `
 TEMPLATE INSTRUCTIONS:
-${templatePromptFile.content}
+${templateInstructions}
+
+Photos: ignore any other source and use only the URLs listed in <cresova_images>.
 
 ---
 `;
+    }
   }
 
   if (filesToImport.ignoreFile.length > 0) {

@@ -307,7 +307,7 @@ export const MOTION_IMAGE_HOVER = `
     </h2>
     <div class="mt-14 grid gap-6 md:grid-cols-3">
       <a href="#" class="group block">
-        <div class="relative aspect-[4/5] overflow-hidden rounded-sm bg-surface shadow-raised transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-lg">
+        <div class="relative aspect-[4/5] overflow-hidden rounded-sm bg-surface shadow-raised transition-[transform,box-shadow] duration-150 will-change-transform group-hover:-translate-y-0.5 group-hover:shadow-lg">
           <img
             src="FOTO_DE_cresova_images"
             alt="Proyecto uno"
@@ -319,7 +319,7 @@ export const MOTION_IMAGE_HOVER = `
         <p class="mt-2 text-[0.9375rem] leading-relaxed text-muted">Reforma integral · 2025</p>
       </a>
       <a href="#" class="group block">
-        <div class="relative aspect-[4/5] overflow-hidden rounded-sm bg-surface shadow-raised transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-lg">
+        <div class="relative aspect-[4/5] overflow-hidden rounded-sm bg-surface shadow-raised transition-[transform,box-shadow] duration-150 will-change-transform group-hover:-translate-y-0.5 group-hover:shadow-lg">
           <img
             src="FOTO_DE_cresova_images"
             alt="Proyecto dos"
@@ -331,7 +331,7 @@ export const MOTION_IMAGE_HOVER = `
         <p class="mt-2 text-[0.9375rem] leading-relaxed text-muted">Diseño comercial · 2024</p>
       </a>
       <a href="#" class="group block">
-        <div class="relative aspect-[4/5] overflow-hidden rounded-sm bg-surface shadow-raised transition-all duration-300 group-hover:-translate-y-0.5 group-hover:shadow-lg">
+        <div class="relative aspect-[4/5] overflow-hidden rounded-sm bg-surface shadow-raised transition-[transform,box-shadow] duration-150 will-change-transform group-hover:-translate-y-0.5 group-hover:shadow-lg">
           <img
             src="FOTO_DE_cresova_images"
             alt="Proyecto tres"

@@ -29,7 +29,7 @@ export const TemplateCard = memo(({ template, onSelect }: TemplateCardProps) => 
         <h3 className="text-sm font-semibold text-bolt-elements-textPrimary truncate">{template.name}</h3>
         <p className="text-xs text-bolt-elements-textSecondary line-clamp-2">{template.description}</p>
         <span className="inline-flex items-center gap-1 text-xs font-medium text-accent-500 pt-1">
-          Usar plantilla
+          Usar de referencia
           <span className="i-ph:arrow-right" />
         </span>
       </div>

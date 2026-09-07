@@ -116,11 +116,11 @@ export function PublishButton() {
                 {publishedUrl}
               </a>
               {/*
-                * Publishing again is the normal thing to want next, not an edge case: the site is
-                * built, the user shows it, asks for a change, and wants the same link to show it.
-                * This view used to end at "Cerrar", so the only way back to the form was to close
-                * the dialog and reopen it — which reads as not being allowed to publish twice.
-                */}
+               * Publishing again is the normal thing to want next, not an edge case: the site is
+               * built, the user shows it, asks for a change, and wants the same link to show it.
+               * This view used to end at "Cerrar", so the only way back to the form was to close
+               * the dialog and reopen it — which reads as not being allowed to publish twice.
+               */}
               <button
                 onClick={() => void handlePublish()}
                 disabled={!canPublish}

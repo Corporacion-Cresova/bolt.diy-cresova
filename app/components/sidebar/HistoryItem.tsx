@@ -5,6 +5,7 @@ import WithTooltip from '~/components/ui/Tooltip';
 import { useEditChatDescription } from '~/lib/hooks';
 import { forwardRef, type ForwardedRef, useCallback } from 'react';
 import { Checkbox } from '~/components/ui/Checkbox';
+import { gradientForSeed } from '~/components/projects-panel';
 
 interface HistoryItemProps {
   item: ChatHistoryItem;
@@ -108,8 +109,14 @@ export function HistoryItem({
           className="flex w-full relative truncate block"
           onClick={selectionMode ? handleItemClick : undefined}
         >
+          {/* same gradient the project's card carries in the gallery, so both views name it alike */}
+          <span
+            className="shrink-0 w-5 h-5 rounded mr-2.5 self-center"
+            style={{ backgroundImage: gradientForSeed(item.id) }}
+            aria-hidden
+          />
           <WithTooltip tooltip={currentDescription}>
-            <span className="truncate pr-24">{currentDescription}</span>
+            <span className="truncate pr-24 self-center">{currentDescription}</span>
           </WithTooltip>
           <div
             className={classNames(

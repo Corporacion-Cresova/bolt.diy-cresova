@@ -74,6 +74,7 @@ export const Artifact = memo(({ artifactId }: ArtifactProps) => {
    */
   const progress = describeBuildProgress({
     actions,
+
     /*
      * This card speaks for its own turn, not for the site. Both halves are needed: `closed` never
      * arrives when a response is cut off mid-artifact, and `streaming` on its own is global, so an
@@ -111,12 +112,8 @@ export const Artifact = memo(({ artifactId }: ArtifactProps) => {
             }}
           >
             <div className="px-5 p-3.5 w-full text-left">
-              <div className="w-full text-bolt-elements-textPrimary font-medium leading-5 text-sm">
-                {dynamicTitle}
-              </div>
-              <div className="w-full text-bolt-elements-textSecondary text-xs mt-0.5">
-                Abrir el panel
-              </div>
+              <div className="w-full text-bolt-elements-textPrimary font-medium leading-5 text-sm">{dynamicTitle}</div>
+              <div className="w-full text-bolt-elements-textSecondary text-xs mt-0.5">Abrir el panel</div>
             </div>
           </button>
           {artifact.type !== 'bundled' && <div className="bg-bolt-elements-artifacts-borderColor w-[1px]" />}

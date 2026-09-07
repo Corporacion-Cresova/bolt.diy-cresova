@@ -14,14 +14,42 @@ export interface ProjectInfo {
   files?: Record<string, string>;
 }
 
+/**
+ * A template is a REFERENCE, not a prompt.
+ *
+ * It used to carry one blob of prose that got dumped into the prompt box, which left the user
+ * editing someone else's text instead of describing their client. These four fields are what the
+ * design kit asks the model to decide and cannot infer on its own; the user still writes the brief
+ * in their own words, and the reference rides along with it.
+ */
 export interface TemplateInfo {
   id: string;
   name: string;
   description: string;
   category: string;
   thumbnailUrl?: string;
-  prompt: string;
+
+  /** matches a sector row of <cresova_design_kit>, which carries palette, type pairing and treatment */
+  sector: string;
+  concepto: string;
+  apuesta: string;
+  secciones: string;
   createdAt: string;
+}
+
+/**
+ * The reference block that travels with the user's brief. Compact on purpose: the design kit
+ * already carries the palette, the type and the motion — this only adds what it cannot know.
+ */
+export function renderTemplateReference(template: TemplateInfo): string {
+  return [
+    '<referencia_de_plantilla>',
+    `Sector del design kit: ${template.sector}`,
+    `Concepto: ${template.concepto}`,
+    `Apuesta: ${template.apuesta}`,
+    `Secciones, en este orden: ${template.secciones}`,
+    '</referencia_de_plantilla>',
+  ].join('\n');
 }
 
 export const $projects = atom<ProjectInfo[]>([]);
@@ -124,126 +152,67 @@ export const BUILTIN_TEMPLATES: TemplateInfo[] = [
   {
     id: 'template-turismo',
     name: 'Hotel, tour o eco-resort',
-    description: 'Hospedaje, tours, buceo, aventura. Trato editorial con la foto como protagonista.',
+    description: 'Hospedaje, tours, buceo, aventura. La foto manda y el texto se aparta.',
     category: 'turismo',
-    prompt: `Crea el sitio de un hotel/operador turístico. Sector del design kit: turismo, aventura, hotelería.
-
-DATOS DEL CLIENTE (completá esto antes de enviar):
-- Nombre del negocio:
-- Qué ofrece exactamente (habitaciones, tours, paquetes):
-- Ubicación y zona:
-- WhatsApp:
-- Precios o rangos que sí podemos publicar:
-- Lo que lo hace distinto de la competencia:
-
-Concepto: el lugar se vende solo, así que la foto manda y el texto se aparta — hero asimétrico con la
-imagen sangrando al borde y la tipografía apoyada sobre el aire, no encima de la foto.
-Apuesta: una sección de experiencias en lista editorial con reglas finas y precio a la derecha, en
-vez de tres tarjetas iguales.
-
-Secciones, en este orden: hero 60/40, franja de confianza con datos concretos (años, idiomas,
-capacidad, tiempo de respuesta), experiencias en lista editorial, galería asimétrica, un testimonio
-grande, contacto en dos columnas con WhatsApp, footer.`,
+    sector: 'turismo, aventura, hotelería',
+    concepto:
+      'el lugar se vende solo, así que la foto manda y el texto se aparta — hero asimétrico con la imagen sangrando al borde y la tipografía apoyada sobre el aire, no encima de la foto',
+    apuesta: 'las experiencias en lista editorial con reglas finas y precio a la derecha, no tres tarjetas iguales',
+    secciones:
+      'hero 60/40, franja de confianza con datos concretos, experiencias en lista editorial, galería asimétrica, un testimonio grande, contacto en dos columnas con WhatsApp, footer',
     createdAt: '2026-09-01',
   },
   {
     id: 'template-gastronomia',
     name: 'Restaurante o café',
-    description: 'Restaurantes, cafeterías, catering, repostería. Menú y antojo por delante.',
+    description: 'Restaurantes, cafeterías, catering, repostería. La carta es el contenido.',
     category: 'gastronomía',
-    prompt: `Crea el sitio de un restaurante/café. Sector del design kit: gastronomía, café, catering.
-
-DATOS DEL CLIENTE (completá esto antes de enviar):
-- Nombre del negocio:
-- Tipo de cocina y platos insignia:
-- Dirección y horarios reales:
-- WhatsApp y si toma reservas o pedidos:
-- Rango de precios:
-- Lo que lo hace distinto:
-
-Concepto: la carta es el contenido, no un PDF escondido — el menú vive en la página, compuesto como
-una carta impresa, con los platos insignia arriba.
-Apuesta: el plato de la casa ocupa una banda completa de ancho total con fondo invertido, una sola
-vez en toda la página.
-
-Secciones, en este orden: hero 60/40, menú editorial por categorías con precios, la banda del plato
-insignia, galería asimétrica del local, testimonio, contacto con horarios y mapa, footer.`,
+    sector: 'gastronomía, café, catering',
+    concepto:
+      'la carta es el contenido, no un PDF escondido — el menú vive en la página, compuesto como una carta impresa, con los platos insignia arriba',
+    apuesta: 'el plato de la casa ocupa una banda de ancho completo con fondo invertido, una sola vez en la página',
+    secciones:
+      'hero 60/40, menú editorial por categorías con precios, la banda del plato insignia, galería asimétrica del local, testimonio, contacto con horarios y mapa, footer',
     createdAt: '2026-09-01',
   },
   {
     id: 'template-oficios',
     name: 'Taller, constructora o servicios',
-    description: 'Talleres, construcción, limpieza, transporte, mantenimiento. Confianza y respuesta rápida.',
+    description: 'Talleres, construcción, limpieza, transporte. Confianza y respuesta rápida.',
     category: 'oficios',
-    prompt: `Crea el sitio de un negocio de oficio/servicios. Sector del design kit: oficios, construcción,
-limpieza, transporte.
-
-DATOS DEL CLIENTE (completá esto antes de enviar):
-- Nombre del negocio:
-- Servicios exactos que presta:
-- Años de experiencia y zona de cobertura:
-- WhatsApp y horario de atención:
-- Certificaciones, garantías o seguros:
-- Lo que lo hace distinto:
-
-Concepto: el cliente llega con una urgencia, así que todo el sitio empuja a un solo gesto —
-escribir por WhatsApp — y cada sección responde una objeción antes de pedirlo.
-Apuesta: un número grande, uno solo en toda la página (años de experiencia o trabajos entregados),
-tratado como pieza tipográfica.
-
-Secciones, en este orden: hero 60/40 con acción de WhatsApp, franja de confianza con datos
-concretos, servicios en lista editorial con qué incluye cada uno, proceso en 3-4 pasos numerados,
-galería de trabajos, testimonio, contacto con zona de cobertura, footer.`,
+    sector: 'oficios, construcción, limpieza, transporte',
+    concepto:
+      'el cliente llega con una urgencia, así que todo el sitio empuja a un solo gesto —escribir por WhatsApp— y cada sección responde una objeción antes de pedirlo',
+    apuesta:
+      'un número grande, uno solo en toda la página (años de experiencia o trabajos entregados), tratado como pieza tipográfica',
+    secciones:
+      'hero 60/40 con acción de WhatsApp, franja de confianza, servicios en lista editorial con qué incluye cada uno, proceso en 3-4 pasos numerados, galería de trabajos, testimonio, contacto con zona de cobertura, footer',
     createdAt: '2026-09-01',
   },
   {
     id: 'template-profesional',
     name: 'Clínica, bufete o consultora',
-    description: 'Salud, legal, financiero, consultoría. Composición impecable, cero riesgos.',
+    description: 'Salud, legal, financiero. Composición impecable, cero riesgos.',
     category: 'profesional',
-    prompt: `Crea el sitio de un despacho/clínica profesional. Sector del design kit: salud, legal,
-financiero, profesional.
-
-DATOS DEL CLIENTE (completá esto antes de enviar):
-- Nombre del despacho o clínica:
-- Especialidades y a quién atiende:
-- Credenciales del equipo (títulos, colegiatura, años):
-- Dirección, horarios y WhatsApp:
-- Cómo se agenda una cita:
-- Lo que lo hace distinto:
-
-Concepto: aquí se compra confianza, no estética — jerarquía clarísima, aire generoso y credenciales
-visibles desde el primer scroll, sin un solo adorno que compita.
-Apuesta: el equipo con nombre, título y foto real es la sección principal, no un pie de página.
-
-Secciones, en este orden: hero 60/40 con acción de agendar, franja de credenciales, especialidades
-en lista editorial, equipo con credenciales, proceso de la primera cita en 3 pasos, testimonio,
-contacto en dos columnas con horarios, footer.`,
+    sector: 'salud, legal, financiero, profesional',
+    concepto:
+      'aquí se compra confianza, no estética — jerarquía clarísima, aire generoso y credenciales visibles desde el primer scroll, sin un solo adorno que compita',
+    apuesta: 'el equipo con nombre, título y foto real es la sección principal, no un pie de página',
+    secciones:
+      'hero 60/40 con acción de agendar, franja de credenciales, especialidades en lista editorial, equipo con credenciales, proceso de la primera cita en 3 pasos, testimonio, contacto en dos columnas con horarios, footer',
     createdAt: '2026-09-01',
   },
   {
     id: 'template-comercio',
     name: 'Tienda o catálogo',
-    description: 'Comercio, retail, distribuidores, catálogo de productos con pedido por WhatsApp.',
+    description: 'Comercio, retail, distribuidores. Catálogo con pedido por WhatsApp.',
     category: 'comercio',
-    prompt: `Crea el sitio de una tienda/catálogo. Sector del design kit: comercio, tienda, retail.
-
-DATOS DEL CLIENTE (completá esto antes de enviar):
-- Nombre de la tienda:
-- Qué vende y categorías principales:
-- 6-8 productos reales con nombre y precio:
-- Cómo se compra (WhatsApp, tienda física, envío):
-- Zona de entrega y costos:
-- Lo que lo hace distinto:
-
-Concepto: catálogo que se puede recorrer sin carrito — cada producto lleva a un pedido por WhatsApp
-con el nombre ya escrito en el mensaje.
-Apuesta: la grilla de productos rompe el ritmo con un producto destacado a doble ancho, no una
-cuadrícula uniforme.
-
-Secciones, en este orden: hero 60/40 con el producto insignia, franja de garantías reales (envío,
-cambios, formas de pago), grilla de productos con precio y acción de pedido, una sección de la
-tienda con foto, testimonio, contacto con zona de entrega, footer.`,
+    sector: 'comercio, tienda, retail',
+    concepto:
+      'catálogo que se puede recorrer sin carrito — cada producto lleva a un pedido por WhatsApp con el nombre ya escrito en el mensaje',
+    apuesta: 'la grilla rompe el ritmo con un producto destacado a doble ancho, no una cuadrícula uniforme',
+    secciones:
+      'hero 60/40 con el producto insignia, franja de garantías reales (envío, cambios, pago), grilla de productos con precio y acción de pedido, una sección de la tienda con foto, testimonio, contacto con zona de entrega, footer',
     createdAt: '2026-09-01',
   },
   {
@@ -251,24 +220,13 @@ tienda con foto, testimonio, contacto con zona de entrega, footer.`,
     name: 'Spa, salón o bienestar',
     description: 'Belleza, spa, bienestar, suplementos. Calma, aire y trato suave.',
     category: 'bienestar',
-    prompt: `Crea el sitio de un negocio de belleza/bienestar. Sector del design kit: belleza, bienestar,
-suplementos.
-
-DATOS DEL CLIENTE (completá esto antes de enviar):
-- Nombre del negocio:
-- Servicios o productos con duración y precio:
-- Dirección, horarios y WhatsApp:
-- Cómo se reserva:
-- Marcas o técnicas que usa:
-- Lo que lo hace distinto:
-
-Concepto: el sitio tiene que sentirse como el lugar — mucho aire entre secciones, ritmo lento, la
-tipografía suave haciendo el trabajo pesado y una sola foto grande por sección.
-Apuesta: la lista de servicios con duración y precio compuesta como una carta, alineada a la
-derecha contra una columna de foto fija.
-
-Secciones, en este orden: hero 60/40, servicios en lista editorial con duración y precio, el
-espacio con galería asimétrica, testimonio grande, reserva con horarios y WhatsApp, footer.`,
+    sector: 'belleza, bienestar, suplementos',
+    concepto:
+      'el sitio tiene que sentirse como el lugar — mucho aire entre secciones, ritmo lento, la tipografía suave haciendo el trabajo pesado y una sola foto grande por sección',
+    apuesta:
+      'la lista de servicios con duración y precio compuesta como una carta, alineada a la derecha contra una columna de foto fija',
+    secciones:
+      'hero 60/40, servicios en lista editorial con duración y precio, el espacio con galería asimétrica, testimonio grande, reserva con horarios y WhatsApp, footer',
     createdAt: '2026-09-01',
   },
 ];
@@ -278,7 +236,7 @@ espacio con galería asimétrica, testimonio grande, reserva con horarios y What
  * empty store, so anyone who already opened the app keeps the old templates in localStorage
  * forever and never sees an improved one.
  */
-const BUILTIN_TEMPLATES_VERSION = '2';
+const BUILTIN_TEMPLATES_VERSION = '3';
 const TEMPLATES_VERSION_KEY = 'cresova_templates_version';
 
 /* Seed built-in templates on first load, and re-seed them when they change */

@@ -29,9 +29,7 @@ const BARS = [
 
 function useVisible(): boolean {
   const currentView = useStore(workbenchStore.currentView);
-  const [documentVisible, setDocumentVisible] = useState(
-    () => typeof document === 'undefined' || !document.hidden,
-  );
+  const [documentVisible, setDocumentVisible] = useState(() => typeof document === 'undefined' || !document.hidden);
 
   useEffect(() => {
     const onChange = () => setDocumentVisible(!document.hidden);
@@ -78,6 +76,7 @@ export const PreviewBuilding = memo(() => {
 
   const progress = describeBuildProgress({
     actions,
+
     // this panel covers the whole project rather than one card, so the stream is the only turn there is
     turnOpen: streaming,
     hasPreview: previews.some((preview) => preview.ready),
@@ -169,8 +168,7 @@ export const PreviewBuilding = memo(() => {
          */}
         {['written', 'stalled', 'truncated'].includes(progress.stage) && (
           <span className="text-bolt-elements-textSecondary text-xs max-w-[420px]">
-            Los archivos están en el servidor: el sitio se puede publicar aunque la vista previa no
-            haya arrancado.
+            Los archivos están en el servidor: el sitio se puede publicar aunque la vista previa no haya arrancado.
           </span>
         )}
       </div>

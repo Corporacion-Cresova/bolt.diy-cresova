@@ -44,9 +44,12 @@ describe('the sectorial exemplars block', () => {
     const heroes = [SECTOR_SALUD_HERO, SECTOR_GASTRONOMIA_HERO, SECTOR_OFICIOS_HERO, SECTOR_COMERCIO_HERO];
 
     for (const hero of heroes) {
-      // The hero mentions at least three numeric tokens. We do not require a specific markup
-      // because each sector's stat row uses different containers (dd/dt, plain <p>, etc.).
+      /*
+       * The hero mentions at least three numeric tokens. We do not require a specific markup
+       * because each sector's stat row uses different containers (dd/dt, plain <p>, etc.).
+       */
       const numericMatches = hero.match(/\b\d+(?:[.,]\d+)*(?:%|\s*(?:años|h|días|k|mil)?)?\b/g) ?? [];
+
       // Filter out CSS values (px, rem, vw) and design-token numbers that are not stats.
       const stats = numericMatches.filter((n) => !/(?:px|rem|vw|vh|em)$/i.test(n));
       expect(stats.length).toBeGreaterThanOrEqual(3);
@@ -59,10 +62,13 @@ describe('the sectorial exemplars block', () => {
      * Road, West End». The contact sections in this file have to honour the same standard: a
      * real day, a real time range. Placeholder hours are the fastest way to look unfinished.
      */
-    // Only the contacto (gastronomía) has a real hours row in this first cut. The other
-    // trios cover hours inside the hero stat strip, which is tested above.
+    /*
+     * Only the contacto (gastronomía) has a real hours row in this first cut. The other
+     * trios cover hours inside the hero stat strip, which is tested above.
+     */
     expect(SECTOR_GASTRONOMIA_CONTACT).toMatch(/(Lunes|Martes|Miércoles|Jueves|Viernes|Sábado|Domingo)/);
     expect(SECTOR_GASTRONOMIA_CONTACT).toMatch(/\d{1,2}:\d{2}\s*[–-]\s*\d{1,2}:\d{2}/);
+
     // The contact section never says "horario a convenir" or "horario a confirmar".
     expect(SECTOR_GASTRONOMIA_CONTACT).not.toMatch(/horario a (?:confirmar|convenir|coordinar)/i);
   });

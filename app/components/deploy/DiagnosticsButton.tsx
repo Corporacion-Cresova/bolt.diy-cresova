@@ -7,7 +7,11 @@ import { webcontainer } from '~/lib/webcontainer';
 import type { RemoteContainer, RunnerDiagnostics } from '~/lib/cresova/remote-container';
 import { describeTabSuspension, watchTabSuspension } from '~/lib/cresova/tab-suspension';
 import { describeBrowserErrors, watchBrowserErrors } from '~/lib/cresova/browser-errors';
-import { checkPreviewEmbedding, describePreviewEmbedding, type PreviewEmbedding } from '~/lib/cresova/preview-embedding';
+import {
+  checkPreviewEmbedding,
+  describePreviewEmbedding,
+  type PreviewEmbedding,
+} from '~/lib/cresova/preview-embedding';
 import { describeAutoTurns } from '~/lib/cresova/auto-turn-budget';
 import versionInfo from '~/version.json';
 import Cookies from 'js-cookie';
@@ -211,7 +215,8 @@ export function DiagnosticsButton() {
      * beats any amount of reasoning about what the runner sends — the two are separated by a
      * gateway that could be changing either.
      */
-    const preview = workbenchStore.previews.get().find((candidate) => candidate.ready) ?? workbenchStore.previews.get()[0];
+    const preview =
+      workbenchStore.previews.get().find((candidate) => candidate.ready) ?? workbenchStore.previews.get()[0];
     const embedding = preview ? await checkPreviewEmbedding(preview.baseUrl) : undefined;
 
     const report = describe(diagnostics, runnerError, await terminalTail(), embedding);

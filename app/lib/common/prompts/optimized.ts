@@ -467,9 +467,9 @@ Examples:
     </icons>
 
     <image_handling>
-      - Use Unsplash for stock photos
+      - Use ONLY the URLs listed in <cresova_images>. Never invent a stock photo URL and never
+        link to Unsplash: an invented id resolves to nothing and ships a page with broken images.
       - Direct URL linking only
-      - ONLY use valid, existing Unsplash URLs
       - NO downloading or storing of images locally
       - Proper Image component implementation
       - Test all image URLs to ensure they load correctly

@@ -23,10 +23,12 @@
  * fastest way to look unfinished.
  */
 
-/* ============================================================
+/*
+ * ============================================================
  * SECTOR 1: SALUD, LEGAL, FINANCIERO, PROFESIONAL
  * Tratamiento: sólido. El usuario quiere confiar antes que asombrarse.
- * ============================================================ */
+ * ============================================================
+ */
 
 /**
  * SALUD HERO — profesionales y consultorios.
@@ -144,10 +146,12 @@ Why it works for salud:
 - The «sin costo» first row is deliberate. It lowers the cost of the next decision.
 `;
 
-/* ============================================================
+/*
+ * ============================================================
  * SECTOR 2: GASTRONOMÍA, CAFÉ, CATERING
  * Tratamiento: editorial. El menú es la identidad.
- * ============================================================ */
+ * ============================================================
+ */
 
 /**
  * GASTRONOMÍA HERO — restaurante con una carta que cambia.
@@ -216,15 +220,15 @@ export const SECTOR_GASTRONOMIA_CONTACT = `
       <form class="mt-9 grid gap-4" onSubmit="return false">
         <label class="grid gap-2">
           <span class="text-[0.8125rem] font-medium">Nombre</span>
-          <input type="text" name="nombre" required class="rounded-md border border-ink/15 bg-surface px-4 py-3 text-[0.9375rem] outline-none transition-colors duration-150 focus:border-accent" />
+          <input type="text" name="nombre" required class="rounded-md border border-ink/15 bg-surface px-4 py-3 text-[0.9375rem] outline-none transition-colors duration-150 focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" />
         </label>
         <label class="grid gap-2">
           <span class="text-[0.8125rem] font-medium">Para cuántos</span>
-          <input type="number" name="personas" min="1" max="12" required class="rounded-md border border-ink/15 bg-surface px-4 py-3 text-[0.9375rem] outline-none transition-colors duration-150 focus:border-accent" />
+          <input type="number" name="personas" min="1" max="12" required class="rounded-md border border-ink/15 bg-surface px-4 py-3 text-[0.9375rem] outline-none transition-colors duration-150 focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" />
         </label>
         <label class="grid gap-2">
           <span class="text-[0.8125rem] font-medium">Fecha y hora</span>
-          <input type="datetime-local" name="fecha" required class="rounded-md border border-ink/15 bg-surface px-4 py-3 text-[0.9375rem] outline-none transition-colors duration-150 focus:border-accent" />
+          <input type="datetime-local" name="fecha" required class="rounded-md border border-ink/15 bg-surface px-4 py-3 text-[0.9375rem] outline-none transition-colors duration-150 focus:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" />
         </label>
         <button type="submit" class="mt-2 justify-self-start rounded-md bg-accent px-6 py-3.5 text-[0.9375rem] font-semibold text-white transition-colors duration-150 hover:bg-accent-strong">
           Pedir mesa
@@ -265,10 +269,12 @@ Why it works for gastronomía:
   gets calls when it is closed.
 `;
 
-/* ============================================================
+/*
+ * ============================================================
  * SECTOR 3: OFICIOS, CONSTRUCCIÓN, LIMPIEZA, TRANSPORTE
  * Tratamiento: sólido. Trust signals matter more than visual flair.
- * ============================================================ */
+ * ============================================================
+ */
 
 /**
  * OFICIOS HERO — contratistas, construcción, oficios.
@@ -323,10 +329,12 @@ Why it works for oficios:
   contractor writes down.
 `;
 
-/* ============================================================
+/*
+ * ============================================================
  * SECTOR 4: COMERCIO, TIENDA, RETAIL
  * Tratamiento: editorial. La marca se siente curada.
- * ============================================================ */
+ * ============================================================
+ */
 
 /**
  * COMERCIO HERO — tienda retail, marca curada.
@@ -370,11 +378,13 @@ Why it works for comercio:
   six products is a store that has not curated.
 `;
 
-/* ============================================================
+/*
+ * ============================================================
  * ANTI-PATTERNS VISUALES
  * Mismo problema, dos respuestas. El modelo vio el bueno y el malo,
  * y puede elegir con fundamento en vez de caer en el default.
- * ============================================================ */
+ * ============================================================
+ */
 
 /**
  * ANTI-PATTERN A — services: cards vs editorial list.
@@ -455,7 +465,7 @@ Why the editorial list version is the right answer:
  * ANTI-PATTERN B — gallery: four equal squares vs asymmetric.
  *
  * The wrong answer is the 2x2 grid. Four equal squares, each with a photo, each given the same
-  * weight. The page says: these photos are equally important. They are not.
+ * weight. The page says: these photos are equally important. They are not.
  *
  * The right answer is one photo that leads, two that support.
  */
