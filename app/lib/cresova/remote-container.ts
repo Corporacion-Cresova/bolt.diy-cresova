@@ -94,9 +94,9 @@ export class RemoteContainer {
     return this._connection.call<RunnerDiagnostics>('diagnostics');
   }
 
-  publish(name: string): Promise<{ url: string }> {
+  publish(name: string): Promise<{ url: string; thumbnailUrl?: string }> {
     // runs the project's build on the server, which takes longer than an ordinary call is given
-    return this._connection.call<{ url: string }>('publish', { name }, BUILD_TIMEOUT_MS);
+    return this._connection.call<{ url: string; thumbnailUrl?: string }>('publish', { name }, BUILD_TIMEOUT_MS);
   }
 
   /**
