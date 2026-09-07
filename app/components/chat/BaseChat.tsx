@@ -7,6 +7,8 @@ import React, { type RefCallback, useEffect, useState } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { Workbench } from '~/components/workbench/Workbench.client';
+import { ProjectsPanel } from '~/components/projects-panel/ProjectsPanel';
+import { $projects, $templates, addProject, type ProjectInfo, type TemplateInfo } from '~/lib/stores/projects-store';
 import { classNames } from '~/utils/classNames';
 import { PROVIDER_LIST } from '~/utils/constants';
 import { Messages } from './Messages.client';
@@ -492,6 +494,17 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
               </div>
             </div>
           </div>
+          <ProjectsPanel
+            onSelectProject={(project) => {
+              sendMessage?.({} as any, project.prompt);
+            }}
+            onSelectTemplate={(template) => {
+              sendMessage?.({} as any, template.prompt);
+            }}
+            onNewProject={() => {
+              /* Users can just start typing */
+            }}
+          />
           <ClientOnly>
             {() => (
               <Workbench chatStarted={chatStarted} isStreaming={isStreaming} setSelectedElement={setSelectedElement} />
