@@ -95,7 +95,34 @@ export const CRESOVA_DESIGN_KIT = `
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 
-  TOKENS (define once as CSS custom properties or Tailwind theme values, then never hardcode):
+  TOKENS. Every worked example below writes \`bg-surface\`, \`text-ink\`, \`border-ink/10\`,
+  \`text-accent\`. Those class names only exist if you PUT THEM IN \`tailwind.config.js\` in this
+  same response. Defining the palette as CSS custom properties instead does not make them exist:
+  PostCSS then fails with «The \`border-ink/10\` class does not exist», the stylesheet does not
+  compile, and the dev server serves a blank page while looking perfectly healthy. That has already
+  happened to a finished site. And the opacity suffixes (\`/10\`, \`/15\`) only work on a colour
+  that lives in this config, which is the other half of the same trap.
+
+  So copy this shape, with the hex values of your sector's row:
+
+  // tailwind.config.js
+  export default {
+    content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+    theme: {
+      extend: {
+        colors: {
+          bg: '#F7F5F0',
+          surface: '#FFFFFF',
+          ink: '#14322C',
+          muted: '#5B6F69',
+          accent: '#0E6E62',
+          'accent-strong': '#0A4F46',
+        },
+      },
+    },
+  };
+
+  The rest of the tokens (define once, then never hardcode):
   - Spacing scale: 4 8 12 16 24 32 48 64 96 128 160
   - Radii: 0 for bands and images, 6px for inputs and buttons, 12px only for elevated panels.
     Do not round everything to the same value.
@@ -151,6 +178,10 @@ export const CRESOVA_DESIGN_KIT = `
   - Contact: two columns, form or WhatsApp action on one side, hours and service area on the other.
   - Footer: business data, navigation, legal line.
 
+  IMAGE WEIGHT: every photo below the fold gets loading="lazy". The catalog serves photos around
+  600KB each, and a page that ships four megabytes of them is unusable on the mobile data most of
+  these clients browse on — the hero is the only image worth loading eagerly.
+
   IMAGE PLACEMENT: the hero photo carries the page, so give it real height (min 70vh on desktop)
   and an object-cover fit so it never stretches. Use a photo from <cresova_images> in the hero and
   in at least two more sections: a page with one lonely image looks unfinished. A section with no
@@ -172,6 +203,11 @@ export const CRESOVA_DESIGN_KIT = `
   - Placeholder copy. Write real, specific Spanish copy for this business and this sector, with
     concrete numbers, real service names and a real service area. "Lorem ipsum", "Your Company"
     or "Servicio 1" are worse than an empty section.
+  - Inventing another country. These are Honduran businesses: unless the client says otherwise,
+    prices are lempiras (L 1,250), phones are +504 with eight digits, and the cities are
+    Tegucigalpa, San Pedro Sula, La Ceiba, Comayagua, Choluteca, Roatán. A page that quotes pesos
+    and lists Guadalajara and Monterrey is not a page this client can show anyone, however good
+    the rest of it looks — and it is the default a model falls into when nobody says where it is.
   - The same radius, the same shadow and the same padding on every single element.
 
   And the looks that currently read as «made by an AI» at a glance. These are not ugly; they are
