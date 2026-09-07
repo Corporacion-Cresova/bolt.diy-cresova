@@ -1,4 +1,11 @@
+import { StickyHeader } from './components/StickyHeader';
 import { Hero } from './components/Hero';
+import { CategoryTriptych } from './components/CategoryTriptych';
+import { Catalogue } from './components/Catalogue';
+import { MarqueeBand } from './components/MarqueeBand';
+import { EditorialBand } from './components/EditorialBand';
+import { ProcessSteps } from './components/ProcessSteps';
+import { ClosingCTA } from './components/ClosingCTA';
 import { TrustStrip } from './components/TrustStrip';
 import { ServiceList } from './components/ServiceList';
 import { Gallery } from './components/Gallery';
@@ -6,7 +13,7 @@ import { Testimonial } from './components/Testimonial';
 import { Contact } from './components/Contact';
 import { SiteFooter } from './components/SiteFooter';
 import { WhatsAppFloat } from './components/WhatsAppFloat';
-import { site } from './lib/site';
+import { catalogue, site } from './lib/site';
 
 /*
  * The page is composed here, and this is the file to rewrite for a new client.
@@ -17,10 +24,24 @@ import { site } from './lib/site';
  *
  * The photo URLs come from <cresova_images>. Only put a photo where it honestly depicts what it
  * sits next to — a section with no suitable photo is better solid than filled with an unrelated one.
+ *
+ * ONE THING NOT TO COPY FROM THIS EXAMPLE: it ships with three photographs and reuses them across
+ * four sections, because three is all it has. Do not do that in a real build. Your catalogue has a
+ * dozen images to choose from, and the same picture appearing in the hero, the triptych and a
+ * product card is the fastest way to make a finished page look like a placeholder.
  */
 export default function App() {
   return (
     <>
+      <StickyHeader
+        links={[
+          { label: 'Cabañas', href: '#catalogo' },
+          { label: 'Experiencias', href: '#servicios' },
+          { label: 'El lugar', href: '#galeria' },
+          { label: 'Contacto', href: '#contacto' },
+        ]}
+      />
+
       <Hero
         eyebrow="Copán Ruinas"
         title="Dormir donde termina el camino"
@@ -45,10 +66,63 @@ export default function App() {
         ]}
       />
 
+      <MarqueeBand words={['Desayuno de finca', 'Senderos propios', 'Agua caliente', 'Wifi en la terraza']} />
+
+      <CategoryTriptych
+        eyebrow="Tres formas de estar acá"
+        title="Dormir, caminar y quedarse quieto."
+        ground="bg"
+        categories={[
+          {
+            name: 'Las cabañas',
+            line: 'Seis, de madera y piedra, cada una con su terraza.',
+            imageUrl: 'https://images.pexels.com/photos/803975/pexels-photo-803975.jpeg?auto=compress&cs=tinysrgb&w=940',
+            imageAlt: 'Cabaña de madera al anochecer, entre el bosque',
+          },
+          {
+            name: 'Los senderos',
+            line: 'Salen de la puerta y llegan al café y al mirador.',
+            imageUrl: 'https://images.pexels.com/photos/1183099/pexels-photo-1183099.jpeg?auto=compress&cs=tinysrgb&w=940',
+            imageAlt: 'La montaña al amanecer, vista desde el sendero',
+          },
+          {
+            name: 'La laguna',
+            line: 'Veinte minutos caminando, y nadie más alrededor.',
+            imageUrl: 'https://images.pexels.com/photos/2662116/pexels-photo-2662116.jpeg?auto=compress&cs=tinysrgb&w=940',
+            imageAlt: 'Laguna y bosque de pinos en la ruta de senderismo',
+          },
+        ]}
+      />
+
+      <Catalogue
+        eyebrow="Tarifas"
+        title="Lo que cuesta quedarse."
+        products={catalogue}
+        ground="surface"
+      />
+
+      <EditorialBand
+        imageUrl="https://images.pexels.com/photos/1183099/pexels-photo-1183099.jpeg?auto=compress&cs=tinysrgb&w=940"
+        imageAlt="La montaña al amanecer, vista desde el sendero"
+        quote="A las seis de la mañana no se oye un solo motor."
+        attribution="Piedra Viva, a 1.400 metros"
+      />
+
+      <ProcessSteps
+        eyebrow="Cómo se reserva"
+        title="Tres mensajes y está hecho."
+        ground="bg"
+        steps={[
+          { title: 'Escribinos', description: 'Decinos fechas y cuántas personas. Contestamos el mismo día.' },
+          { title: 'Te confirmamos', description: 'Disponibilidad y precio cerrado, sin sorpresas al llegar.' },
+          { title: 'Llegás', description: 'Te esperamos con el café hecho. El check-in es a las 14:00.' },
+        ]}
+      />
+
       <ServiceList
         eyebrow="Experiencias"
         title="Lo que se puede hacer sin bajar de la montaña"
-        ground="surface"
+        ground="tint"
         services={[
           {
             name: 'Sendero de café',
@@ -105,7 +179,13 @@ export default function App() {
         description="Contestamos el mismo día. Decinos las fechas y cuántas personas son, y te mandamos disponibilidad y precio cerrado."
         whatsappMessage={`Hola ${site.name}, quiero consultar disponibilidad.`}
         serviceArea={['Copán Ruinas', 'Santa Rita', 'La Entrada']}
-        ground="bg"
+        ground="surface"
+      />
+
+      <ClosingCTA
+        title="La montaña no se llena. Se reserva."
+        message={`Hola ${site.name}, quiero reservar.`}
+        label="Reservar por WhatsApp"
       />
 
       <SiteFooter />

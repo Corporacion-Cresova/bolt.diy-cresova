@@ -13,8 +13,30 @@ QUÉ CAMBIAR, EN ESTE ORDEN:
 3. index.html — el <link> de la tipografía y --font-display/--font-body en index.css, juntos. Una
    familia nombrada en CSS pero no cargada acá cae al font del sistema sin avisar.
 
-4. src/App.tsx — la página. Elegí cuatro a seis secciones, usá cada una UNA vez, y mirá los
-   `ground`: alternan a propósito.
+4. src/lib/site.ts, otra vez — el array `catalogue`, con nombres y precios reales en lempiras.
+   Es la sección que más convence a un dueño de negocio y la que más se deja fuera.
+
+5. src/App.tsx — la página. Ocho a catorce secciones, cada una UNA vez, y mirá los `ground`:
+   alternan a propósito.
+
+LO QUE YA EXISTE EN src/components (componelo, no lo reescribas):
+
+   StickyHeader        transparente sobre el hero, sólido con blur al bajar
+   Hero                60/40, foto sangrando al borde
+   TrustStrip          franja de datos concretos
+   MarqueeBand         una línea de palabras reales sobre el acento — una por página
+   CategoryTriptych    tres fotos a sangre con título encima, una por línea de negocio
+   Catalogue           productos con filtros que filtran y quick view con WhatsApp
+   EditorialBand       una foto a ancho completo con una frase encima — una por página
+   ProcessSteps        3-4 pasos numerados
+   ServiceList         lista editorial con precio
+   Gallery             masonry de fotos
+   Testimonial         una cita grande
+   Contact             dos columnas
+   ClosingCTA          titular a tamaño display sobre fondo invertido, antes del footer
+   SiteFooter, WhatsAppFloat
+
+   Si falta una forma, creá un componente nuevo al lado usando Section como envoltorio.
 
 LO QUE NO HAY QUE HACER:
 
