@@ -1,6 +1,7 @@
 import { json, type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import versionInfo from '~/version.json';
 import { generateOpenRouterCatalog } from '~/lib/.server/images/openrouter-images';
+import { imageStoreStats } from '~/lib/.server/images/image-store';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('api.health');
@@ -46,7 +47,15 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
       : !imagesKey
         ? 'OPENROUTER_IMAGES_KEY no llegó al runtime'
         : 'listo — agregá ?flux=1 para gastar $0.04 y probar una imagen de verdad',
-    prueba: undefined as undefined | { ok: boolean; detalle: string },
+    prueba: undefined as undefined | { ok: boolean; detalle: string; url?: string },
+
+    /*
+     * The generated images this instance is currently holding. Empty right after a redeploy and
+     * that is expected: the store is memory-backed, so a restart drops it. What it is here to
+     * catch is the opposite — a count that sits at the ceiling, meaning eviction is doing the
+     * work and previews from earlier in the day have started losing their photos.
+     */
+    cache: imageStoreStats(),
   };
 
   if (url.searchParams.get('flux') === '1' && images.listo) {
@@ -57,10 +66,15 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
         prompts: [{ subject: 'A single ripe coffee cherry on the branch, morning light', role: 'gallery' }],
         sector: 'Turismo, aventura, hotelería',
         apiKey: imagesKey,
+        origin: url.origin,
       });
 
       images.prueba = generated.length
-        ? { ok: true, detalle: `imagen generada en ${Date.now() - started} ms` }
+        ? {
+            ok: true,
+            detalle: `imagen generada en ${Date.now() - started} ms — abrí la url para verla`,
+            url: generated[0].url,
+          }
         : { ok: false, detalle: 'la llamada terminó sin imagen — revisá los logs del servicio' };
     } catch (error) {
       logger.error('Flux smoke test failed', error);

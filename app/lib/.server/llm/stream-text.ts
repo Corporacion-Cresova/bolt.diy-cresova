@@ -11,6 +11,7 @@ import { CRESOVA_SECTORIAL_EXEMPLARS } from '~/lib/common/prompts/cresova-sector
 import { CRESOVA_MOTION_RECIPES } from '~/lib/common/prompts/cresova-motion-recipes';
 import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
+import { keepPromptSafePhotos } from '~/lib/.server/images/prompt-safe-photos';
 import { generateOpenRouterCatalog, composeImageBriefs } from '~/lib/.server/images/openrouter-images';
 import { detectSector } from '~/lib/cresova/sector-detector';
 import { allowedHTMLElements } from '~/utils/markdown';
@@ -83,7 +84,9 @@ function findUserRequest<T extends Omit<Message, 'id'>>(messages: T[]): T | unde
   return visible[visible.length - 1] ?? messages.find((message) => message.role === 'user');
 }
 
-function renderPhotoCatalog(photos: CatalogPhoto[]): string {
+function renderPhotoCatalog(unsafePhotos: CatalogPhoto[]): string {
+  const photos = keepPromptSafePhotos(unsafePhotos);
+
   if (photos.length === 0) {
     return `
 <cresova_images>
@@ -151,6 +154,15 @@ export async function streamText(props: {
   messageSliceId?: number;
   chatMode?: 'discuss' | 'build';
   designScheme?: DesignScheme;
+
+  /**
+   * Absolute origin this app is reachable at, taken from the incoming request.
+   *
+   * Generated images are served back by this app and embedded in a page that runs on the runner
+   * under a different host, so they need an absolute URL and there is no configuration that
+   * already holds one. The request knows; nothing else does.
+   */
+  origin?: string;
 }) {
   const {
     messages,
@@ -165,6 +177,7 @@ export async function streamText(props: {
     summary,
     chatMode,
     designScheme,
+    origin,
   } = props;
   let currentModel = DEFAULT_MODEL;
   let currentProvider = DEFAULT_PROVIDER.name;
@@ -319,6 +332,7 @@ export async function streamText(props: {
           prompts: briefs,
           sector,
           apiKey: imagesKey,
+          origin,
         });
         combined = combined.concat(generatedPhotos);
       }
