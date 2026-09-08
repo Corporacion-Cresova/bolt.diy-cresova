@@ -30,6 +30,17 @@ interface Env {
   MAX_COMPLETION_TOKENS: string;
 
   /** Optional. Secret shared with the Cresova Runner; signs the tickets the browser presents. */
+  /*
+   * Las dos de generación de imágenes.
+   *
+   * Estar declaradas en app/types/global.d.ts no alcanza: bindings.sh arma los --binding que
+   * recibe wrangler leyendo los nombres de ESTE archivo, así que una variable que falte acá se
+   * pone en EasyPanel, llega al contenedor, y aun así nunca aparece en context.cloudflare.env.
+   * El fallback a process.env tampoco la rescata, porque en el runtime de workerd process.env no
+   * se puebla desde el entorno del host. Falla en silencio: la función simplemente no corre.
+   */
+  CRESOVA_IMAGES_ENABLED: string;
+  OPENROUTER_IMAGES_KEY: string;
   RUNNER_TOKEN: string;
 
   /** Optional. WebSocket address of the Cresova Runner, for example wss://runner.cresova.com */
