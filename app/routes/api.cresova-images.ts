@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from '@remix-run/cloudflare';
-import { imagePath, imageStoreStats, listImages } from '~/lib/.server/images/image-store';
+import { getLastImageFailures, imagePath, imageStoreStats, listImages } from '~/lib/.server/images/image-store';
 
 /**
  * What the image generator actually produced, and whether the page used it.
@@ -24,6 +24,7 @@ import { imagePath, imageStoreStats, listImages } from '~/lib/.server/images/ima
 export async function loader({ request }: LoaderFunctionArgs) {
   const images = listImages();
   const stats = imageStoreStats();
+  const failures = getLastImageFailures();
   const origin = new URL(request.url).origin;
 
   const escape = (value: string) =>
@@ -52,6 +53,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
       </article>`;
     })
     .join('\n');
+
+  /*
+   * Shown above the photos rather than instead of them: a run can be billed for six images and
+   * keep four, and the two that were lost are the interesting part.
+   */
+  const failureBanner = failures
+    ? `
+    <section class="failures">
+      <h2>La última generación perdió ${failures.entries.length} ${failures.entries.length === 1 ? 'imagen' : 'imágenes'}</h2>
+      <p class="state">${escape(failures.model)} · ${escape(time(failures.at))}</p>
+      <ul>${failures.entries.map((entry) => `<li><b>${escape(entry.role)}</b>: ${escape(entry.reason)}</li>`).join('')}</ul>
+    </section>`
+    : '';
 
   const empty = `
     <p class="empty">
@@ -85,6 +99,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     summary { cursor: pointer; opacity: .7; }
     pre { white-space: pre-wrap; opacity: .8; background: var(--line); padding: .75rem; border-radius: 6px; margin: .5rem 0 0; }
     .empty { opacity: .7; }
+    .failures { border: 1px solid #b45309; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 2rem; }
+    .failures h2 { font-size: 1rem; margin: 0 0 .3rem; color: #b45309; text-transform: none; letter-spacing: 0; opacity: 1; }
+    .failures ul { margin: .6rem 0 0; padding-left: 1.1rem; font-size: .9rem; }
+    .failures li { margin-bottom: .25rem; }
+    @media (prefers-color-scheme: dark) { .failures { border-color: #fbbf24; } .failures h2 { color: #fbbf24; } }
   </style>
 </head>
 <body>
@@ -93,6 +112,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ${stats.count} en memoria · ${Math.round(stats.bytes / 1024 / 1024)} MB de ${Math.round(stats.limitBytes / 1024 / 1024)} MB ·
     <a href="/api/health">/api/health</a>
   </p>
+  ${failureBanner}
   ${images.length ? rows : empty}
 </body>
 </html>`;

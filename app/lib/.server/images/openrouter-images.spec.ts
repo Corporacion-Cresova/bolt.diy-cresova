@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_IMAGE_MODEL,
+  OPENROUTER_IMAGE_MODELS_ENDPOINT,
   composeImageBriefs,
   buildImagePrompt,
   generateOpenRouterCatalog,
@@ -277,24 +278,27 @@ describe('generateOpenRouterCatalog, with OpenRouter answering', () => {
 
 describe('the configured image model', () => {
   /*
-   * The bug these two exist for: the model was `black-forest-labs/flux.2-pro`, an id written from
-   * memory. OpenRouter serves no Flux model at all, so every request was rejected, the catalog
-   * quietly fell back to Pexels, and a client's site shipped with stock photos while every switch
-   * in the product said image generation was on.
+   * The first version of this test asked `/api/v1/models` whether the model existed, concluded
+   * that `black-forest-labs/flux.2-pro` did not, and was wrong: that endpoint is the *chat*
+   * catalogue, and image models live at `/api/v1/images/models`. Flux was generating and being
+   * billed the whole time — the logs said so plainly.
    *
-   * The first test is offline and always runs. The second asks OpenRouter's public catalogue —
-   * no key, no cost — and is skipped when the sandbox has no network, so a build without internet
-   * does not fail on it.
+   * Which is the lesson worth keeping: a check against the wrong source of truth is more
+   * dangerous than no check, because it answers with confidence. Hence the endpoint is now a
+   * named export used by both this test and `/api/health`, so there is one place to be right.
+   *
+   * The network call is skipped when the sandbox has no internet, so a build without it does not
+   * fail here.
    */
   it('is an id shaped like something a provider serves', () => {
     expect(DEFAULT_IMAGE_MODEL).toMatch(/^[a-z0-9-]+\/[a-z0-9.-]+$/);
   });
 
-  it('is a model OpenRouter actually serves, and one that outputs images', async () => {
+  it('is a model in OpenRouter image catalogue', async () => {
     let catalogue: Response;
 
     try {
-      catalogue = await fetch('https://openrouter.ai/api/v1/models', { signal: AbortSignal.timeout(15_000) });
+      catalogue = await fetch(OPENROUTER_IMAGE_MODELS_ENDPOINT, { signal: AbortSignal.timeout(15_000) });
     } catch {
       return;
     }
@@ -303,14 +307,12 @@ describe('the configured image model', () => {
       return;
     }
 
-    const body = (await catalogue.json()) as {
-      data?: Array<{ id: string; architecture?: { output_modalities?: string[] } }>;
-    };
+    const body = (await catalogue.json()) as { data?: Array<{ id: string }> };
 
-    const found = body.data?.find((model) => model.id === DEFAULT_IMAGE_MODEL);
-
-    expect(found, `OpenRouter does not serve "${DEFAULT_IMAGE_MODEL}"`).toBeTruthy();
-    expect(found?.architecture?.output_modalities).toContain('image');
+    expect(
+      body.data?.some((model) => model.id === DEFAULT_IMAGE_MODEL),
+      `the image catalogue does not list "${DEFAULT_IMAGE_MODEL}"`,
+    ).toBe(true);
   }, 20_000);
 });
 

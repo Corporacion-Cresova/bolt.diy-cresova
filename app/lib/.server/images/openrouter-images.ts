@@ -1,5 +1,5 @@
 import { createScopedLogger } from '~/utils/logger';
-import { imagePath, putImage } from './image-store';
+import { imagePath, putImage, recordImageFailures } from './image-store';
 import { describeBusiness } from './describe-business';
 
 const logger = createScopedLogger('CresovaImagesOpenRouter');
@@ -26,22 +26,21 @@ const logger = createScopedLogger('CresovaImagesOpenRouter');
 
 const OPENROUTER_IMAGES_ENDPOINT = 'https://openrouter.ai/api/v1/images';
 
+/** The catalogue of models this endpoint serves. Not `/api/v1/models`, which is chat only. */
+export const OPENROUTER_IMAGE_MODELS_ENDPOINT = 'https://openrouter.ai/api/v1/images/models';
+
 /**
- * The image model, and the reason this is not a constant any more.
+ * The image model.
  *
- * It used to be `black-forest-labs/flux.2-pro`, which OpenRouter does not serve. It serves no
- * Flux model at all — the id was written from memory and never checked against their catalogue.
- * So every request was rejected, `runSingleImage` logged a line nobody reads, the catalog fell
- * back to Pexels, and a whole site was generated with stock photos while the switch said the
- * feature was on. Nothing in the product said otherwise.
+ * Flux 2 Pro is what Diego chose and what the logs show working: about $0.03 for a 16:9 frame and
+ * $0.045 for the taller crops. It is left as the default deliberately — the one time it was
+ * changed, it was changed on a bad reading (see the note on the catalogue endpoint above), not on
+ * anything wrong with the model.
  *
- * Nano Banana is the default because it is the model this feature was costed against: about
- * $0.039 an image, so $0.24 for the six a site gets, which is the number the plan committed to.
  * The override exists because picking an image model is a taste decision made by looking at
- * output, and Diego should be able to try `google/gemini-3.1-flash-image` (better, twice the
- * price) without waiting for a deploy of new code.
+ * output, and it should not need a deploy of new code.
  */
-export const DEFAULT_IMAGE_MODEL = 'google/gemini-2.5-flash-image';
+export const DEFAULT_IMAGE_MODEL = 'black-forest-labs/flux.2-pro';
 
 /**
  * How long one image may take before it is given up on.
@@ -308,19 +307,23 @@ export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): P
         return { failure: { role: imagePrompt.role, reason: generated.reason } };
       }
 
-      const id = putImage(generated.base64, generated.contentType, {
+      const stored = putImage(generated.base64, generated.contentType, {
         role: imagePrompt.role,
         subject: imagePrompt.subject,
         business: imagePrompt.business ?? '',
         prompt: fluxPrompt,
       });
 
-      if (!id) {
-        return { failure: { role: imagePrompt.role, reason: 'the image came back but could not be stored' } };
+      if (!stored.ok) {
+        /*
+         * The image arrived and was paid for; it is this app that would not keep it. That is a
+         * different fault from the service refusing to make one, and it needs saying as such.
+         */
+        return { failure: { role: imagePrompt.role, reason: `generated but not stored — ${stored.reason}` } };
       }
 
       const photo: CatalogPhoto = {
-        url: `${req.origin!.replace(/\/$/, '')}${imagePath(id, generated.contentType)}`,
+        url: `${req.origin!.replace(/\/$/, '')}${imagePath(stored.id, generated.contentType)}`,
         alt: imagePrompt.subject,
         source: 'openrouter',
       };
@@ -339,6 +342,8 @@ export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): P
       failures.push(result.failure);
     }
   }
+
+  recordImageFailures(model, failures);
 
   logger.info(
     `OpenRouter catalog with ${model}: ${photos.length}/${req.prompts.length} images for sector "${req.sector}"` +

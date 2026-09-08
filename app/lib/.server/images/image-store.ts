@@ -71,14 +71,27 @@ export interface ImageBrief {
 }
 
 /**
- * Roughly forty editorial JPEGs. Sized against workerd's 128 MB so a burst of generations can
- * never be what takes the builder down; the eviction below keeps it at the ceiling rather than
- * letting it grow.
+ * The ceiling on everything held, and the eviction below keeps it there rather than letting the
+ * cache grow. Sized against workerd's 128 MB so a busy afternoon can never be what takes the
+ * builder down, and generous enough to hold a couple of sites' worth of frames — a published site
+ * does not depend on this staying warm, because the runner copies the images in at publish time.
  */
-const MAX_TOTAL_BYTES = 24 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 
-/** Larger than any 16:9 JPEG Flux returns, small enough that a runaway response cannot be stored. */
-const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+/**
+ * The ceiling on one image.
+ *
+ * This was 6 MB, with a comment claiming it was "larger than any 16:9 JPEG Flux returns" — a
+ * number written from an assumption, not from a measurement. A 4-megapixel frame returned as PNG
+ * is comfortably past it, and the rejection was silent: `putImage` returned null, the photo
+ * vanished from the catalog, and the build carried on with stock photos. Exactly the failure mode
+ * this file was written to end, reintroduced by its own guard.
+ *
+ * 16 MB fits a 4 MP PNG with room to spare and still stops a runaway response from being stored.
+ * When it does reject something, it now says so in words that reach `/api/health` and the build
+ * log — the size matters less than the rejection being visible.
+ */
+const MAX_IMAGE_BYTES = 16 * 1024 * 1024;
 
 const ALLOWED_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -121,27 +134,40 @@ function decodeBase64(b64: string): Uint8Array | null {
   }
 }
 
+export type PutImageResult = { ok: true; id: string } | { ok: false; reason: string };
+
 /**
- * Stores one generated image and returns the id to address it by, or null when the payload is
- * not something we are willing to serve. Never throws: a build must not fail because an image
+ * Stores one generated image and returns the id to address it by, or why it refused.
+ *
+ * The reason is returned rather than only logged because of what a silent refusal costs: an image
+ * that was generated and paid for disappears, the catalog falls back to stock, and the only trace
+ * is a line in a container nobody reads. Never throws — a build must not fail because an image
  * came back malformed.
  */
-export function putImage(base64: string, contentType: string, brief: ImageBrief): string | null {
+export function putImage(base64: string, contentType: string, brief: ImageBrief): PutImageResult {
   if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
-    logger.warn(`Refusing to store an image with content type "${contentType}"`);
-    return null;
+    const reason = `content type "${contentType}" is not one this app serves`;
+    logger.warn(`Refusing to store an image: ${reason}`);
+
+    return { ok: false, reason };
   }
 
   const bytes = decodeBase64(base64);
 
   if (!bytes || bytes.byteLength === 0) {
-    logger.warn('Refusing to store an image whose base64 payload did not decode');
-    return null;
+    const reason = 'the base64 payload did not decode';
+    logger.warn(`Refusing to store an image: ${reason}`);
+
+    return { ok: false, reason };
   }
 
   if (bytes.byteLength > MAX_IMAGE_BYTES) {
-    logger.warn(`Refusing to store a ${Math.round(bytes.byteLength / 1024)} KB image, over the per-image ceiling`);
-    return null;
+    const reason =
+      `the image is ${Math.round(bytes.byteLength / 1024 / 1024)} MB, over the ` +
+      `${MAX_IMAGE_BYTES / 1024 / 1024} MB per-image ceiling`;
+    logger.warn(`Refusing to store an image: ${reason}`);
+
+    return { ok: false, reason };
   }
 
   evictUntilItFits(bytes.byteLength);
@@ -150,7 +176,7 @@ export function putImage(base64: string, contentType: string, brief: ImageBrief)
   images.set(id, { bytes, contentType, brief, createdAt: new Date().toISOString(), hits: 0 });
   storedBytes += bytes.byteLength;
 
-  return id;
+  return { ok: true, id };
 }
 
 export function getImage(id: string): StoredImage | undefined {
@@ -184,10 +210,29 @@ export function imageStoreStats(): { count: number; bytes: number; limitBytes: n
   return { count: images.size, bytes: storedBytes, limitBytes: MAX_TOTAL_BYTES };
 }
 
+/**
+ * Why the last generation's images did not come back, if any of them did not.
+ *
+ * Kept here so the diagnostics page can show it. A build's image failures used to exist only as a
+ * log line inside the container, which meant that from the outside "generated six photos" and
+ * "was billed for six photos and kept none" looked exactly the same — and that is precisely the
+ * state a whole site shipped in.
+ */
+let lastFailures: { at: string; model: string; entries: Array<{ role: string; reason: string }> } | undefined;
+
+export function recordImageFailures(model: string, entries: Array<{ role: string; reason: string }>) {
+  lastFailures = entries.length ? { at: new Date().toISOString(), model, entries } : undefined;
+}
+
+export function getLastImageFailures() {
+  return lastFailures;
+}
+
 /** Test seam. Never called by the runtime. */
 export function __resetImageStore() {
   images.clear();
   storedBytes = 0;
+  lastFailures = undefined;
 }
 
 export const IMAGE_EXTENSIONS: Record<string, string> = {

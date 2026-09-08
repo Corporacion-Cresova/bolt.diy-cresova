@@ -2,7 +2,7 @@ import { json, type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import versionInfo from '~/version.json';
 import { generateOpenRouterCatalog } from '~/lib/.server/images/openrouter-images';
 import { imageStoreStats } from '~/lib/.server/images/image-store';
-import { DEFAULT_IMAGE_MODEL } from '~/lib/.server/images/openrouter-images';
+import { DEFAULT_IMAGE_MODEL, OPENROUTER_IMAGE_MODELS_ENDPOINT } from '~/lib/.server/images/openrouter-images';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('api.health');
@@ -61,10 +61,12 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
     modelo: imagesModel,
 
     /*
-     * Whether OpenRouter actually serves the configured model, checked against their public
-     * catalogue. Free, needs no key, and it is the check that would have caught the id nobody
-     * verified: `black-forest-labs/flux.2-pro` does not exist, so every request was rejected and
-     * every site shipped with stock photos while this page reported the feature as ready.
+     * Whether OpenRouter's image catalogue lists the configured model.
+     *
+     * The first version of this checked `/api/v1/models` — the *chat* catalogue — and so reported
+     * a perfectly working Flux model as nonexistent. Image models live at a different endpoint
+     * entirely. A check pointed at the wrong source of truth is worse than no check, because it
+     * is confidently wrong; this one now shares its endpoint with the test that covers it.
      */
     modeloValido: undefined as undefined | { ok: boolean; detalle: string },
 
@@ -75,19 +77,17 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
   };
 
   try {
-    const catalogue = await fetch('https://openrouter.ai/api/v1/models', { signal: AbortSignal.timeout(8000) });
+    const catalogue = await fetch(OPENROUTER_IMAGE_MODELS_ENDPOINT, { signal: AbortSignal.timeout(8000) });
 
     if (catalogue.ok) {
-      const body = (await catalogue.json()) as {
-        data?: Array<{ id: string; architecture?: { output_modalities?: string[] } }>;
-      };
-      const found = body.data?.find((model) => model.id === imagesModel);
+      const body = (await catalogue.json()) as { data?: Array<{ id: string }> };
 
-      images.modeloValido = !found
-        ? { ok: false, detalle: `OpenRouter no sirve "${imagesModel}" — revisá OPENROUTER_IMAGES_MODEL` }
-        : found.architecture?.output_modalities?.includes('image')
-          ? { ok: true, detalle: 'OpenRouter lo sirve y genera imágenes' }
-          : { ok: false, detalle: `"${imagesModel}" existe pero no genera imágenes` };
+      images.modeloValido = body.data?.some((model) => model.id === imagesModel)
+        ? { ok: true, detalle: 'OpenRouter lo lista en su catálogo de imágenes' }
+        : {
+            ok: false,
+            detalle: `el catálogo de imágenes de OpenRouter no lista "${imagesModel}" — revisá OPENROUTER_IMAGES_MODEL`,
+          };
     }
   } catch {
     // a catalogue that does not answer says nothing about our configuration, so it says nothing
