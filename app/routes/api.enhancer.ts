@@ -1,6 +1,6 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { streamText } from '~/lib/.server/llm/stream-text';
-import { stripIndents } from '~/utils/stripIndent';
+import { cresovaBriefPrompt } from '~/lib/common/prompts/cresova-brief';
 import type { ProviderInfo } from '~/types/model';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { createScopedLogger } from '~/utils/logger';
@@ -45,44 +45,21 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
       messages: [
         {
           role: 'user',
-          content:
-            `[Model: ${model}]\n\n[Provider: ${providerName}]\n\n` +
-            stripIndents`
-            You are a professional prompt engineer specializing in crafting precise, effective prompts.
-            Your task is to enhance prompts by making them more specific, actionable, and effective.
-
-            I want you to improve the user prompt that is wrapped in \`<original_prompt>\` tags.
-
-            For valid prompts:
-            - Make instructions explicit and unambiguous
-            - Add relevant context and constraints
-            - Remove redundant information
-            - Maintain the core intent
-            - Ensure the prompt is self-contained
-            - Use professional language
-
-            For invalid or unclear prompts:
-            - Respond with clear, professional guidance
-            - Keep responses concise and actionable
-            - Maintain a helpful, constructive tone
-            - Focus on what the user should provide
-            - Use a standard template for consistency
-
-            IMPORTANT: Your response must ONLY contain the enhanced prompt text.
-            Do not include any explanations, metadata, or wrapper tags.
-
-            <original_prompt>
-              ${message}
-            </original_prompt>
-          `,
+          content: `[Model: ${model}]\n\n[Provider: ${providerName}]\n\n` + cresovaBriefPrompt(message),
         },
       ],
       env: context.cloudflare?.env as any,
       apiKeys,
       providerSettings,
       options: {
+        /*
+         * The whole instruction lives in the user turn, and this only guards the shape of the
+         * answer. The brief lands straight in the prompt box, so a preamble like «Claro, acá está
+         * el brief:» becomes the first line of the next build request.
+         */
         system:
-          'You are a senior software principal architect, you should help the user analyse the user query and enrich it with the necessary context and constraints to make it more specific, actionable, and effective. You should also ensure that the prompt is self-contained and uses professional language. Your response should ONLY contain the enhanced prompt text. Do not include any explanations, metadata, or wrapper tags.',
+          'Sos el director de arte de Cresova. Devolvés únicamente el brief pedido, sin saludo, ' +
+          'sin explicación y sin envolverlo en etiquetas ni en un bloque de código.',
 
         /*
          * onError: (event) => {
