@@ -18,6 +18,13 @@ import {
 
 const jpegBase64 = (bytes: number) => btoa('\xff\xd8\xff'.padEnd(bytes, 'x'));
 
+/** The id of a stored image, for the tests that only care that it worked. */
+const idOf = (result: ReturnType<typeof putImage>) => {
+  expect(result.ok, result.ok ? '' : result.reason).toBe(true);
+
+  return (result as { ok: true; id: string }).id;
+};
+
 const brief = {
   role: 'hero',
   subject: 'Editorial hero photograph',
@@ -31,11 +38,11 @@ describe('image store', () => {
   });
 
   it('stores bytes and gives back an id that addresses them', () => {
-    const id = putImage(jpegBase64(64), 'image/jpeg', brief);
+    const id = idOf(putImage(jpegBase64(64), 'image/jpeg', brief));
 
     expect(id).toBeTruthy();
 
-    const stored = getImage(id!);
+    const stored = getImage(id);
     expect(stored?.contentType).toBe('image/jpeg');
     expect(stored?.bytes.byteLength).toBe(64);
   });
@@ -52,33 +59,44 @@ describe('image store', () => {
   });
 
   it('refuses a content type it will not serve', () => {
-    expect(putImage(jpegBase64(64), 'text/html', brief)).toBeNull();
-    expect(putImage(jpegBase64(64), 'image/svg+xml', brief)).toBeNull();
+    expect(putImage(jpegBase64(64), 'text/html', brief).ok).toBe(false);
+    expect(putImage(jpegBase64(64), 'image/svg+xml', brief).ok).toBe(false);
   });
 
   it('refuses a payload that is not valid base64, without throwing', () => {
-    expect(putImage('this is not base64 !!!', 'image/jpeg', brief)).toBeNull();
+    expect(putImage('this is not base64 !!!', 'image/jpeg', brief).ok).toBe(false);
   });
 
-  it('refuses an image over the per-image ceiling', () => {
-    // 7 MB, above the 6 MB ceiling
-    expect(putImage(jpegBase64(7 * 1024 * 1024), 'image/jpeg', brief)).toBeNull();
+  it('refuses an image over the per-image ceiling, and says how big it was', () => {
+    const result = putImage(jpegBase64(17 * 1024 * 1024), 'image/jpeg', brief);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? '' : result.reason).toMatch(/17 MB.*16 MB/);
+  });
+
+  it('accepts a 4-megapixel PNG, which is what an image model actually returns', () => {
+    /*
+     * The ceiling used to be 6 MB, on the assumption that a Flux frame was a small JPEG. A 4 MP
+     * PNG is not, so real images were being refused and the refusal was silent — the photo simply
+     * never appeared in the catalog and the build shipped with stock.
+     */
+    expect(putImage(jpegBase64(12 * 1024 * 1024), 'image/png', brief).ok).toBe(true);
   });
 
   it('evicts the oldest images rather than growing without a bound', () => {
     /*
-     * Six images of 5 MB is 30 MB against a 24 MB ceiling, so the first ones have to go. The
+     * Seven images of 12 MB is 84 MB against a 64 MB ceiling, so the first ones have to go. The
      * builder runs on workerd with 128 MB; an unbounded cache here would be a way for a busy
      * afternoon to take the whole app down.
      */
-    const ids = Array.from({ length: 6 }, () => putImage(jpegBase64(5 * 1024 * 1024), 'image/jpeg', brief));
+    const ids = Array.from({ length: 7 }, () => idOf(putImage(jpegBase64(12 * 1024 * 1024), 'image/jpeg', brief)));
 
     const stats = imageStoreStats();
     expect(stats.bytes).toBeLessThanOrEqual(stats.limitBytes);
 
     // the most recent survived, the first did not
-    expect(getImage(ids[5]!)).toBeDefined();
-    expect(getImage(ids[0]!)).toBeUndefined();
+    expect(getImage(ids[6])).toBeDefined();
+    expect(getImage(ids[0])).toBeUndefined();
   });
 });
 
@@ -92,10 +110,10 @@ describe('what the store remembers about each image', () => {
      * This is what answers «is it generating images of *this* business» rather than just «is it
      * generating images». The prompt is only evidence if it sits next to the picture it made.
      */
-    const id = putImage(jpegBase64(64), 'image/jpeg', brief);
+    const id = idOf(putImage(jpegBase64(64), 'image/jpeg', brief));
 
-    expect(getImage(id!)?.brief).toEqual(brief);
-    expect(getImage(id!)?.brief.business).toContain('El Zorzal Express');
+    expect(getImage(id)?.brief).toEqual(brief);
+    expect(getImage(id)?.brief.business).toContain('El Zorzal Express');
   });
 
   it('starts every image at zero hits and counts each time it is served', () => {
@@ -103,7 +121,7 @@ describe('what the store remembers about each image', () => {
      * Zero hits on an image that exists is the interesting case: generated, paid for, and then
      * left out of the page by the model.
      */
-    const id = putImage(jpegBase64(64), 'image/jpeg', brief)!;
+    const id = idOf(putImage(jpegBase64(64), 'image/jpeg', brief));
 
     expect(getImage(id)?.hits).toBe(0);
 
@@ -115,7 +133,7 @@ describe('what the store remembers about each image', () => {
   });
 
   it('does not count a diagnostics listing as a hit', () => {
-    const id = putImage(jpegBase64(64), 'image/jpeg', brief)!;
+    const id = idOf(putImage(jpegBase64(64), 'image/jpeg', brief));
 
     listImages();
     getImage(id);
@@ -128,8 +146,8 @@ describe('what the store remembers about each image', () => {
   });
 
   it('lists what it holds newest first', () => {
-    const first = putImage(jpegBase64(64), 'image/jpeg', { ...brief, role: 'hero' })!;
-    const second = putImage(jpegBase64(64), 'image/jpeg', { ...brief, role: 'gallery' })!;
+    const first = idOf(putImage(jpegBase64(64), 'image/jpeg', { ...brief, role: 'hero' }));
+    const second = idOf(putImage(jpegBase64(64), 'image/jpeg', { ...brief, role: 'gallery' }));
 
     expect(listImages().map((image) => image.id)).toEqual([second, first]);
   });

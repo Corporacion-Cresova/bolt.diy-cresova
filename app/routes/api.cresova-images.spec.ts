@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loader } from './api.cresova-images';
-import { __resetImageStore, putImage, serveImage } from '~/lib/.server/images/image-store';
+import { __resetImageStore, putImage, recordImageFailures, serveImage } from '~/lib/.server/images/image-store';
 
 /*
  * This page exists to answer a question OpenRouter's own dashboard cannot: not «is it generating
@@ -64,10 +64,12 @@ describe('the generated-images page', () => {
   });
 
   it('distinguishes a photo the page used from one the model ignored', async () => {
-    const used = putImage(jpeg, 'image/jpeg', brief({ role: 'hero' }))!;
+    const used = putImage(jpeg, 'image/jpeg', brief({ role: 'hero' }));
+
+    expect(used.ok).toBe(true);
     putImage(jpeg, 'image/jpeg', brief({ role: 'gallery' }));
 
-    serveImage(used);
+    serveImage((used as { ok: true; id: string }).id);
 
     const html = await render();
 
@@ -109,5 +111,31 @@ describe('the generated-images page', () => {
     const html = await render();
 
     expect(html).toContain('nunca servida');
+  });
+
+  it('says which images the last run lost, and why', async () => {
+    /*
+     * The state a whole site shipped in: billed for six photos, kept none, and nothing anywhere
+     * in the product said so. From outside the container that looked identical to a clean run.
+     */
+    recordImageFailures('black-forest-labs/flux.2-pro', [
+      { role: 'hero', reason: 'generated but not stored — the image is 9 MB, over the 6 MB per-image ceiling' },
+      { role: 'about', reason: 'HTTP 402: insufficient credits' },
+    ]);
+
+    const html = await render();
+
+    expect(html).toContain('perdió 2 imágenes');
+    expect(html).toContain('over the 6 MB per-image ceiling');
+    expect(html).toContain('insufficient credits');
+    expect(html).toContain('black-forest-labs/flux.2-pro');
+  });
+
+  it('says nothing about failures when the last run had none', async () => {
+    putImage(jpeg, 'image/jpeg', brief());
+
+    const html = await render();
+
+    expect(html).not.toContain('perdió');
   });
 });
