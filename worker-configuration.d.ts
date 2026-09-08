@@ -41,6 +41,15 @@ interface Env {
    */
   CRESOVA_IMAGES_ENABLED: string;
   OPENROUTER_IMAGES_KEY: string;
+
+  /**
+   * Optional. Overrides the image model, e.g. google/gemini-3.1-flash-image.
+   *
+   * Unset means google/gemini-2.5-flash-image, about $0.039 an image. This exists because
+   * choosing an image model is a judgement made by looking at what comes out, and it should not
+   * need a deploy of new code.
+   */
+  OPENROUTER_IMAGES_MODEL: string;
   RUNNER_TOKEN: string;
 
   /** Optional. WebSocket address of the Cresova Runner, for example wss://runner.cresova.com */

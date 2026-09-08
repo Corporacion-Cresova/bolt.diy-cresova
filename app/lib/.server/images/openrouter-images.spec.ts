@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_IMAGE_MODEL,
   composeImageBriefs,
   buildImagePrompt,
   generateOpenRouterCatalog,
@@ -130,7 +131,7 @@ describe('generateOpenRouterCatalog', () => {
 
     const result = await generateOpenRouterCatalog(req);
 
-    expect(result).toEqual([]);
+    expect(result.photos).toEqual([]);
   });
 
   it('returns an empty catalog when the prompt list is empty, without hitting the network', async () => {
@@ -143,7 +144,7 @@ describe('generateOpenRouterCatalog', () => {
 
     const result = await generateOpenRouterCatalog(req);
 
-    expect(result).toEqual([]);
+    expect(result.photos).toEqual([]);
   });
 
   it('skips generation entirely when there is no origin to serve the images from', async () => {
@@ -161,7 +162,7 @@ describe('generateOpenRouterCatalog', () => {
       origin: undefined,
     });
 
-    expect(result).toEqual([]);
+    expect(result.photos).toEqual([]);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
@@ -193,45 +194,45 @@ describe('generateOpenRouterCatalog, with OpenRouter answering', () => {
      */
     answerWith({ data: [{ b64_json: b64, media_type: 'image/jpeg' }] });
 
-    const [photo] = await generateOpenRouterCatalog({
+    const { photos } = await generateOpenRouterCatalog({
       prompts: [{ subject: 'a hotel reception', role: 'hero' }],
       sector: 'turismo, aventura, hotelería',
       apiKey: 'openrouter-test-key',
       origin: 'https://builder.cresova.com',
     });
 
-    expect(photo.url).not.toMatch(/^data:/);
-    expect(photo.url).toMatch(/^https:\/\/builder\.cresova\.com\/api\/cresova-image\/[0-9a-f]{32}\.jpg$/);
-    expect(photo.url.length).toBeLessThan(300);
-    expect(photo.source).toBe('openrouter');
-    expect(photo.alt).toBe('a hotel reception');
+    expect(photos[0].url).not.toMatch(/^data:/);
+    expect(photos[0].url).toMatch(/^https:\/\/builder\.cresova\.com\/api\/cresova-image\/[0-9a-f]{32}\.jpg$/);
+    expect(photos[0].url.length).toBeLessThan(300);
+    expect(photos[0].source).toBe('openrouter');
+    expect(photos[0].alt).toBe('a hotel reception');
   });
 
   it('stores the bytes under the id in the URL, so the route can serve them', async () => {
     answerWith({ data: [{ b64_json: b64, media_type: 'image/jpeg' }] });
 
-    const [photo] = await generateOpenRouterCatalog({
+    const { photos } = await generateOpenRouterCatalog({
       prompts: [{ subject: 'subject', role: 'hero' }],
       sector: 'turismo, aventura, hotelería',
       apiKey: 'openrouter-test-key',
       origin: 'https://builder.cresova.com',
     });
 
-    const id = photo.url.split('/').pop()!.replace('.jpg', '');
+    const id = photos[0].url.split('/').pop()!.replace('.jpg', '');
     expect(getImage(id)?.bytes.byteLength).toBe(512);
   });
 
   it('does not double the slash when the origin carries a trailing one', async () => {
     answerWith({ data: [{ b64_json: b64, media_type: 'image/jpeg' }] });
 
-    const [photo] = await generateOpenRouterCatalog({
+    const { photos } = await generateOpenRouterCatalog({
       prompts: [{ subject: 'subject', role: 'hero' }],
       sector: 'turismo, aventura, hotelería',
       apiKey: 'openrouter-test-key',
       origin: 'https://builder.cresova.com/',
     });
 
-    expect(photo.url).not.toContain('.com//');
+    expect(photos[0].url).not.toContain('.com//');
   });
 
   it('drops the image rather than the build when OpenRouter answers with an error', async () => {
@@ -244,7 +245,7 @@ describe('generateOpenRouterCatalog, with OpenRouter answering', () => {
       origin: 'https://builder.cresova.com',
     });
 
-    expect(result).toEqual([]);
+    expect(result.photos).toEqual([]);
   });
 
   it('drops the image rather than the build when the payload will not decode', async () => {
@@ -257,19 +258,144 @@ describe('generateOpenRouterCatalog, with OpenRouter answering', () => {
       origin: 'https://builder.cresova.com',
     });
 
-    expect(result).toEqual([]);
+    expect(result.photos).toEqual([]);
   });
 
   it('assumes jpeg when OpenRouter omits the media type', async () => {
     answerWith({ data: [{ b64_json: b64 }] });
 
-    const [photo] = await generateOpenRouterCatalog({
+    const { photos } = await generateOpenRouterCatalog({
       prompts: [{ subject: 'subject', role: 'hero' }],
       sector: 'turismo, aventura, hotelería',
       apiKey: 'openrouter-test-key',
       origin: 'https://builder.cresova.com',
     });
 
-    expect(photo.url).toMatch(/\.jpg$/);
+    expect(photos[0].url).toMatch(/\.jpg$/);
+  });
+});
+
+describe('the configured image model', () => {
+  /*
+   * The bug these two exist for: the model was `black-forest-labs/flux.2-pro`, an id written from
+   * memory. OpenRouter serves no Flux model at all, so every request was rejected, the catalog
+   * quietly fell back to Pexels, and a client's site shipped with stock photos while every switch
+   * in the product said image generation was on.
+   *
+   * The first test is offline and always runs. The second asks OpenRouter's public catalogue —
+   * no key, no cost — and is skipped when the sandbox has no network, so a build without internet
+   * does not fail on it.
+   */
+  it('is an id shaped like something a provider serves', () => {
+    expect(DEFAULT_IMAGE_MODEL).toMatch(/^[a-z0-9-]+\/[a-z0-9.-]+$/);
+  });
+
+  it('is a model OpenRouter actually serves, and one that outputs images', async () => {
+    let catalogue: Response;
+
+    try {
+      catalogue = await fetch('https://openrouter.ai/api/v1/models', { signal: AbortSignal.timeout(15_000) });
+    } catch {
+      return;
+    }
+
+    if (!catalogue.ok) {
+      return;
+    }
+
+    const body = (await catalogue.json()) as {
+      data?: Array<{ id: string; architecture?: { output_modalities?: string[] } }>;
+    };
+
+    const found = body.data?.find((model) => model.id === DEFAULT_IMAGE_MODEL);
+
+    expect(found, `OpenRouter does not serve "${DEFAULT_IMAGE_MODEL}"`).toBeTruthy();
+    expect(found?.architecture?.output_modalities).toContain('image');
+  }, 20_000);
+});
+
+describe('when OpenRouter rejects the request', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('carries the reason out instead of only logging it', async () => {
+    /*
+     * A failure nobody can see is a failure nobody fixes. This is what `/api/health?flux=1` shows
+     * and what the build logs as an error, so a wrong model id is one page load away from being
+     * diagnosed rather than a whole generation away.
+     */
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => '{"error":{"message":"black-forest-labs/flux.2-pro is not a valid model ID"}}',
+    } as Response);
+
+    const result = await generateOpenRouterCatalog({
+      prompts: [{ subject: 'subject', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com',
+    });
+
+    expect(result.photos).toEqual([]);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0].reason).toContain('400');
+    expect(result.failures[0].reason).toContain('not a valid model ID');
+  });
+
+  it('reports one failure per image, so a partial run is legible', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 402,
+      text: async () => 'insufficient credits',
+    } as Response);
+
+    const result = await generateOpenRouterCatalog({
+      prompts: composeImageBriefs('turismo, aventura, hotelería', 'Crea un sitio para Hotel Casa Fortuna en Roatán'),
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com',
+    });
+
+    expect(result.failures).toHaveLength(6);
+    expect(result.failures.every((failure) => failure.reason.includes('402'))).toBe(true);
+  });
+
+  it('sends the model override when one is given', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => '',
+    } as Response);
+
+    await generateOpenRouterCatalog({
+      prompts: [{ subject: 'subject', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      model: 'google/gemini-3.1-flash-image',
+      origin: 'https://builder.cresova.com',
+    });
+
+    const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.model).toBe('google/gemini-3.1-flash-image');
+  });
+
+  it('falls back to the default model when no override is given', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => '',
+    } as Response);
+
+    await generateOpenRouterCatalog({
+      prompts: [{ subject: 'subject', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com',
+    });
+
+    const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.model).toBe(DEFAULT_IMAGE_MODEL);
   });
 });
