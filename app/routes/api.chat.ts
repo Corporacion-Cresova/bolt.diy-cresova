@@ -112,6 +112,13 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
       maxLLMSteps: number;
     }>();
 
+  /*
+   * Where this app answers from, so a generated image can be given an absolute URL. The site that
+   * embeds it runs on the runner under a different host, so a relative path would never resolve,
+   * and no environment variable holds this — the request does.
+   */
+  const origin = new URL(request.url).origin;
+
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = JSON.parse(parseCookies(cookieHeader || '').apiKeys || '{}');
   const providerSettings: Record<string, IProviderSetting> = JSON.parse(
@@ -376,6 +383,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
                 designScheme,
                 summary,
                 messageSliceId,
+                origin,
               });
             } catch (error) {
               // never leave execute waiting on a chain that will not continue
@@ -457,6 +465,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             designScheme,
             summary,
             messageSliceId,
+            origin,
           });
 
           // the model is connected, the budget from here on covers time to first token

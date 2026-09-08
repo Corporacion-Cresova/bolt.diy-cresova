@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   composeImageBriefs,
   buildImagePrompt,
   generateOpenRouterCatalog,
-  type FluxImagePrompt,
   type OpenRouterImagesRequest,
 } from './openrouter-images';
+import { __resetImageStore, getImage } from './image-store';
 
 /*
  * The OpenRouter image integration is a switch Cresova can flip to replace the Pexels photo
@@ -13,10 +13,10 @@ import {
  * that lets us trust the switch: what briefs get composed, what the prompt looks like, and
  * how the runtime handles a missing key, a failed call, or a partial success.
  *
- * The network call itself is not exercised here — OpenRouter is a paid endpoint and the
- * sandbox has no OPENROUTER_IMAGES_KEY. The generation loop is shaped so all of its
- * branches (success, failure, missing key) can be tested by inspecting the call shape and
- * the no-key path.
+ * OpenRouter itself is never called — it is a paid endpoint — so the success path is exercised
+ * against a stubbed `fetch`. That stub is what earns these tests: the version of this suite that
+ * only tested the no-key path asserted the data-URL contract against a literal it wrote itself,
+ * and so agreed happily with an implementation that broke every build.
  */
 
 describe('composeImageBriefs', () => {
@@ -71,7 +71,10 @@ describe('buildImagePrompt', () => {
 
   it('uses the right composition cue per role so the hero and gallery come out differently', () => {
     const hero = buildImagePrompt({ subject: 'hero scene', role: 'hero' }, 'salud, legal, financiero, profesional');
-    const gallery = buildImagePrompt({ subject: 'gallery scene', role: 'gallery' }, 'salud, legal, financiero, profesional');
+    const gallery = buildImagePrompt(
+      { subject: 'gallery scene', role: 'gallery' },
+      'salud, legal, financiero, profesional',
+    );
 
     expect(hero).toContain('right third');
     expect(hero).toContain('negative space');
@@ -122,6 +125,7 @@ describe('generateOpenRouterCatalog', () => {
       prompts: [{ subject: 'subject', role: 'hero' }],
       sector: 'turismo, aventura, hotelería',
       apiKey: undefined,
+      origin: 'https://builder.cresova.com',
     };
 
     const result = await generateOpenRouterCatalog(req);
@@ -134,6 +138,7 @@ describe('generateOpenRouterCatalog', () => {
       prompts: [],
       sector: 'turismo, aventura, hotelería',
       apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com',
     };
 
     const result = await generateOpenRouterCatalog(req);
@@ -141,21 +146,130 @@ describe('generateOpenRouterCatalog', () => {
     expect(result).toEqual([]);
   });
 
-  it('every successful photo is returned as a data: URL with the openrouter source tag', () => {
+  it('skips generation entirely when there is no origin to serve the images from', async () => {
     /*
-     * Pin the data-URL contract: the model pastes these verbatim into <img src=...> inside
-     * a WebContainer, and a CDN URL would 404 the moment the TTL expires. The source tag
-     * keeps the [AI] preference cue in the prompt working.
+     * Without an origin a generated image has no address, and six of them cost $0.24. Skipping
+     * before the call rather than after it is the difference between a missing feature and a
+     * bill for images no page could ever load.
      */
-    const dataUrl = `data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAA...`;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
-    const photo = {
-      url: dataUrl,
-      alt: 'subject',
-      source: 'openrouter' as const,
-    };
+    const result = await generateOpenRouterCatalog({
+      prompts: [{ subject: 'subject', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: undefined,
+    });
 
-    expect(photo.url).toMatch(/^data:image\/jpeg;base64,/);
+    expect(result).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('generateOpenRouterCatalog, with OpenRouter answering', () => {
+  const b64 = btoa('\xff\xd8\xff'.padEnd(512, 'x'));
+
+  beforeEach(() => {
+    __resetImageStore();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function answerWith(payload: unknown, ok = true) {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok,
+      status: ok ? 200 : 400,
+      json: async () => payload,
+    } as Response);
+  }
+
+  it('returns a short http URL, never the base64 it received', async () => {
+    /*
+     * The whole point of the store. A `data:` URL here is what made every build fail with
+     * `Custom error: Bad Request`, and it is also something no model could copy into an
+     * <img src> even if the request had been accepted.
+     */
+    answerWith({ data: [{ b64_json: b64, media_type: 'image/jpeg' }] });
+
+    const [photo] = await generateOpenRouterCatalog({
+      prompts: [{ subject: 'a hotel reception', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com',
+    });
+
+    expect(photo.url).not.toMatch(/^data:/);
+    expect(photo.url).toMatch(/^https:\/\/builder\.cresova\.com\/api\/cresova-image\/[0-9a-f]{32}\.jpg$/);
+    expect(photo.url.length).toBeLessThan(300);
     expect(photo.source).toBe('openrouter');
+    expect(photo.alt).toBe('a hotel reception');
+  });
+
+  it('stores the bytes under the id in the URL, so the route can serve them', async () => {
+    answerWith({ data: [{ b64_json: b64, media_type: 'image/jpeg' }] });
+
+    const [photo] = await generateOpenRouterCatalog({
+      prompts: [{ subject: 'subject', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com',
+    });
+
+    const id = photo.url.split('/').pop()!.replace('.jpg', '');
+    expect(getImage(id)?.bytes.byteLength).toBe(512);
+  });
+
+  it('does not double the slash when the origin carries a trailing one', async () => {
+    answerWith({ data: [{ b64_json: b64, media_type: 'image/jpeg' }] });
+
+    const [photo] = await generateOpenRouterCatalog({
+      prompts: [{ subject: 'subject', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com/',
+    });
+
+    expect(photo.url).not.toContain('.com//');
+  });
+
+  it('drops the image rather than the build when OpenRouter answers with an error', async () => {
+    answerWith({ error: { message: 'quota exceeded', code: 402 } });
+
+    const result = await generateOpenRouterCatalog({
+      prompts: [{ subject: 'subject', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com',
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it('drops the image rather than the build when the payload will not decode', async () => {
+    answerWith({ data: [{ b64_json: 'not base64 !!!', media_type: 'image/jpeg' }] });
+
+    const result = await generateOpenRouterCatalog({
+      prompts: [{ subject: 'subject', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com',
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it('assumes jpeg when OpenRouter omits the media type', async () => {
+    answerWith({ data: [{ b64_json: b64 }] });
+
+    const [photo] = await generateOpenRouterCatalog({
+      prompts: [{ subject: 'subject', role: 'hero' }],
+      sector: 'turismo, aventura, hotelería',
+      apiKey: 'openrouter-test-key',
+      origin: 'https://builder.cresova.com',
+    });
+
+    expect(photo.url).toMatch(/\.jpg$/);
   });
 });

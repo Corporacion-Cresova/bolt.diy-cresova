@@ -3,6 +3,14 @@ import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/pro
 import { dirname, join, relative } from 'node:path';
 import { createConnection, createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
+import {
+  LOCAL_IMAGE_DIR,
+  TEXT_ASSET_PATTERN,
+  findGeneratedImageUrls,
+  localFileName,
+  localImagePath,
+  rewriteGeneratedImageUrls,
+} from './generated-images.mjs';
 import { existsSync, readdirSync } from 'node:fs';
 import { isValidProjectId, isValidPublishName, resolveInsideProject } from './paths.mjs';
 import {
@@ -487,9 +495,91 @@ export class ProjectManager {
     await rename(tempDir, finalDir);
     console.log(`Published ${projectId} as ${name}`);
 
+    await this.#localiseGeneratedImages(finalDir);
+
     const thumbnailUrl = await this.#captureThumbnail(name, finalDir);
 
     return { url: this.publishedUrl(name), thumbnailUrl };
+  }
+
+  /**
+   * Downloads the AI-generated photos into the published directory and rewrites the pages to
+   * point at the local copies.
+   *
+   * Why this has to happen at publish time is explained in `generated-images.mjs`, along with the
+   * matching itself. What is here is the IO: fetch each URL once, write it beside the site, and
+   * rewrite only the URLs whose bytes actually landed.
+   *
+   * Never lets a failure reach the caller. A site published with a remote image URL still works
+   * today; one that failed to publish works never.
+   */
+  async #localiseGeneratedImages(publishedDir) {
+    const assetsDir = join(publishedDir, LOCAL_IMAGE_DIR);
+    const downloaded = new Map();
+
+    let entries;
+
+    try {
+      entries = await readdir(publishedDir, { recursive: true, withFileTypes: true });
+    } catch (error) {
+      console.warn('Could not scan the published site for generated images:', error?.message ?? error);
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isFile() || !TEXT_ASSET_PATTERN.test(entry.name)) {
+        continue;
+      }
+
+      const filePath = join(entry.parentPath ?? publishedDir, entry.name);
+
+      let content;
+
+      try {
+        content = await readFile(filePath, 'utf8');
+      } catch {
+        continue;
+      }
+
+      const urls = findGeneratedImageUrls(content);
+
+      if (urls.length === 0) {
+        continue;
+      }
+
+      for (const url of urls) {
+        if (downloaded.has(url)) {
+          continue;
+        }
+
+        const fileName = localFileName(url);
+
+        try {
+          const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+
+          if (!response.ok) {
+            console.warn(`Generated image ${fileName} answered ${response.status}, leaving the remote URL`);
+            continue;
+          }
+
+          await mkdir(assetsDir, { recursive: true });
+          await writeFile(join(assetsDir, fileName), Buffer.from(await response.arrayBuffer()));
+          downloaded.set(url, localImagePath(url));
+        } catch (error) {
+          console.warn(`Could not download ${fileName}, leaving the remote URL:`, error?.message ?? error);
+        }
+      }
+
+      const rewritten = rewriteGeneratedImageUrls(content, downloaded);
+
+      if (rewritten !== content) {
+        await writeFile(filePath, rewritten, 'utf8');
+      }
+    }
+
+    if (downloaded.size > 0) {
+      console.log(`Localised ${downloaded.size} generated image(s) into the published site`);
+    }
   }
 
   /**
