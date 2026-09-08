@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from '@remix-run/cloudflare';
-import { getImage } from '~/lib/.server/images/image-store';
+import { serveImage } from '~/lib/.server/images/image-store';
 
 /**
  * Serves an image generated for a build.
@@ -15,7 +15,7 @@ import { getImage } from '~/lib/.server/images/image-store';
 export async function loader({ params }: LoaderFunctionArgs) {
   const id = (params.id ?? '').replace(/\.(jpg|jpeg|png|webp)$/i, '');
 
-  const image = id ? getImage(id) : undefined;
+  const image = id ? serveImage(id) : undefined;
 
   if (!image) {
     /*

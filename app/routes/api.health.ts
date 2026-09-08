@@ -56,6 +56,9 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
      * work and previews from earlier in the day have started losing their photos.
      */
     cache: imageStoreStats(),
+
+    /** Where to look at what was generated, and at the prompt that produced each one. */
+    galeria: '/api/cresova-images',
   };
 
   if (url.searchParams.get('flux') === '1' && images.listo) {
@@ -63,7 +66,13 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
 
     try {
       const generated = await generateOpenRouterCatalog({
-        prompts: [{ subject: 'A single ripe coffee cherry on the branch, morning light', role: 'gallery' }],
+        prompts: [
+          {
+            subject: 'A single ripe coffee cherry on the branch, morning light',
+            role: 'gallery',
+            business: 'prueba de salud, no es un sitio real',
+          },
+        ],
         sector: 'Turismo, aventura, hotelería',
         apiKey: imagesKey,
         origin: url.origin,

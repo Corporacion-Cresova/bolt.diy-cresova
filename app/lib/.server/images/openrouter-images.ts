@@ -1,5 +1,6 @@
 import { createScopedLogger } from '~/utils/logger';
 import { imagePath, putImage } from './image-store';
+import { describeBusiness } from './describe-business';
 
 const logger = createScopedLogger('CresovaImagesOpenRouter');
 
@@ -54,6 +55,19 @@ export interface FluxImagePrompt {
   subject: string;
   composition?: string;
   role: 'hero' | 'gallery' | 'about' | 'context' | 'product';
+
+  /**
+   * The business the photograph is of, as a phrase.
+   *
+   * Carried separately from `subject` rather than spliced into it: the subject describes the kind
+   * of shot ("wide environmental photograph of the working space"), and a description dropped
+   * into the middle of that turns a clean sentence into a run-on that Flux has to untangle. It
+   * belongs as its own declarative cue, which is how the rest of this prompt is built.
+   *
+   * Empty when the request gave nothing to go on. The prompt then leans on the sector alone,
+   * which is weak — but inventing a business would be worse.
+   */
+  business?: string;
 }
 
 export interface OpenRouterImagesRequest {
@@ -130,14 +144,24 @@ export function buildImagePrompt(req: FluxImagePrompt, sector: string): string {
     product: 'Subject on a neutral surface, soft directional light, slight angle, no harsh shadows',
   };
 
+  const business = req.business?.trim();
+
   return [
     `${req.subject.trim()}.`,
+
+    /*
+     * Second, right after the kind of shot and before the style cues: Flux weights the front of
+     * the prompt most heavily, and what the photograph is *of* matters more than how it is lit.
+     */
+    business ? `The business: ${business}.` : '',
     `${defaults.mood}.`,
     `${compositionByRole[req.role]}.`,
     `Color palette: ${defaults.palette}.`,
     'Photographic, no text, no logos, no watermark.',
     'Sharp focus, 24-70mm lens equivalent, natural grain.',
-  ].join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /**
@@ -232,7 +256,12 @@ export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): P
         return null;
       }
 
-      const id = putImage(generated.base64, generated.contentType);
+      const id = putImage(generated.base64, generated.contentType, {
+        role: imagePrompt.role,
+        subject: imagePrompt.subject,
+        business: imagePrompt.business ?? '',
+        prompt: fluxPrompt,
+      });
 
       if (!id) {
         return null;
@@ -264,38 +293,60 @@ export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): P
 }
 
 /**
- * Composes the image prompt list for a build, sized to the role the image plays in the page.
+ * Composes the image prompt list for a build, sized to the role each image plays in the page.
  *
- * Six per site is the upper bound because more than that and the cost per site passes
- * $0.25 without a proportional quality jump.
+ * Every brief names the business. That sounds obvious and it was not true: only the hero brief
+ * carried the request, and the other five said things like "wide environmental photograph of the
+ * working space" — with no hint of *whose* working space. Flux was being asked to photograph a
+ * business it had never been told about, so five of six images came back as generic stock for
+ * the sector and nothing more. That is the gap between "the API is being called" and "the photos
+ * are of this client".
+ *
+ * When there is no description to be had, the briefs fall back to the sector alone rather than
+ * inventing a business. A generic photograph is a weak photograph; a photograph of a business
+ * that does not exist is a lie on a client's page.
+ *
+ * Six per site is the upper bound because more than that and the cost per site passes $0.25
+ * without a proportional quality jump.
  */
 export function composeImageBriefs(sector: string, request: string): FluxImagePrompt[] {
-  const safeRequest = request.replace(/[<>]/g, '').slice(0, 280);
+  const business = describeBusiness(request);
 
-  return [
+  const briefs: Array<Pick<FluxImagePrompt, 'subject' | 'role'>> = [
     {
-      subject: `Editorial hero photograph showing the business described as: ${safeRequest}`,
+      subject: 'Editorial hero photograph showing what this business does, in the place it does it',
       role: 'hero',
     },
     {
-      subject: `Wide environmental photograph of the working space, no people, natural light`,
+      subject: 'Wide environmental photograph of the working space, no people, natural light',
       role: 'gallery',
     },
     {
-      subject: `Close-up of a detail that suggests craft or care, hand at work, materials, surfaces`,
+      subject:
+        'Close-up of a detail from the day-to-day work that suggests craft or care: hands at work, materials, surfaces',
       role: 'gallery',
     },
     {
-      subject: `The subject of the business in their element, candid, mid-action, documentary style`,
+      subject: 'The work in progress, candid, mid-action, documentary style',
       role: 'gallery',
     },
     {
-      subject: `Portrait-style photograph of the team or owner at work, candid, warm`,
+      /*
+       * Not a posed portrait, on purpose. This brief used to ask for "the team or owner", and a
+       * generated face on a client's About section is a person who does not exist, presented as
+       * the people the client actually is. Hands and posture carry the same warmth and claim
+       * nothing about who anyone is.
+       */
+      subject:
+        'Someone at work, seen from behind or in profile, hands and posture in frame rather than a posed face, candid and warm',
       role: 'about',
     },
     {
-      subject: `Environmental photograph of the surrounding area or neighborhood that gives the business its place`,
+      subject:
+        'Environmental photograph of the surroundings — the street, the neighbourhood, the landscape that gives this business its place',
       role: 'context',
     },
   ];
+
+  return briefs.map((brief) => ({ ...brief, business }));
 }

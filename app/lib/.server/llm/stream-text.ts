@@ -136,6 +136,10 @@ ${photos
     language using the description above.
   - [AI] tagged images were generated specifically for this build and share a consistent mood
     and palette; prefer them for the hero and the gallery. [placeholder] is a fallback only.
+  - An [AI] photo shows a plausible scene, never a real one. Never caption it with a person's
+    name, a job title next to a face, a testimonial byline, or anything that presents it as a
+    photograph of a specific real person or a specific real product. Places, work and atmosphere
+    are what these are for.
 </cresova_images>
 `;
 }
