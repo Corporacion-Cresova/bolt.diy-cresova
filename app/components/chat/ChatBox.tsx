@@ -271,12 +271,12 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             </IconButton>
             <WebSearch onSearchResult={(result) => props.onWebSearchResult?.(result)} disabled={props.isStreaming} />
             <IconButton
-              title="Enhance prompt"
+              title="Generar brief del sitio"
               disabled={props.input.length === 0 || props.enhancingPrompt}
               className={classNames('transition-all', props.enhancingPrompt ? 'opacity-100' : '')}
               onClick={() => {
                 props.enhancePrompt?.();
-                toast.success('Prompt enhanced!');
+                toast.success('Brief generado — revisalo y ajustá lo que haga falta');
               }}
             >
               {props.enhancingPrompt ? (
