@@ -45,6 +45,19 @@ export default defineConfig((config) => {
       },
       config.mode !== 'test' && remixCloudflareDevProxy(),
       remixVitePlugin({
+        /*
+         * Every file under `app/routes` is a route unless it is named here, and a route is bundled
+         * for the browser. A test that sits next to the route it covers therefore drags whatever
+         * that route imports into the client bundle — and a `.server` import there fails the
+         * production build with "Server-only module referenced by client".
+         *
+         * It fails only in `remix vite:build`: the dev server, `tsc`, eslint and vitest are all
+         * happy, so the first thing to notice is the deploy. Naming the test files here is what
+         * lets a route loader be tested from the place a reader would look for the test.
+         *
+         * The dotfile pattern is Remix's own default, kept because setting this option replaces it.
+         */
+        ignoredRouteFiles: ['**/.*', '**/*.spec.*', '**/*.test.*'],
         future: {
           v3_fetcherPersist: true,
           v3_relativeSplatPath: true,
