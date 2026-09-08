@@ -25,7 +25,23 @@ const logger = createScopedLogger('CresovaImagesOpenRouter');
  */
 
 const OPENROUTER_IMAGES_ENDPOINT = 'https://openrouter.ai/api/v1/images';
-const FLUX_2_PRO_MODEL = 'black-forest-labs/flux.2-pro';
+
+/**
+ * The image model, and the reason this is not a constant any more.
+ *
+ * It used to be `black-forest-labs/flux.2-pro`, which OpenRouter does not serve. It serves no
+ * Flux model at all — the id was written from memory and never checked against their catalogue.
+ * So every request was rejected, `runSingleImage` logged a line nobody reads, the catalog fell
+ * back to Pexels, and a whole site was generated with stock photos while the switch said the
+ * feature was on. Nothing in the product said otherwise.
+ *
+ * Nano Banana is the default because it is the model this feature was costed against: about
+ * $0.039 an image, so $0.24 for the six a site gets, which is the number the plan committed to.
+ * The override exists because picking an image model is a taste decision made by looking at
+ * output, and Diego should be able to try `google/gemini-3.1-flash-image` (better, twice the
+ * price) without waiting for a deploy of new code.
+ */
+export const DEFAULT_IMAGE_MODEL = 'google/gemini-2.5-flash-image';
 
 /**
  * How long one image may take before it is given up on.
@@ -74,6 +90,9 @@ export interface OpenRouterImagesRequest {
   prompts: FluxImagePrompt[];
   sector: string;
   apiKey: string | undefined;
+
+  /** Overrides the default model. Comes from OPENROUTER_IMAGES_MODEL when it is set. */
+  model?: string;
 
   /**
    * Absolute origin of this app, e.g. `https://builder.cresova.com`.
@@ -164,18 +183,29 @@ export function buildImagePrompt(req: FluxImagePrompt, sector: string): string {
     .join(' ');
 }
 
+/** Why one image did not come back, in the words the service used. */
+export interface ImageFailure {
+  role: string;
+  reason: string;
+}
+
+type SingleImageResult = { ok: true; base64: string; contentType: string } | { ok: false; reason: string };
+
 /**
- * Calls OpenRouter once and returns the raw base64 payload, or null on any failure.
+ * Calls OpenRouter once and returns the raw base64 payload, or why it did not.
  *
- * Deliberately returns the payload rather than a URL: turning bytes into something addressable
- * is the store's job, and keeping that out of here means a failure to store looks the same as a
- * failure to generate — a missing image, never a broken build.
+ * The reason is carried out rather than only logged. When the model id was wrong every request
+ * was rejected and the only trace was a `logger.warn` inside a container — so from the outside a
+ * misconfiguration and a working feature looked identical, and a client's site shipped with stock
+ * photos while the switch said images were on. A failure nobody can see is a failure nobody
+ * fixes.
  */
 async function runSingleImage(
   apiKey: string,
+  model: string,
   prompt: string,
   role: FluxImagePrompt['role'],
-): Promise<{ base64: string; contentType: string } | null> {
+): Promise<SingleImageResult> {
   try {
     const response = await fetch(OPENROUTER_IMAGES_ENDPOINT, {
       method: 'POST',
@@ -184,7 +214,7 @@ async function runSingleImage(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: FLUX_2_PRO_MODEL,
+        model,
         prompt,
         n: 1,
         output_format: 'jpeg',
@@ -194,44 +224,62 @@ async function runSingleImage(
     });
 
     if (!response.ok) {
-      logger.warn(`OpenRouter image generation failed with ${response.status}`);
-      return null;
+      /*
+       * The body says which of the many 400s this is — an unknown model, no credit, a rejected
+       * prompt — and those need different fixes. Truncated because it is rendered in a page.
+       */
+      const detail = await response.text().catch(() => '');
+      const reason = `HTTP ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ''}`;
+      logger.warn(`OpenRouter image generation failed — ${reason}`);
+
+      return { ok: false, reason };
     }
 
     const payload = (await response.json()) as OpenRouterImageResponse;
 
     if (payload.error) {
-      logger.warn(`OpenRouter image generation errored: ${payload.error.message ?? 'no message'}`);
-      return null;
+      const reason = payload.error.message ?? 'the service reported an error with no message';
+      logger.warn(`OpenRouter image generation errored: ${reason}`);
+
+      return { ok: false, reason };
     }
 
     const firstImage = payload.data?.[0];
 
     if (!firstImage?.b64_json) {
       logger.warn('OpenRouter image generation returned an empty payload');
-      return null;
+      return { ok: false, reason: 'the answer carried no image' };
     }
 
     /*
      * `media_type` is documented as present whenever the format could be identified and omitted
      * when it could not. We asked for jpeg, so that is the assumption when it is missing.
      */
-    return { base64: firstImage.b64_json, contentType: firstImage.media_type || 'image/jpeg' };
+    return { ok: true, base64: firstImage.b64_json, contentType: firstImage.media_type || 'image/jpeg' };
   } catch (error) {
-    logger.warn(`OpenRouter image generation threw: ${error instanceof Error ? error.message : 'unknown'}`);
-    return null;
+    const reason = error instanceof Error ? error.message : 'unknown error';
+    logger.warn(`OpenRouter image generation threw: ${reason}`);
+
+    return { ok: false, reason };
   }
+}
+
+export interface OpenRouterCatalogResult {
+  photos: CatalogPhoto[];
+
+  /** One entry per image that did not come back. Empty on a clean run. */
+  failures: ImageFailure[];
 }
 
 /**
  * Generates one image per prompt, in parallel, stores the bytes and returns one CatalogPhoto per
- * prompt that succeeded. Logs (never throws) for each that failed. Callers concatenate the result
- * with whatever Pexels returned to keep the prompt-time catalog dense.
+ * prompt that succeeded — plus why each of the others did not. Never throws: a build must not
+ * fail because the image service is misconfigured.
  */
-export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): Promise<CatalogPhoto[]> {
+export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): Promise<OpenRouterCatalogResult> {
   if (!req.apiKey) {
     logger.debug('No OpenRouter image API key configured, returning empty catalog');
-    return [];
+    return { photos: [], failures: [] };
   }
 
   /*
@@ -240,20 +288,24 @@ export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): P
    */
   if (!req.origin) {
     logger.warn('No origin available to serve generated images from, skipping image generation');
-    return [];
+    return { photos: [], failures: [{ role: 'all', reason: 'no origin to serve the images from' }] };
   }
 
   if (req.prompts.length === 0) {
-    return [];
+    return { photos: [], failures: [] };
   }
 
-  const results = await Promise.all(
-    req.prompts.map(async (imagePrompt) => {
-      const fluxPrompt = buildImagePrompt(imagePrompt, req.sector);
-      const generated = await runSingleImage(req.apiKey!, fluxPrompt, imagePrompt.role);
+  const model = req.model || DEFAULT_IMAGE_MODEL;
 
-      if (!generated) {
-        return null;
+  type PerPrompt = { photo: CatalogPhoto } | { failure: ImageFailure };
+
+  const results = await Promise.all(
+    req.prompts.map(async (imagePrompt): Promise<PerPrompt> => {
+      const fluxPrompt = buildImagePrompt(imagePrompt, req.sector);
+      const generated = await runSingleImage(req.apiKey!, model, fluxPrompt, imagePrompt.role);
+
+      if (!generated.ok) {
+        return { failure: { role: imagePrompt.role, reason: generated.reason } };
       }
 
       const id = putImage(generated.base64, generated.contentType, {
@@ -264,7 +316,7 @@ export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): P
       });
 
       if (!id) {
-        return null;
+        return { failure: { role: imagePrompt.role, reason: 'the image came back but could not be stored' } };
       }
 
       const photo: CatalogPhoto = {
@@ -273,23 +325,27 @@ export async function generateOpenRouterCatalog(req: OpenRouterImagesRequest): P
         source: 'openrouter',
       };
 
-      return photo;
+      return { photo };
     }),
   );
 
-  const successful: CatalogPhoto[] = [];
+  const photos: CatalogPhoto[] = [];
+  const failures: ImageFailure[] = [];
 
-  for (const photo of results) {
-    if (photo !== null) {
-      successful.push(photo);
+  for (const result of results) {
+    if ('photo' in result) {
+      photos.push(result.photo);
+    } else {
+      failures.push(result.failure);
     }
   }
 
   logger.info(
-    `OpenRouter catalog: ${successful.length}/${req.prompts.length} images generated for sector "${req.sector}"`,
+    `OpenRouter catalog with ${model}: ${photos.length}/${req.prompts.length} images for sector "${req.sector}"` +
+      (failures.length ? ` — first failure: ${failures[0].reason}` : ''),
   );
 
-  return successful;
+  return { photos, failures };
 }
 
 /**

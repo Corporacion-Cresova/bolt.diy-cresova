@@ -332,13 +332,27 @@ export async function streamText(props: {
          */
         const sector = detectSector(lastUserMessage.content);
         const briefs = composeImageBriefs(sector, lastUserMessage.content);
-        const generatedPhotos = await generateOpenRouterCatalog({
+        const generated = await generateOpenRouterCatalog({
           prompts: briefs,
           sector,
           apiKey: imagesKey,
+          model: serverEnv?.OPENROUTER_IMAGES_MODEL || process.env.OPENROUTER_IMAGES_MODEL,
           origin,
         });
-        combined = combined.concat(generatedPhotos);
+
+        if (generated.failures.length) {
+          /*
+           * Loud on purpose. The one time this mattered, every request was being rejected for a
+           * model id that does not exist, and the build carried on with stock photos as if the
+           * feature were off. `/api/health?flux=1` names the same reason on demand.
+           */
+          logger.error(
+            `Image generation produced ${generated.photos.length}/${briefs.length} images. ` +
+              `First failure: ${generated.failures[0].reason}`,
+          );
+        }
+
+        combined = combined.concat(generated.photos);
       }
 
       const pexelsPhotos = await fetchPhotoCatalog(query, serverEnv?.PEXELS_API_KEY || process.env.PEXELS_API_KEY);
