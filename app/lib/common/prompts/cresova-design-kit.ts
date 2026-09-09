@@ -146,7 +146,19 @@ export const CRESOVA_DESIGN_KIT = `
   happened to a finished site. And the opacity suffixes (\`/10\`, \`/15\`) only work on a colour
   that lives in this config, which is the other half of the same trap.
 
-  So copy this shape, with the hex values of your sector's row:
+  FIRST, CHECK WHETHER THE PROJECT ALREADY HAS A \`tailwind.config.js\`. The Cresova Base template
+  ships one, and it declares more than colours: \`text-hero\`, \`text-section\`, \`font-display\`,
+  \`font-heading\`, \`max-w-measure\`, \`rounded-control\`, \`shadow-raised\`. Its components use those
+  classes. Replacing that file with a colours-only config deletes every one of them, and the page
+  fails to compile in exactly the way this section is warning you about — with the difference that
+  this time you caused it.
+
+  SO: WHEN THE FILE ALREADY EXISTS, DO NOT REWRITE IT. Set the palette in \`src/index.css\`, which is
+  where that config reads its colours from: paste your sector's six values into \`:root\` and delete
+  the other rows. That is the whole palette change — six lines, one file.
+
+  ONLY WHEN THERE IS NO CONFIG YET, write this one. Not a shorter one: every token below is used by
+  the worked examples further down, and a class that is not declared here does not exist.
 
   // tailwind.config.js
   export default {
@@ -154,16 +166,44 @@ export const CRESOVA_DESIGN_KIT = `
     theme: {
       extend: {
         colors: {
-          bg: '#F7F5F0',
-          surface: '#FFFFFF',
-          ink: '#14322C',
-          muted: '#5B6F69',
-          accent: '#0E6E62',
-          'accent-strong': '#0A4F46',
+          bg: 'rgb(var(--bg) / <alpha-value>)',
+          surface: 'rgb(var(--surface) / <alpha-value>)',
+          ink: 'rgb(var(--ink) / <alpha-value>)',
+          muted: 'rgb(var(--muted) / <alpha-value>)',
+          accent: 'rgb(var(--accent) / <alpha-value>)',
+          'accent-strong': 'rgb(var(--accent-strong) / <alpha-value>)',
         },
+        fontFamily: {
+          display: ['var(--font-display)', 'system-ui', 'sans-serif'],
+          body: ['var(--font-body)', 'system-ui', 'sans-serif'],
+        },
+        fontWeight: { heading: 'var(--weight-display)' },
+        fontSize: {
+          hero: ['clamp(3rem, 9vw, 10rem)', { lineHeight: '0.98', letterSpacing: '-0.025em' }],
+          display: ['clamp(4.5rem, 12vw, 9rem)', { lineHeight: '1', letterSpacing: '-0.03em' }],
+          section: ['clamp(1.75rem, 3vw, 2.5rem)', { lineHeight: '1.15', letterSpacing: '-0.015em' }],
+          body: ['1.0625rem', { lineHeight: '1.6' }],
+        },
+        maxWidth: { container: '1200px', measure: '65ch' },
+        borderRadius: { control: '6px', panel: '12px' },
+        boxShadow: { raised: '0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06)' },
       },
     },
   };
+
+  Then define the six values in \`src/index.css\`, as RGB triplets so \`<alpha-value>\` works:
+
+  :root {
+    --bg: 247 245 240;
+    --surface: 255 255 255;
+    --ink: 20 50 44;
+    --muted: 91 111 105;
+    --accent: 14 110 98;
+    --accent-strong: 10 79 70;
+    --font-display: 'Bricolage Grotesque';
+    --font-body: 'Karla';
+    --weight-display: 600;
+  }
 
   The rest of the tokens (define once, then never hardcode):
   - Spacing scale: 4 8 12 16 24 32 48 64 96 128 160
