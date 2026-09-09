@@ -179,7 +179,7 @@ export const CRESOVA_DESIGN_KIT = `
         },
         fontWeight: { heading: 'var(--weight-display)' },
         fontSize: {
-          hero: ['clamp(3rem, 9vw, 10rem)', { lineHeight: '0.98', letterSpacing: '-0.025em' }],
+          hero: ['clamp(2.75rem, 13cqw, 10rem)', { lineHeight: '0.98', letterSpacing: '-0.025em' }],
           display: ['clamp(4.5rem, 12vw, 9rem)', { lineHeight: '1', letterSpacing: '-0.03em' }],
           section: ['clamp(1.75rem, 3vw, 2.5rem)', { lineHeight: '1.15', letterSpacing: '-0.015em' }],
           body: ['1.0625rem', { lineHeight: '1.6' }],
@@ -213,9 +213,16 @@ export const CRESOVA_DESIGN_KIT = `
   - Container: 1200px max, 24px gutter mobile, 40px desktop.
 
   TYPE SCALE (the single biggest tell of a generated page is timid type — type that fits):
-  - Hero headline: clamp(3rem, 9vw, 10rem), line-height 0.95–1.05, tracking -0.025em, and the
+  - Hero headline: clamp(2.75rem, 13cqw, 10rem), line-height 0.95–1.05, tracking -0.025em, and the
     display weight of your sector row — which is 300 for jewellery and 800 for a workshop, not 600
     for everything.
+    \`cqw\` and not \`vw\`, and that difference is not cosmetic. With 9vw the headline measured
+    itself against the window while living in a 60% column: at 1440px it came out at 129px inside
+    690px of space, broke into five lines, pushed the WhatsApp button below the fold and cut the
+    subtitle mid-sentence. This file warned about exactly that failure two lines below and the base
+    template committed it anyway, because nobody had rendered it. Container units make one number
+    serve both shapes: ~90px in a 60/40 column, ~156px in a full-width hero. Put
+    \`container-type: inline-size\` on the column the headline lives in.
     The old ceiling here was 6.5rem, and it was set by taste rather than by evidence. Six sites this
     agency shipped and clients approved were measured: their hero headlines render at 96, 120, 144,
     152 and 160 CSS pixels. Three of the six break past what this file used to allow. 10rem is the
