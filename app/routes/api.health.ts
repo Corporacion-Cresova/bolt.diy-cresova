@@ -2,6 +2,7 @@ import { json, type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import versionInfo from '~/version.json';
 import { generateOpenRouterCatalog } from '~/lib/.server/images/openrouter-images';
 import { imageStoreStats } from '~/lib/.server/images/image-store';
+import { getMonthTotal, getTodayTotal, type DailyTotal } from '~/lib/modules/llm/cost-tracker';
 import { DEFAULT_IMAGE_MODEL, OPENROUTER_IMAGE_MODELS_ENDPOINT } from '~/lib/.server/images/openrouter-images';
 import { createScopedLogger } from '~/utils/logger';
 
@@ -132,6 +133,30 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
     }
   }
 
+  /**
+   * Lo gastado, en el formato en que se lee: lempiras primero.
+   *
+   * Se cuenta en memoria del proceso, así que un redeploy lo pone en cero. Eso se dice abajo, en
+   * vez de dejar que un total bajo se lea como un día barato.
+   */
+  const gasto = (total: DailyTotal) => ({
+    lempiras: Number(total.hnl.toFixed(2)),
+    dolares: Number(total.usd.toFixed(4)),
+    generaciones: total.generations,
+    imagenes: total.images,
+    imagenesDolares: Number(total.imagesUsd.toFixed(4)),
+    tokens: { entrada: total.tokensInput, salida: total.tokensOutput },
+
+    /*
+     * Cuando esto no es cero, el total de arriba es un piso y no el gasto real: hubo generaciones
+     * con un modelo que no está en la tabla de precios.
+     */
+    generacionesSinPrecio: total.unpricedGenerations,
+  });
+
+  const hoy = getTodayTotal();
+  const mes = getMonthTotal();
+
   return json({
     status: 'healthy',
     version: `v${versionInfo.version} build ${versionInfo.build}`,
@@ -139,5 +164,12 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
     timestamp: new Date().toISOString(),
     env,
     images,
+    gasto: {
+      hoy: { fecha: hoy.date, ...gasto(hoy) },
+      mes: { periodo: mes.date, ...gasto(mes) },
+      nota:
+        'Se cuenta en memoria del proceso y arranca de cero en cada redeploy. ' +
+        'El día cierra en hora de Honduras, no UTC. La facturación de OpenRouter es la verdad.',
+    },
   });
 };

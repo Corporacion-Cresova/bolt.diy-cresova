@@ -1,6 +1,7 @@
 import { createScopedLogger } from '~/utils/logger';
 import { imagePath, putImage, recordImageFailures } from './image-store';
 import { describeBusiness } from './describe-business';
+import { trackImage } from '~/lib/modules/llm/cost-tracker';
 
 const logger = createScopedLogger('CresovaImagesOpenRouter');
 
@@ -107,6 +108,14 @@ export interface OpenRouterImagesRequest {
 interface OpenRouterImageResponse {
   data?: Array<{ b64_json?: string; media_type?: string }>;
   error?: { message?: string; code?: number };
+
+  /*
+   * Lo que la llamada costó, según quien la cobra. Se venía descartando, así que las seis fotos
+   * de cada sitio —cerca de la quinta parte de lo que cuesta generarlo— no aparecían en ningún
+   * total. Se registra este número en vez de derivarlo de una tabla propia porque es el que va a
+   * la factura.
+   */
+  usage?: { cost?: number };
 }
 
 /**
@@ -248,6 +257,10 @@ async function runSingleImage(
     if (!firstImage?.b64_json) {
       logger.warn('OpenRouter image generation returned an empty payload');
       return { ok: false, reason: 'the answer carried no image' };
+    }
+
+    if (typeof payload.usage?.cost === 'number') {
+      trackImage(model, payload.usage.cost);
     }
 
     /*
