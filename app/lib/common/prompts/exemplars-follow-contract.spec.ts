@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CRESOVA_SECTION_EXEMPLARS } from './cresova-section-exemplars';
-import { CRESOVA_SECTORIAL_EXEMPLARS } from './cresova-sectorial-exemplars';
+import { SECTORS_WITH_EXEMPLARS, cresovaSectorialExemplars } from './cresova-sectorial-exemplars';
 import { CRESOVA_MOTION_RECIPES } from './cresova-motion-recipes';
 
 /**
@@ -11,8 +11,20 @@ import { CRESOVA_MOTION_RECIPES } from './cresova-motion-recipes';
  */
 const EXEMPLARS: [string, string][] = [
   ['section exemplars', CRESOVA_SECTION_EXEMPLARS],
-  ['sectorial exemplars', CRESOVA_SECTORIAL_EXEMPLARS],
   ['motion recipes', CRESOVA_MOTION_RECIPES],
+
+  /*
+   * Cada sector por separado, no el bloque entero: desde que los exemplars se filtran por rubro,
+   * lo que el modelo lee es el render de un sector, y es ese render el que tiene que cumplir el
+   * contrato. Un blob que junta los cuatro podría pasar mientras uno solo falla.
+   */
+  ...SECTORS_WITH_EXEMPLARS.map((sector): [string, string] => [
+    `sectorial exemplars — ${sector}`,
+    cresovaSectorialExemplars(sector),
+  ]),
+
+  // y el caso sin ejemplo propio, que sigue llevando los anti-patterns
+  ['sectorial exemplars — sin ejemplo propio', cresovaSectorialExemplars('belleza, bienestar, suplementos')],
 ];
 
 /** The durations Tailwind ships. A number outside this list generates no CSS at all. */

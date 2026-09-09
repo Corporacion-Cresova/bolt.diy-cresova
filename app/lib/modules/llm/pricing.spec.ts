@@ -132,12 +132,22 @@ describe('la tabla contra el catálogo público de OpenRouter', () => {
       const input = Number(theirs.prompt) * 1_000_000;
       const output = Number(theirs.completion) * 1_000_000;
 
-      // 1% de tolerancia: redondeo nuestro, no deriva real
-      if (Math.abs(input - ours.inputPer1M) > input * 0.01 + 1e-6) {
+      /*
+       * 10% de tolerancia, y no menos.
+       *
+       * Empezó en 1% y a las pocas horas se puso roja sola: DeepSeek V4 Flash pasó de $0.0871 a
+       * $0.0855, un 1.9%. OpenRouter agrega varios proveedores por modelo y el precio flota. Una
+       * aserción que falla con el mercado moviéndose normalmente es una aserción que se ignora, y
+       * ahí deja de proteger de nada.
+       *
+       * Lo que este test tiene que atrapar es un error de captura, no una fluctuación: la tabla
+       * que reemplazó estaba seis veces por debajo. 10% deja pasar el ruido y no deja pasar eso.
+       */
+      if (Math.abs(input - ours.inputPer1M) > input * 0.1 + 1e-6) {
         drifted.push(`${model} entrada: tabla ${ours.inputPer1M}, OpenRouter ${input.toFixed(4)}`);
       }
 
-      if (Math.abs(output - ours.outputPer1M) > output * 0.01 + 1e-6) {
+      if (Math.abs(output - ours.outputPer1M) > output * 0.1 + 1e-6) {
         drifted.push(`${model} salida: tabla ${ours.outputPer1M}, OpenRouter ${output.toFixed(4)}`);
       }
     }
