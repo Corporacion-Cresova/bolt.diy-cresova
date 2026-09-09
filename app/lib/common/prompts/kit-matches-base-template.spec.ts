@@ -112,7 +112,33 @@ describe('el design kit y la plantilla base', () => {
   });
 
   it('el hero declarado es el mismo en el snippet del kit y en la plantilla', () => {
-    expect(kitConfigSnippet).toContain('clamp(3rem, 9vw, 10rem)');
+    /*
+     * Compara los dos lados entre sí, no contra un literal. La primera versión hardcodeaba
+     * `clamp(3rem, 9vw, 10rem)`, así que el primer cambio legítimo a la escala tipográfica la
+     * rompía en los dos lados a la vez sin que ninguno estuviera mal. Lo que hay que sostener es
+     * que coincidan, no cuánto miden.
+     */
+    const heroDeclarado = (source: string) => /hero:\s*\['([^']+)'/.exec(source)?.[1];
+
+    const enLaPlantilla = heroDeclarado(tailwindConfig);
+    expect(enLaPlantilla, 'la plantilla dejó de declarar el tamaño del hero').toBeTruthy();
+    expect(heroDeclarado(kitConfigSnippet)).toBe(enLaPlantilla);
+  });
+
+  it('el titular mide contra su columna, no contra la ventana', () => {
+    /*
+     * Con `vw` el titular se medía contra la ventana viviendo en una columna del 60%: a 1440px
+     * salía a 129px dentro de 690px de espacio, en cinco líneas, con el botón de WhatsApp debajo
+     * del pliegue. El kit advertía contra eso mismo dos líneas más abajo y la plantilla lo hacía
+     * igual, porque nadie la había renderizado nunca.
+     */
+    expect(tailwindConfig).toMatch(/hero:\s*\['clamp\([^']*cqw/);
+    expect(kitConfigSnippet).toMatch(/hero:\s*\['clamp\([^']*cqw/);
+
+    // y las unidades de contenedor necesitan que alguien abra el contenedor
+    const css = fileFromTemplate('src/index.css');
+    expect(css).toContain('container-type: inline-size');
+    expect(fileFromTemplate('src/components/Hero.tsx')).toContain('mide-por-columna');
   });
 
   it('el kit manda la paleta al archivo donde la plantilla la lee', () => {
@@ -122,12 +148,15 @@ describe('el design kit y la plantilla base', () => {
     expect(CRESOVA_DESIGN_KIT).toContain('src/index.css');
   });
 
-  it('el tamaño del hero es el mismo número en la prosa y en el código', () => {
+  it('el tamaño del hero es el mismo número en la prosa del kit y en el código', () => {
     /*
-     * 10rem salió de medir seis sitios que el cliente aprobó. Si uno de los dos lados se mueve y
-     * el otro no, el modelo recibe dos techos distintos para la misma decisión.
+     * El kit dice el tamaño dos veces: en prosa, en la sección de escala tipográfica, y otra vez
+     * en el snippet de config. Si una se mueve y la otra no, el modelo recibe dos techos distintos
+     * para la misma decisión.
      */
-    expect(tailwindConfig).toContain('clamp(3rem, 9vw, 10rem)');
-    expect(CRESOVA_DESIGN_KIT).toContain('clamp(3rem, 9vw, 10rem)');
+    const enElConfig = /hero:\s*\['([^']+)'/.exec(tailwindConfig)?.[1];
+
+    expect(enElConfig).toBeTruthy();
+    expect(CRESOVA_DESIGN_KIT, 'la prosa del kit no nombra el tamaño que declara el config').toContain(enElConfig!);
   });
 });

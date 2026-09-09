@@ -3,6 +3,15 @@
 @tailwind utilities;
 
 /*
+ * Abre un contenedor de consulta para que `text-hero` mida contra este ancho y no contra la
+ * ventana. Va en la columna de texto del hero, no en el hero entero: lo que tiene que decidir el
+ * tamaño del titular es el espacio que el titular tiene.
+ */
+.mide-por-columna {
+  container-type: inline-size;
+}
+
+/*
  * The six sector palettes of the Cresova design kit, verified as sets.
  *
  * Pick the row that matches the business, paste its six values into :root, and delete the rest.

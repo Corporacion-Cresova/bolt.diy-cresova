@@ -5,7 +5,15 @@
  * large share of it, so imports failed for an hour at a time. A vendored template is just a
  * static asset served by the app itself.
  *
- * Usage: node scripts/vendor-templates.mjs
+ * Uso:
+ *   node scripts/vendor-templates.mjs              solo las plantillas locales de este repo
+ *   node scripts/vendor-templates.mjs --upstream   además re-descarga las de GitHub
+ *
+ * Lo de GitHub está detrás de una bandera por una razón concreta: los JSON vendorizados de
+ * terceros llevan parches nuestros. `vite-shadcn` no pasaba su propio typecheck —un `props` sin
+ * usar y un import muerto, TS6133 y TS6192— y eso hacía fallar el build al publicar; se corrigió
+ * a mano sobre el JSON, porque un archivo generado no tiene otro lugar donde guardar un parche.
+ * Re-clonar sin querer los borra y el fallo vuelve sin que nadie lo relacione. Ya pasó una vez.
  */
 import { execSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -18,6 +26,15 @@ const TEMPLATES = [
   'xKevIsDev/bolt-astro-basic-template',
   'xKevIsDev/vite-shadcn',
 ];
+
+/**
+ * Plantillas que viven en este repo, no en GitHub.
+ *
+ * `cresova-base` se vendorizaba a mano, y eso significa que el JSON que de verdad llega al modelo
+ * y la carpeta que uno lee podían decir cosas distintas sin que nada lo notara. El código que se
+ * lee tiene que ser el código que se envía.
+ */
+const LOCAL_TEMPLATES = [{ slug: 'cresova-base', dir: 'templates/cresova-base', repo: 'cresova/cresova-base' }];
 
 const OUTPUT_DIR = 'public/templates';
 const SKIPPED_DIRS = new Set(['.git', 'node_modules']);
@@ -41,30 +58,45 @@ function isBinary(buffer) {
 
 mkdirSync(OUTPUT_DIR, { recursive: true });
 
-for (const repo of TEMPLATES) {
+/** Empaqueta un directorio de archivos de texto en el JSON que la app sirve. */
+function vendor(slug, repo, dir) {
+  const files = [];
+  let skipped = 0;
+
+  for (const path of walk(dir)) {
+    const buffer = readFileSync(join(dir, path));
+
+    if (isBinary(buffer)) {
+      skipped++;
+      continue;
+    }
+
+    files.push({ path, content: buffer.toString('utf8') });
+  }
+
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  writeFileSync(join(OUTPUT_DIR, `${slug}.json`), `${JSON.stringify({ repo, files })}\n`);
+  console.log(`✔ ${slug}: ${files.length} files${skipped ? `, ${skipped} binary skipped` : ''}`);
+}
+
+for (const { slug, dir, repo } of LOCAL_TEMPLATES) {
+  vendor(slug, repo, dir);
+}
+
+const refreshUpstream = process.argv.includes('--upstream');
+
+if (!refreshUpstream) {
+  console.log('Plantillas de GitHub sin tocar. Para re-descargarlas: --upstream (revisá el diff, lleva parches).');
+}
+
+for (const repo of refreshUpstream ? TEMPLATES : []) {
   const slug = repo.split('/').pop();
   const checkout = mkdtempSync(join(tmpdir(), 'cresova-template-'));
 
   try {
     execSync(`git clone --depth 1 -q https://github.com/${repo} ${checkout}`, { stdio: ['ignore', 'ignore', 'pipe'] });
 
-    const files = [];
-    let skipped = 0;
-
-    for (const path of walk(checkout)) {
-      const buffer = readFileSync(join(checkout, path));
-
-      if (isBinary(buffer)) {
-        skipped++;
-        continue;
-      }
-
-      files.push({ path, content: buffer.toString('utf8') });
-    }
-
-    files.sort((a, b) => a.path.localeCompare(b.path));
-    writeFileSync(join(OUTPUT_DIR, `${slug}.json`), `${JSON.stringify({ repo, files })}\n`);
-    console.log(`✔ ${slug}: ${files.length} files${skipped ? `, ${skipped} binary skipped` : ''}`);
+    vendor(slug, repo, checkout);
   } catch (error) {
     console.error(`✘ ${slug}: ${error.message.split('\n')[0]}`);
   } finally {
