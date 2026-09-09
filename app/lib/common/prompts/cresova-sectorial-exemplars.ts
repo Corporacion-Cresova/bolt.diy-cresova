@@ -553,8 +553,18 @@ const SECTOR_BLOCKS: Record<string, { treatment: string; blocks: string[] }> = {
 /** Los sectores que tienen ejemplo propio acá. Turismo vive en los section exemplars. */
 export const SECTORS_WITH_EXEMPLARS = Object.keys(SECTOR_BLOCKS);
 
-export function cresovaSectorialExemplars(sector: string): string {
-  const match = SECTOR_BLOCKS[sector];
+/**
+ * @param sector la fila detectada
+ * @param matched falso cuando el detector no reconoció el rubro y `sector` es solo el default
+ */
+export function cresovaSectorialExemplars(sector: string, matched = true): string {
+  /*
+   * Un rubro no reconocido no recibe el ejemplo del default. Medido contra 54 rubros reales, más
+   * de la mitad caían en comercio sin ser comercio; darles el ejemplo de comercio es afirmar algo
+   * que nadie verificó. Se le dice al modelo que elija la fila él, que para eso tiene la tabla
+   * entera y la descripción del negocio.
+   */
+  const match = matched ? SECTOR_BLOCKS[sector] : undefined;
 
   /*
    * Sin ejemplo propio —belleza no tiene, turismo vive en los section exemplars— van solo los
@@ -572,8 +582,14 @@ ${
     ? `  Una sección resuelta para este rubro exacto, con la densidad de decisiones que se espera.
   Copiá esa densidad, no el arreglo. Los colores quedan como nombres de token — la tabla sectorial
   del design kit decide la paleta.`
-    : `  Este rubro no tiene un ejemplo propio acá. Sostené la densidad de los section exemplars y
+    : matched
+      ? `  Este rubro no tiene un ejemplo propio acá. Sostené la densidad de los section exemplars y
   no copies el tratamiento de otro rubro.`
+      : `  NO PUDIMOS DETERMINAR EL RUBRO DE ESTE NEGOCIO, así que no te damos ni un ejemplo ni una
+  fila de la tabla sectorial. Elegila vos: leé la descripción del cliente, buscá en la tabla del
+  design kit la fila que de verdad le corresponde, y nombrala en tu respuesta antes de escribir el
+  primer archivo. No caigas por defecto en comercio ni copies el tratamiento de otro rubro — un
+  colegio, una funeraria y una ferretería no se parecen en nada y merecen decisiones distintas.`
 }
 
 ${sectorial}

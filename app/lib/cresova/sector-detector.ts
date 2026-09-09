@@ -80,6 +80,33 @@ const SECTOR_RULES: Array<{ sector: string; keywords: string[] }> = [
       'insurance',
       'consulting',
       'consultant',
+      'farmacia',
+      'farmacéutica',
+      'botica',
+      'óptica',
+      'optometría',
+      'laboratorio',
+      'veterinaria',
+      'veterinario',
+      'radiología',
+      'ultrasonido',
+      'ortodoncia',
+      'inmobiliaria',
+      'bienes raíces',
+      'aseguradora',
+      'cooperativa',
+      'financiera',
+      'préstamos',
+      'auditoría',
+      'asesoría',
+      'pharmacy',
+      'optics',
+      'laboratory',
+      'veterinary',
+      'real estate',
+      'insurance',
+      'credit union',
+      'advisory',
     ],
   },
   {
@@ -126,6 +153,10 @@ const SECTOR_RULES: Array<{ sector: string; keywords: string[] }> = [
       'dining',
       'bistro',
       'grill',
+      'repostería',
+      'pastelería',
+      'bakery',
+      'pastry',
     ],
   },
   {
@@ -175,6 +206,14 @@ const SECTOR_RULES: Array<{ sector: string; keywords: string[] }> = [
       'trainer',
       'supplements',
       'protein',
+      'tatuaje',
+      'tatuajes',
+      'tattoo',
+      'piercing',
+      'depilación',
+      'pilates',
+      'crossfit',
+      'terapia física',
     ],
   },
   {
@@ -282,6 +321,30 @@ const SECTOR_RULES: Array<{ sector: string; keywords: string[] }> = [
       'furniture',
       'home decor',
       'boutique',
+      'ferretería',
+      'ferreteria',
+      'librería',
+      'papelería',
+      'floristería',
+      'florería',
+      'juguetería',
+      'perfumería',
+      'zapatería',
+      'mueblería',
+      'agroservicio',
+      'distribuidora',
+      'mayorista',
+      'abarrotes',
+      'pulpería',
+      'bazar',
+      'hardware store',
+      'bookstore',
+      'stationery',
+      'flower shop',
+      'toy store',
+      'shoe store',
+      'furniture',
+      'wholesale',
     ],
   },
   {
@@ -343,6 +406,30 @@ const SECTOR_RULES: Array<{ sector: string; keywords: string[] }> = [
       'courier',
       'taxi',
       'shipping',
+      'taller',
+      'mecánico',
+      'mecánica',
+      'automotriz',
+      'herrería',
+      'herrero',
+      'carpintería',
+      'carpintero',
+      'soldadura',
+      'imprenta',
+      'serigrafía',
+      'lavandería',
+      'cerrajería',
+      'refrigeración',
+      'aire acondicionado',
+      'fumigación',
+      'jardinería',
+      'workshop',
+      'mechanic',
+      'welding',
+      'printing',
+      'laundry',
+      'locksmith',
+      'landscaping',
     ],
   },
   {
@@ -425,9 +512,38 @@ const SECTOR_RULES: Array<{ sector: string; keywords: string[] }> = [
  */
 export const SECTOR_NAMES: string[] = [...new Set(SECTOR_RULES.map((rule) => rule.sector))];
 
-export function detectSector(message: string): string {
+export interface SectorMatch {
+  /** La fila de la tabla sectorial, o el default cuando no hubo coincidencia. */
+  sector: string;
+
+  /**
+   * Falso cuando ninguna palabra clave coincidió y `sector` es solo el default.
+   *
+   * Esta distinción es la pieza que faltaba, y su ausencia costaba caro. Medido contra 54 rubros
+   * reales de negocio pequeño hondureño, más de la mitad caían en «comercio, tienda, retail» sin
+   * ser comercio: farmacias, ópticas, talleres, imprentas, colegios, funerarias, aseguradoras.
+   * Como el default era indistinguible de un acierto, el sitio salía con la tipografía, la paleta
+   * y el ejemplo de un rubro que no era el del cliente, y nadie tenía forma de saberlo.
+   *
+   * Algunos de esos casos ahora sí tienen palabra clave. Pero la lista de rubros que una agencia
+   * atiende no se termina nunca, así que el arreglo de fondo no es una lista más larga: es que
+   * cuando no sabemos, se diga. Quien recibe ese «no sé» —el modelo, que tiene la tabla completa
+   * enfrente y la descripción del negocio— elige mejor que un default.
+   */
+  matched: boolean;
+}
+
+/**
+ * El default cuando nada coincide.
+ *
+ * Sigue siendo comercio porque es el tratamiento más neutro de la tabla, pero ahora viaja
+ * acompañado de `matched: false`, que es lo que permite tratarlo como lo que es.
+ */
+const FALLBACK_SECTOR = 'comercio, tienda, retail';
+
+export function detectSectorMatch(message: string): SectorMatch {
   if (!message) {
-    return 'comercio, tienda, retail';
+    return { sector: FALLBACK_SECTOR, matched: false };
   }
 
   const normalized = message
@@ -453,17 +569,23 @@ export function detectSector(message: string): string {
        */
       if (normalizedKeyword.includes(' ')) {
         if (normalized.includes(normalizedKeyword)) {
-          return rule.sector;
+          return { sector: rule.sector, matched: true };
         }
       } else if (words.has(normalizedKeyword)) {
-        return rule.sector;
+        return { sector: rule.sector, matched: true };
       }
     }
   }
 
-  /*
-   * Nothing matched. The safest fallback for a truly unknown request is "comercio"
-   * because it has the broadest visual palette and the most neutral treatment.
-   */
-  return 'comercio, tienda, retail';
+  return { sector: FALLBACK_SECTOR, matched: false };
+}
+
+/**
+ * El sector como string, para quien no necesita saber si fue un acierto o el default.
+ *
+ * Lo usa el catálogo de fotos: una paleta neutra es una respuesta razonable para un rubro
+ * desconocido, y ahí el default no hace daño.
+ */
+export function detectSector(message: string): string {
+  return detectSectorMatch(message).sector;
 }

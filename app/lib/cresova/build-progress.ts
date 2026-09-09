@@ -168,9 +168,7 @@ export function describeBuildProgress(input: BuildProgressInput): BuildProgress 
          */
         return `${filesTotal} ${plural(filesTotal, 'archivo escrito', 'archivos escritos')}, sin vista previa todavía`;
       case 'ready':
-        return filesTotal
-          ? `Sitio listo · ${filesTotal} ${plural(filesTotal, 'archivo', 'archivos')}`
-          : 'Sitio listo';
+        return filesTotal ? `Sitio listo · ${filesTotal} ${plural(filesTotal, 'archivo', 'archivos')}` : 'Sitio listo';
       case 'thinking':
         return 'Preparando tu sitio';
       case 'idle':
