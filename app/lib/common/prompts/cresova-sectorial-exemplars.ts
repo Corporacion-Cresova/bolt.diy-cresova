@@ -515,40 +515,77 @@ Why the asymmetric version is the right answer:
  * The full block injected into the system prompt alongside the design kit and the original
  * exemplars. Replaces the gap where, before, the only sector with real density was turismo.
  */
-export const CRESOVA_SECTORIAL_EXEMPLARS = `
+/**
+ * Los exemplars del sector que se está construyendo, y solo de ese.
+ *
+ * Antes esto era una constante con los cuatro sectores dentro, inyectada entera en cada build. Un
+ * sitio de clínica llegaba al modelo con el ejemplo de salud —el que sirve— y también con los de
+ * gastronomía, oficios y comercio, unos 2.700 tokens de secciones resueltas para negocios que no
+ * son el del cliente. Cinco ejemplos, cuatro del rubro equivocado, compitiendo por la atención con
+ * el único que aplica.
+ *
+ * Eso no es un problema de costo, es de calidad: es la explicación mecánica de un sitio que sale
+ * genérico o que se siente de otro rubro. El detector de sector ya existía y ya se usaba para
+ * elegir la paleta de las fotos; acá decide qué ejemplos entran.
+ *
+ * Los anti-patterns entran siempre. No enseñan un rubro, enseñan lo que el modelo escribe cuando
+ * no hay nada más en el prompt, y eso aplica a todos.
+ */
+const SECTOR_BLOCKS: Record<string, { treatment: string; blocks: string[] }> = {
+  'salud, legal, financiero, profesional': {
+    treatment: 'sólido',
+    blocks: [SECTOR_SALUD_HERO, SECTOR_SALUD_SERVICES],
+  },
+  'gastronomía, café, catering': {
+    treatment: 'editorial',
+    blocks: [SECTOR_GASTRONOMIA_HERO, SECTOR_GASTRONOMIA_CONTACT],
+  },
+  'oficios, construcción, limpieza, transporte': {
+    treatment: 'sólido',
+    blocks: [SECTOR_OFICIOS_HERO],
+  },
+  'comercio, tienda, retail': {
+    treatment: 'editorial',
+    blocks: [SECTOR_COMERCIO_HERO],
+  },
+};
+
+/** Los sectores que tienen ejemplo propio acá. Turismo vive en los section exemplars. */
+export const SECTORS_WITH_EXEMPLARS = Object.keys(SECTOR_BLOCKS);
+
+export function cresovaSectorialExemplars(sector: string): string {
+  const match = SECTOR_BLOCKS[sector];
+
+  /*
+   * Sin ejemplo propio —belleza no tiene, turismo vive en los section exemplars— van solo los
+   * anti-patterns. Mandar el ejemplo de otro rubro «para que tenga algo» es exactamente el fallo
+   * que esta función existe para terminar.
+   */
+  const sectorial = match
+    ? `  === ${sector.toUpperCase()} — tratamiento ${match.treatment} ===\n\n${match.blocks.join('\n\n')}\n`
+    : '';
+
+  return `
 <cresova_sectorial_exemplars>
-  The original exemplars are one sector: a dive shop in Roatán. This block adds four more sectors
-  with the same density. Pick the closest one and copy its trio: hero, services, contact. The
-  colours stay as token names — the sector table in the design kit decides the palette.
+${
+  match
+    ? `  Una sección resuelta para este rubro exacto, con la densidad de decisiones que se espera.
+  Copiá esa densidad, no el arreglo. Los colores quedan como nombres de token — la tabla sectorial
+  del design kit decide la paleta.`
+    : `  Este rubro no tiene un ejemplo propio acá. Sostené la densidad de los section exemplars y
+  no copies el tratamiento de otro rubro.`
+}
 
-  === SALUD, LEGAL, FINANCIERO, PROFESIONAL — tratamiento sólido ===
-
-  ${SECTOR_SALUD_HERO}
-
-  ${SECTOR_SALUD_SERVICES}
-
-  === GASTRONOMÍA, CAFÉ, CATERING — tratamiento editorial ===
-
-  ${SECTOR_GASTRONOMIA_HERO}
-
-  ${SECTOR_GASTRONOMIA_CONTACT}
-
-  === OFICIOS, CONSTRUCCIÓN, LIMPIEZA, TRANSPORTE — tratamiento sólido ===
-
-  ${SECTOR_OFICIOS_HERO}
-
-  === COMERCIO, TIENDA, RETAIL — tratamiento editorial ===
-
-  ${SECTOR_COMERCIO_HERO}
-
-  === ANTI-PATTERNS — the wrong answer next to the right one ===
+${sectorial}
+  === ANTI-PATTERNS — la respuesta equivocada al lado de la correcta ===
 
   ${ANTI_PATTERN_SERVICES}
 
   ${ANTI_PATTERN_GALLERY}
 
-  These anti-patterns are the same lesson told negatively. The wrong answer is what the model
-  writes when nothing else is in the prompt. The right answer is what the same section looks like
-  when someone has thought about it. The model has seen both. Choose the one you would defend.
+  Estos anti-patterns son la misma lección contada en negativo. La respuesta equivocada es lo que
+  el modelo escribe cuando no hay nada más en el prompt. La correcta es cómo se ve esa misma
+  sección cuando alguien la pensó. Ya viste las dos. Elegí la que defenderías.
 </cresova_sectorial_exemplars>
 `;
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CRESOVA_SECTORIAL_EXEMPLARS,
+  SECTORS_WITH_EXEMPLARS,
+  cresovaSectorialExemplars,
   SECTOR_SALUD_HERO,
   SECTOR_SALUD_SERVICES,
   SECTOR_GASTRONOMIA_HERO,
@@ -20,18 +21,73 @@ import {
  */
 
 describe('the sectorial exemplars block', () => {
-  it('ships a worked trio for every sector the kit defines as non-turismo', () => {
+  it('tiene un ejemplo propio para cuatro sectores', () => {
+    expect(SECTORS_WITH_EXEMPLARS).toEqual([
+      'salud, legal, financiero, profesional',
+      'gastronomía, café, catering',
+      'oficios, construcción, limpieza, transporte',
+      'comercio, tienda, retail',
+    ]);
+  });
+
+  it('a un build solo le llega el ejemplo de su rubro', () => {
     /*
-     * The design kit's sector table names six sectors: turismo, gastronomía, belleza, comercio,
-     * oficios, salud/legal/financiero. The original exemplars cover turismo. This file covers
-     * the remaining four (belleza is intentionally merged with salud for the first cut). If a
-     * sector is added later, this test must be updated alongside the new trio.
+     * Este es el test del fallo real. Antes se inyectaban los cuatro sectores en cada build, así
+     * que un sitio de clínica llegaba al modelo con el ejemplo de salud —el que sirve— y también
+     * con los de gastronomía, oficios y comercio: unas 2.700 tokens de secciones resueltas para
+     * negocios que no son el del cliente, compitiendo por la atención con la única que aplica.
+     *
+     * Es la explicación mecánica de un sitio que sale genérico o que se siente de otro rubro.
      */
-    const block = CRESOVA_SECTORIAL_EXEMPLARS;
-    expect(block).toContain('SALUD, LEGAL, FINANCIERO, PROFESIONAL');
-    expect(block).toContain('GASTRONOMÍA, CAFÉ, CATERING');
-    expect(block).toContain('OFICIOS, CONSTRUCCIÓN, LIMPIEZA, TRANSPORTE');
-    expect(block).toContain('COMERCIO, TIENDA, RETAIL');
+    const clinica = cresovaSectorialExemplars('salud, legal, financiero, profesional');
+
+    expect(clinica).toContain('SALUD, LEGAL, FINANCIERO, PROFESIONAL');
+    expect(clinica).not.toContain('GASTRONOMÍA, CAFÉ, CATERING');
+    expect(clinica).not.toContain('OFICIOS, CONSTRUCCIÓN, LIMPIEZA, TRANSPORTE');
+    expect(clinica).not.toContain('COMERCIO, TIENDA, RETAIL');
+  });
+
+  it('cada sector trae su propio ejemplo y ninguno ajeno', () => {
+    for (const sector of SECTORS_WITH_EXEMPLARS) {
+      const rendered = cresovaSectorialExemplars(sector);
+
+      expect(rendered, sector).toContain(sector.toUpperCase());
+
+      for (const other of SECTORS_WITH_EXEMPLARS.filter((candidate) => candidate !== sector)) {
+        expect(rendered, `${sector} no debería traer ${other}`).not.toContain(other.toUpperCase());
+      }
+    }
+  });
+
+  it('un rubro sin ejemplo propio no recibe el de otro rubro', () => {
+    /*
+     * Belleza no tiene ejemplo acá y turismo vive en los section exemplars. Mandarles el ejemplo
+     * de salud «para que tengan algo» es exactamente el fallo que este filtro termina.
+     */
+    const belleza = cresovaSectorialExemplars('belleza, bienestar, suplementos');
+
+    for (const sector of SECTORS_WITH_EXEMPLARS) {
+      expect(belleza).not.toContain(sector.toUpperCase());
+    }
+
+    // pero los anti-patterns sí, porque no enseñan un rubro
+    expect(belleza).toContain('ANTI-PATTERNS');
+  });
+
+  it('los anti-patterns entran en todos los rubros', () => {
+    for (const sector of [...SECTORS_WITH_EXEMPLARS, 'turismo, aventura, hotelería']) {
+      expect(cresovaSectorialExemplars(sector), sector).toContain('ANTI-PATTERNS');
+    }
+  });
+
+  it('el bloque de un rubro pesa mucho menos que los cuatro juntos', () => {
+    /*
+     * El motivo por el que esto vale la pena medir: lo que se ahorra no es plata, es atención.
+     */
+    const uno = cresovaSectorialExemplars('salud, legal, financiero, profesional').length;
+    const todos = SECTORS_WITH_EXEMPLARS.reduce((sum, sector) => sum + cresovaSectorialExemplars(sector).length, 0);
+
+    expect(uno).toBeLessThan(todos / 2);
   });
 
   it('every hero carries a stat row with three or four real numbers, not adjectives', () => {

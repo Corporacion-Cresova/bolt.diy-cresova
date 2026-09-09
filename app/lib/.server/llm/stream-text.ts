@@ -7,7 +7,7 @@ import { PromptLibrary } from '~/lib/common/prompt-library';
 import { CRESOVA_BUILD_CONTRACT } from '~/lib/common/prompts/cresova-build-contract';
 import { CRESOVA_DESIGN_KIT } from '~/lib/common/prompts/cresova-design-kit';
 import { CRESOVA_SECTION_EXEMPLARS } from '~/lib/common/prompts/cresova-section-exemplars';
-import { CRESOVA_SECTORIAL_EXEMPLARS } from '~/lib/common/prompts/cresova-sectorial-exemplars';
+import { cresovaSectorialExemplars } from '~/lib/common/prompts/cresova-sectorial-exemplars';
 import { CRESOVA_MOTION_RECIPES } from '~/lib/common/prompts/cresova-motion-recipes';
 import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
@@ -290,12 +290,16 @@ export async function streamText(props: {
       systemPrompt = `${systemPrompt}\n${CRESOVA_SECTION_EXEMPLARS}`;
 
       /*
-       * Sector-specific exemplars sit next to the original six (which are turismo). The original
-       * file stays — it has density the model needs — and the sectorial file adds salud,
-       * gastronomía, oficios and comercio so the model has density for non-turismo requests too.
-       * Same gate, same cost decision: only on the first build of a new site.
+       * Solo el ejemplo del rubro que se está construyendo.
+       *
+       * Antes entraban los cuatro. Un sitio de clínica llegaba con el ejemplo de salud y también
+       * con los de gastronomía, oficios y comercio: cuatro secciones resueltas para negocios que
+       * no son el del cliente, compitiendo por la atención con la única que aplica. El sector ya
+       * se detecta más abajo para elegir la paleta de las fotos; se detecta acá una vez y sirve
+       * para las dos cosas.
        */
-      systemPrompt = `${systemPrompt}\n${CRESOVA_SECTORIAL_EXEMPLARS}`;
+      const sector = detectSector(lastUserMessage.content);
+      systemPrompt = `${systemPrompt}\n${cresovaSectorialExemplars(sector)}`;
 
       /*
        * Motion recipes are the "page that surprises" layer. The design kit caps motion at one
@@ -330,7 +334,6 @@ export async function streamText(props: {
          * for a hotel, a clinic or a workshop. detectSector() picks the closest row
          * in the design-kit's sector table.
          */
-        const sector = detectSector(lastUserMessage.content);
         const briefs = composeImageBriefs(sector, lastUserMessage.content);
         const generated = await generateOpenRouterCatalog({
           prompts: briefs,
