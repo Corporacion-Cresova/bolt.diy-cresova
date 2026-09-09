@@ -16,6 +16,7 @@ import { ExpoQrModal } from '~/components/workbench/ExpoQrModal';
 import styles from './BaseChat.module.scss';
 import type { ProviderInfo } from '~/types/model';
 import { ColorSchemeDialog } from '~/components/ui/ColorSchemeDialog';
+import { BusinessBriefDialog } from '~/components/ui/BusinessBriefDialog';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import { McpTools } from './MCPTools';
@@ -55,7 +56,7 @@ interface ChatBoxProps {
   handleInputChange?: ((event: React.ChangeEvent<HTMLTextAreaElement>) => void) | undefined;
   handleStop?: (() => void) | undefined;
   enhancingPrompt?: boolean | undefined;
-  enhancePrompt?: (() => void) | undefined;
+  enhancePrompt?: ((overrideInput?: string) => void) | undefined;
   onWebSearchResult?: (result: string) => void;
   chatMode?: 'discuss' | 'build';
   setChatMode?: (mode: 'discuss' | 'build') => void;
@@ -270,8 +271,21 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               <div className="i-ph:paperclip text-xl"></div>
             </IconButton>
             <WebSearch onSearchResult={(result) => props.onWebSearchResult?.(result)} disabled={props.isStreaming} />
+            {/*
+             * Two ways to the same brief. This one starts from the business — a name, a rubro, a
+             * line about what they sell — and exists because the wand beside it needs something
+             * already written, while an agency's real starting point is a blank box and a
+             * business card.
+             */}
+            <BusinessBriefDialog
+              disabled={props.enhancingPrompt || props.isStreaming}
+              onDescribe={(description) => {
+                props.enhancePrompt?.(description);
+                toast.success('Armando el brief del negocio');
+              }}
+            />
             <IconButton
-              title="Generar brief del sitio"
+              title="Generar brief a partir de lo escrito"
               disabled={props.input.length === 0 || props.enhancingPrompt}
               className={classNames('transition-all', props.enhancingPrompt ? 'opacity-100' : '')}
               onClick={() => {

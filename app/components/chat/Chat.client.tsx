@@ -793,9 +793,14 @@ export const ChatImpl = memo(
             content: parsedMessages[i] || '',
           };
         })}
-        enhancePrompt={() => {
+        enhancePrompt={(overrideInput?: string) => {
+          /*
+           * The override is what the assisted form sends: a description built from the business
+           * fields rather than something typed in the box. Same brief writer, same streaming into
+           * the same textarea — only the way in differs.
+           */
           enhancePrompt(
-            input,
+            overrideInput ?? input,
             (input) => {
               setInput(input);
               scrollTextArea();

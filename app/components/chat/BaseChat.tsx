@@ -58,7 +58,7 @@ interface BaseChatProps {
   handleStop?: () => void;
   sendMessage?: (event: React.UIEvent, messageInput?: string) => void;
   handleInputChange?: (event: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  enhancePrompt?: () => void;
+  enhancePrompt?: (overrideInput?: string) => void;
   importChat?: (description: string, messages: Message[]) => Promise<void>;
   exportChat?: () => void;
   uploadedFiles?: File[];
