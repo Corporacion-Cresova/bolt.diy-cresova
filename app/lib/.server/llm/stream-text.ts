@@ -13,7 +13,7 @@ import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
 import { keepPromptSafePhotos } from '~/lib/.server/images/prompt-safe-photos';
 import { generateOpenRouterCatalog, composeImageBriefs } from '~/lib/.server/images/openrouter-images';
-import { detectSector } from '~/lib/cresova/sector-detector';
+import { detectSectorMatch } from '~/lib/cresova/sector-detector';
 import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import { trackGeneration } from '~/lib/modules/llm/cost-tracker';
@@ -298,8 +298,13 @@ export async function streamText(props: {
        * se detecta más abajo para elegir la paleta de las fotos; se detecta acá una vez y sirve
        * para las dos cosas.
        */
-      const sector = detectSector(lastUserMessage.content);
-      systemPrompt = `${systemPrompt}\n${cresovaSectorialExemplars(sector)}`;
+      const { sector, matched } = detectSectorMatch(lastUserMessage.content);
+
+      if (!matched) {
+        logger.info(`Rubro no reconocido; el modelo elige la fila. Pedido: "${lastUserMessage.content.slice(0, 80)}"`);
+      }
+
+      systemPrompt = `${systemPrompt}\n${cresovaSectorialExemplars(sector, matched)}`;
 
       /*
        * Motion recipes are the "page that surprises" layer. The design kit caps motion at one
