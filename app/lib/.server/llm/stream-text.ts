@@ -298,13 +298,15 @@ export async function streamText(props: {
        * se detecta más abajo para elegir la paleta de las fotos; se detecta acá una vez y sirve
        * para las dos cosas.
        */
-      const { sector, matched } = detectSectorMatch(lastUserMessage.content);
+      const { sector, rubro, matched } = detectSectorMatch(lastUserMessage.content);
 
-      if (!matched) {
+      if (matched) {
+        logger.info(`Rubro detectado: "${rubro}" (familia visual: ${sector})`);
+      } else {
         logger.info(`Rubro no reconocido; el modelo elige la fila. Pedido: "${lastUserMessage.content.slice(0, 80)}"`);
       }
 
-      systemPrompt = `${systemPrompt}\n${cresovaSectorialExemplars(sector, matched)}`;
+      systemPrompt = `${systemPrompt}\n${cresovaSectorialExemplars(sector, matched, rubro)}`;
 
       /*
        * Motion recipes are the "page that surprises" layer. The design kit caps motion at one

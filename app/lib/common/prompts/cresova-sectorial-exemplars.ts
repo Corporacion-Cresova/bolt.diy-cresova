@@ -554,10 +554,11 @@ const SECTOR_BLOCKS: Record<string, { treatment: string; blocks: string[] }> = {
 export const SECTORS_WITH_EXEMPLARS = Object.keys(SECTOR_BLOCKS);
 
 /**
- * @param sector la fila detectada
+ * @param sector la familia visual detectada — decide paleta y tipografía
  * @param matched falso cuando el detector no reconoció el rubro y `sector` es solo el default
+ * @param rubro el rubro específico («clínica dental», «ferretería»), vacío si no se reconoció
  */
-export function cresovaSectorialExemplars(sector: string, matched = true): string {
+export function cresovaSectorialExemplars(sector: string, matched = true, rubro = ''): string {
   /*
    * Un rubro no reconocido no recibe el ejemplo del default. Medido contra 54 rubros reales, más
    * de la mitad caían en comercio sin ser comercio; darles el ejemplo de comercio es afirmar algo
@@ -575,22 +576,35 @@ export function cresovaSectorialExemplars(sector: string, matched = true): strin
     ? `  === ${sector.toUpperCase()} — tratamiento ${match.treatment} ===\n\n${match.blocks.join('\n\n')}\n`
     : '';
 
+  /*
+   * El rubro específico, nombrado antes que cualquier ejemplo.
+   *
+   * El ejemplo de abajo es de la familia —salud sirve para una clínica dental y para un bufete—
+   * pero el contenido no se escribe para una familia. Sin esta línea, el modelo lee «salud, legal,
+   * financiero, profesional» y escribe el promedio de los cuatro.
+   */
+  const rubroLine = rubro
+    ? `  EL RUBRO DE ESTE NEGOCIO ES: ${rubro}. Las secciones, el vocabulario, el catálogo y las
+  pruebas de confianza se escriben para ese rubro y para ninguno más. El ejemplo de abajo es de su
+  familia visual, que agrupa varios rubros: copiá su densidad de decisiones, no su tema.\n\n`
+    : '';
+
   return `
 <cresova_sectorial_exemplars>
-${
-  match
-    ? `  Una sección resuelta para este rubro exacto, con la densidad de decisiones que se espera.
+${rubroLine}${
+    match
+      ? `  Una sección resuelta para este rubro exacto, con la densidad de decisiones que se espera.
   Copiá esa densidad, no el arreglo. Los colores quedan como nombres de token — la tabla sectorial
   del design kit decide la paleta.`
-    : matched
-      ? `  Este rubro no tiene un ejemplo propio acá. Sostené la densidad de los section exemplars y
+      : matched
+        ? `  Este rubro no tiene un ejemplo propio acá. Sostené la densidad de los section exemplars y
   no copies el tratamiento de otro rubro.`
-      : `  NO PUDIMOS DETERMINAR EL RUBRO DE ESTE NEGOCIO, así que no te damos ni un ejemplo ni una
+        : `  NO PUDIMOS DETERMINAR EL RUBRO DE ESTE NEGOCIO, así que no te damos ni un ejemplo ni una
   fila de la tabla sectorial. Elegila vos: leé la descripción del cliente, buscá en la tabla del
   design kit la fila que de verdad le corresponde, y nombrala en tu respuesta antes de escribir el
   primer archivo. No caigas por defecto en comercio ni copies el tratamiento de otro rubro — un
   colegio, una funeraria y una ferretería no se parecen en nada y merecen decisiones distintas.`
-}
+  }
 
 ${sectorial}
   === ANTI-PATTERNS — la respuesta equivocada al lado de la correcta ===

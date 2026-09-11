@@ -8,7 +8,7 @@ import {
   emptyBusinessFields,
   type BusinessFields,
 } from '~/lib/cresova/business-brief-input';
-import { SECTOR_NAMES } from '~/lib/cresova/sector-detector';
+import { RUBROS_POR_FAMILIA } from '~/lib/cresova/sector-detector';
 
 /**
  * The way into a brief when there is no prompt yet.
@@ -105,15 +105,24 @@ export const BusinessBriefDialog: React.FC<BusinessBriefDialogProps> = ({ onDesc
                   <select
                     id="cresova-business-sector"
                     className={FIELD_CLASS}
-                    value={fields.sector}
-                    onChange={set('sector')}
+                    value={fields.rubro}
+                    onChange={set('rubro')}
                   >
                     {/* Empty by default so the brief writer infers it, which it does well from the name */}
                     <option value="">Que lo deduzca</option>
-                    {SECTOR_NAMES.map((sector) => (
-                      <option key={sector} value={sector}>
-                        {sector}
-                      </option>
+                    {/*
+                     * Rubros específicos, agrupados por la familia visual a la que pertenecen. El
+                     * grupo está ahí para encontrar el rubro, no para elegirse: lo que viaja al
+                     * redactor es «clínica dental», no «salud, legal, financiero, profesional».
+                     */}
+                    {RUBROS_POR_FAMILIA.map((grupo) => (
+                      <optgroup key={grupo.familia} label={grupo.familia}>
+                        {grupo.rubros.map((rubro) => (
+                          <option key={rubro} value={rubro}>
+                            {rubro}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </div>

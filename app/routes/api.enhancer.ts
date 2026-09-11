@@ -2,6 +2,7 @@ import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { streamText } from '~/lib/.server/llm/stream-text';
 import { cresovaBriefPrompt } from '~/lib/common/prompts/cresova-brief';
 import { textStreamResponse } from '~/lib/.server/llm/text-stream-response';
+import { detectRubro } from '~/lib/cresova/sector-detector';
 import type { ProviderInfo } from '~/types/model';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { createScopedLogger } from '~/utils/logger';
@@ -46,7 +47,8 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
       messages: [
         {
           role: 'user',
-          content: `[Model: ${model}]\n\n[Provider: ${providerName}]\n\n` + cresovaBriefPrompt(message),
+          content:
+            `[Model: ${model}]\n\n[Provider: ${providerName}]\n\n` + cresovaBriefPrompt(message, detectRubro(message)),
         },
       ],
       env: context.cloudflare?.env as any,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canDescribeBusiness, describeBusinessForBrief, emptyBusinessFields } from './business-brief-input';
-import { SECTOR_NAMES } from './sector-detector';
+import { RUBROS, RUBROS_POR_FAMILIA, detectSectorMatch } from './sector-detector';
 
 const fields = (over: Partial<typeof emptyBusinessFields> = {}) => ({
   ...emptyBusinessFields,
@@ -12,14 +12,14 @@ describe('describeBusinessForBrief', () => {
   it('reads as a colleague describing the client, not as a form dump', () => {
     const description = describeBusinessForBrief(
       fields({
-        sector: 'salud, legal, financiero, profesional',
+        rubro: 'clínica dental',
         city: 'San Pedro Sula',
         offering: 'ortodoncia, limpiezas y blanqueamiento',
       }),
     );
 
     expect(description).toContain('Clínica Dental Sonrisa');
-    expect(description).toContain('salud, legal, financiero, profesional');
+    expect(description).toContain('clínica dental');
     expect(description).toContain('San Pedro Sula');
     expect(description).toContain('ortodoncia, limpiezas y blanqueamiento');
   });
@@ -68,16 +68,34 @@ describe('canDescribeBusiness', () => {
   });
 });
 
-describe('the sectors the form offers', () => {
-  it('are the detector own sector names, with no duplicates', () => {
+describe('los rubros que ofrece el formulario', () => {
+  it('son rubros, no las filas de la tabla', () => {
     /*
-     * The brief prompt looks each sector up in its table by exact string. A hand-written list in
-     * the form would be a second place to drift.
+     * El desperfecto que este archivo no veía: el desplegable ofrecía «salud, legal, financiero,
+     * profesional» como si fuera un rubro, y esa cadena viajaba tal cual al redactor del brief.
+     * Para una clínica dental eso es decirle que el negocio es cuatro rubros a la vez.
      */
-    expect(SECTOR_NAMES.length).toBe(new Set(SECTOR_NAMES).size);
-    expect(SECTOR_NAMES).toContain('salud, legal, financiero, profesional');
-    expect(SECTOR_NAMES).toContain('gastronomía, café, catering');
-    expect(SECTOR_NAMES).toContain('turismo, aventura, hotelería');
-    expect(SECTOR_NAMES.length).toBeGreaterThanOrEqual(6);
+    expect(RUBROS).toContain('clínica dental');
+    expect(RUBROS).toContain('ferretería');
+    expect(RUBROS).toContain('taller mecánico');
+    expect(RUBROS).not.toContain('salud, legal, financiero, profesional');
+  });
+
+  it('no repite ninguno y todos caen bajo una familia', () => {
+    expect(RUBROS.length).toBe(new Set(RUBROS).size);
+    expect(RUBROS_POR_FAMILIA.every((grupo) => grupo.rubros.length > 0)).toBe(true);
+    expect(RUBROS_POR_FAMILIA.flatMap((grupo) => grupo.rubros)).toEqual(RUBROS);
+  });
+
+  it('cada rubro del desplegable lo reconoce el detector', () => {
+    /*
+     * Los dos lados tienen que coincidir en la cadena exacta: el formulario la manda en la
+     * descripción y el detector la vuelve a leer para elegir la familia. Si uno se mueve sin el
+     * otro, el brief nombra un rubro que el build ya no reconoce.
+     */
+    for (const rubro of RUBROS) {
+      const detectado = detectSectorMatch(`Necesito el sitio de Ejemplo, un negocio de ${rubro}, en Tegucigalpa.`);
+      expect(detectado.matched, `«${rubro}» no lo reconoce ninguna palabra clave`).toBe(true);
+    }
   });
 });

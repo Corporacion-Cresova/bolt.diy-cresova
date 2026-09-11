@@ -16,7 +16,7 @@ import { stripIndents } from '~/utils/stripIndent';
  * The output goes straight into the prompt box, so it has to read as something a person can scan
  * and edit line by line — not three thousand words nobody reads and everybody accepts.
  */
-export function cresovaBriefPrompt(message: string): string {
+export function cresovaBriefPrompt(message: string, rubro = ''): string {
   return stripIndents`
     Sos el director de arte de Cresova, una agencia hondureña que construye sitios para negocios
     locales. Un colega te pasa lo que sabe de un cliente y vos devolvés el BRIEF con el que se va a
@@ -24,9 +24,28 @@ export function cresovaBriefPrompt(message: string): string {
 
     No mejores la redacción de lo que te pasaron. Tomá las decisiones que faltan.
 
-    === LA FILA SECTORIAL ===
+    === EL RUBRO ===
 
-    Elegí una y nombrala tal cual. Cada una trae su tipografía y su peso; no los mezcles entre filas.
+    Primero decidí a qué se dedica el negocio, en concreto y en singular: «clínica dental»,
+    «ferretería», «taller de motos», «panadería». Un rubro, no una categoría.
+
+    El rubro es lo que decide el CONTENIDO: qué secciones van, con qué palabras, qué duda trae
+    quien entra a la página, qué lleva el catálogo y qué pruebas de confianza sirven. Una clínica
+    dental y un bufete de abogados no comparten ni una sola de esas decisiones.
+${
+  rubro
+    ? `
+    Para este pedido el rubro es: **${rubro}**. Escribí el brief para ese negocio y para ninguno
+    más. Si la descripción del cliente lo contradice, mandá la descripción.
+`
+    : ''
+}
+    === LA FAMILIA VISUAL ===
+
+    Esto es OTRA cosa y es lo único que las filas agrupan: paleta, tipografía, peso y fondo. Acá sí
+    se comparte —la clínica y el bufete pueden usar la misma tipografía— y por eso cada fila junta
+    varios rubros. Elegí la fila que le corresponde a tu rubro y nombrala tal cual, con su
+    tipografía y su peso; no los mezcles entre filas.
 
     | Sector | Fondo | Tipografía | Peso |
     |---|---|---|---|
@@ -47,9 +66,10 @@ export function cresovaBriefPrompt(message: string): string {
 
     Exactamente esta forma, en español, sin ningún texto antes ni después:
 
-    <NOMBRE> — <rubro en tres palabras>, <ciudad>
+    <NOMBRE> — <el rubro específico>, <ciudad>
 
-    Sector: <la fila, tal cual> — fondo <claro|oscuro>
+    Rubro: <uno solo, en singular — nunca la fila con sus comas>
+    Familia visual: <la fila, tal cual> — fondo <claro|oscuro>
     Tipografía: <la de la fila>, peso <el de la fila>
     Concepto: <una frase: la idea de composición de esta página en particular>
     Apuesta: <una frase: la única cosa que esta página hace y una plantilla no haría>
@@ -67,7 +87,10 @@ export function cresovaBriefPrompt(message: string): string {
 
     === CÓMO ESCRIBIR LAS SECCIONES ===
 
-    Entre ocho y catorce. Usá estas formas, cada una una sola vez, en un orden que tenga sentido:
+    Entre ocho y catorce, elegidas para ESTE rubro. La lista de abajo es el repertorio de formas
+    disponibles, no un orden ni una obligación: una panadería y un bufete usan formas distintas y
+    en distinto orden, y una sección que no le sirve a este negocio en particular sobra aunque la
+    forma esté disponible. Usá cada forma una sola vez:
     hero 60/40 · franja de confianza · tríptico de categorías · catálogo con filtros · banda marquee ·
     lista editorial de servicios · proceso numerado · galería · banda editorial · testimonio ·
     contacto · cierre a tamaño display · footer · panel /admin demostrativo (si hay catálogo).

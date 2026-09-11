@@ -1,282 +1,562 @@
 /**
- * Sector detector for Cresova Builder.
+ * Detector de rubro para Cresova Builder.
  *
- * Takes a user message (e.g. "una web para una clínica dental en Tegucigalpa")
- * and returns the matching sector from the design-kit's sector table.
+ * Devuelve dos cosas distintas que antes eran una sola, y confundirlas costaba calidad:
  *
- * Without this, the image prompt builder uses buildPhotoQuery (which strips
- * keywords and returns the first 5 words) as a proxy for the sector, and the
- * generated Flux images end up with generic prompts. With it, the Flux prompt
- * includes the correct palette, mood, and composition cues from the sector.
+ *   - **El rubro**: qué es el negocio. «clínica dental», «ferretería», «taller mecánico». Decide
+ *     el contenido — qué secciones van, con qué vocabulario, qué teme quien visita la página, qué
+ *     lleva el catálogo. Una clínica dental y un bufete de abogados no comparten nada de esto.
+ *   - **La familia visual**: la fila de la tabla del design kit. Decide paleta, tipografía, peso y
+ *     fondo. Acá sí comparten: la clínica y el bufete pueden usar Instrument Sans sin problema.
  *
- * The sector names match the first column of the sector table in
- * cresova-design-kit.ts exactly, so callers can use the result as a lookup key
- * into that table.
+ * Antes existía solamente la familia, y el desplegable del formulario ofrecía esa fila como si
+ * fuera el rubro. Elegir «salud, legal, financiero, profesional» para una clínica dental le dice
+ * al redactor del brief que el negocio es cuatro rubros a la vez, y lo que sale es el promedio de
+ * los cuatro: un sitio que no se equivoca y tampoco es de nadie.
+ *
+ * El orden del arreglo es el orden de evaluación y lo específico va antes que lo genérico: «taller
+ * de carpintería» tiene que caer en carpintería y no en taller mecánico, y «nutrición deportiva»
+ * en suplementos y no en tienda deportiva.
  */
 
-/*
- * Each sector is defined by the keywords a user would naturally use when asking
- * for a site in that industry. The words are in Spanish (the UI language) and
- * English (the model's internal language), covering both.
- *
- * Order matters: the first match wins, and more specific sectors come before
- * broader ones. "clínica" matches health before "oficina" matches commerce.
- */
-const SECTOR_RULES: Array<{ sector: string; keywords: string[] }> = [
+/** Las filas de la tabla sectorial del design kit, tal cual están escritas ahí. */
+export const FAMILIAS = {
+  SALUD: 'salud, legal, financiero, profesional',
+  GASTRO: 'gastronomía, café, catering',
+  BELLEZA: 'belleza, bienestar, suplementos',
+  TURISMO: 'turismo, aventura, hotelería',
+  TALLER: 'taller, motos, automotriz, deporte',
+  OFICIOS: 'oficios, construcción, limpieza, transporte',
+  COMERCIO: 'comercio, tienda, retail',
+} as const;
+
+export type Familia = (typeof FAMILIAS)[keyof typeof FAMILIAS];
+
+interface RubroRule {
+  /** Cómo lo diría el cliente. Es lo que decide el contenido del sitio. */
+  rubro: string;
+
+  /** La fila del design kit. Es lo que decide paleta y tipografía. */
+  familia: Familia;
+
+  /**
+   * Lo que alguien escribiría al pedir este sitio, en español y en inglés.
+   *
+   * Una palabra suelta se compara como palabra entera, así que «barbería» no matchea «bar». Una
+   * frase se busca como frase dentro del texto normalizado.
+   */
+  keywords: string[];
+}
+
+const RUBRO_RULES: RubroRule[] = [
   {
-    sector: 'salud, legal, financiero, profesional',
+    rubro: 'clínica dental',
+    familia: FAMILIAS.SALUD,
+    keywords: ['dental', 'dentista', 'odontología', 'odontólogo', 'ortodoncia', 'ortodoncista', 'dentist'],
+  },
+  {
+    rubro: 'clínica veterinaria',
+    familia: FAMILIAS.SALUD,
+    keywords: ['veterinaria', 'veterinario', 'veterinary'],
+  },
+  {
+    rubro: 'farmacia',
+    familia: FAMILIAS.SALUD,
+    keywords: ['farmacia', 'farmacéutica', 'botica', 'pharmacy'],
+  },
+  {
+    rubro: 'óptica',
+    familia: FAMILIAS.SALUD,
+    keywords: ['óptica', 'optometría', 'optometrista', 'optics'],
+  },
+  {
+    rubro: 'laboratorio clínico',
+    familia: FAMILIAS.SALUD,
+    keywords: ['laboratorio', 'radiología', 'ultrasonido', 'laboratory'],
+  },
+  {
+    rubro: 'fisioterapia y rehabilitación',
+    familia: FAMILIAS.SALUD,
+    keywords: ['fisioterapia', 'fisioterapeuta', 'rehabilitación', 'quiropráctico', 'terapia física', 'physiotherapy'],
+  },
+  {
+    rubro: 'consulta de psicología',
+    familia: FAMILIAS.SALUD,
+    keywords: ['psicólogo', 'psicóloga', 'psicología', 'psiquiatra', 'psicoterapia', 'salud mental', 'psychologist'],
+  },
+  {
+    rubro: 'consulta de nutrición',
+    familia: FAMILIAS.SALUD,
+    keywords: ['nutriólogo', 'nutricionista', 'nutrición', 'dietista', 'nutritionist'],
+  },
+  {
+    rubro: 'clínica médica',
+    familia: FAMILIAS.SALUD,
     keywords: [
       'clínica',
       'clínico',
-      'dental',
-      'dentista',
-      'odontología',
-      'odontólogo',
+      'consultorio',
       'médico',
       'medicina',
       'doctor',
       'hospital',
-      'consultorio',
-      'salud',
-      'saludable',
-      'psicólogo',
-      'terapia',
-      'nutrición',
-      'nutriólogo',
-      'fisioterapia',
+      'pediatra',
+      'ginecólogo',
+      'dermatólogo',
+      'medical',
+      'clinic',
+    ],
+  },
+  {
+    rubro: 'bufete de abogados',
+    familia: FAMILIAS.SALUD,
+    keywords: [
       'abogado',
+      'abogada',
       'abogacía',
       'bufete',
       'legal',
       'leyes',
       'jurídico',
       'notario',
-      'contador',
-      'contabilidad',
-      'financiero',
-      'finanzas',
-      'seguros',
-      'seguro',
-      'consultor',
-      'consultoría',
-      'profesional',
-      'profesión',
-      'despacho',
-      'clinic',
-      'dental',
-      'dentist',
-      'medical',
-      'doctor',
-      'hospital',
-      'health',
       'lawyer',
-      'legal',
       'law',
       'attorney',
-      'accountant',
-      'accounting',
-      'financial',
-      'finance',
-      'insurance',
+    ],
+  },
+  {
+    rubro: 'contabilidad y auditoría',
+    familia: FAMILIAS.SALUD,
+    keywords: ['contador', 'contadora', 'contabilidad', 'auditoría', 'accountant', 'accounting'],
+  },
+  {
+    rubro: 'cooperativa de ahorro y crédito',
+    familia: FAMILIAS.SALUD,
+    keywords: ['cooperativa', 'credit union'],
+  },
+  {
+    rubro: 'aseguradora',
+    familia: FAMILIAS.SALUD,
+    keywords: ['seguros', 'seguro', 'aseguradora', 'insurance'],
+  },
+  {
+    rubro: 'inmobiliaria',
+    familia: FAMILIAS.SALUD,
+    keywords: ['inmobiliaria', 'bienes raíces', 'real estate'],
+  },
+  {
+    rubro: 'asesoría financiera',
+    familia: FAMILIAS.SALUD,
+    keywords: ['financiero', 'financiera', 'finanzas', 'préstamos', 'financial', 'finance'],
+  },
+  {
+    rubro: 'consultoría profesional',
+    familia: FAMILIAS.SALUD,
+    keywords: [
+      'consultor',
+      'consultora',
+      'consultoría',
+      'asesoría',
+      'despacho',
+      'profesional',
+      'profesión',
       'consulting',
       'consultant',
-      'farmacia',
-      'farmacéutica',
-      'botica',
-      'óptica',
-      'optometría',
-      'laboratorio',
-      'veterinaria',
-      'veterinario',
-      'radiología',
-      'ultrasonido',
-      'ortodoncia',
-      'inmobiliaria',
-      'bienes raíces',
-      'aseguradora',
-      'cooperativa',
-      'financiera',
-      'préstamos',
-      'auditoría',
-      'asesoría',
-      'pharmacy',
-      'optics',
-      'laboratory',
-      'veterinary',
-      'real estate',
-      'insurance',
-      'credit union',
       'advisory',
     ],
   },
   {
-    sector: 'gastronomía, café, catering',
+    rubro: 'salud en general',
+    familia: FAMILIAS.SALUD,
+    keywords: ['salud', 'saludable', 'health'],
+  },
+  {
+    rubro: 'panadería y repostería',
+    familia: FAMILIAS.GASTRO,
+    keywords: ['panadería', 'pastelería', 'repostería', 'chocolatería', 'bakery', 'pastry'],
+  },
+  {
+    rubro: 'heladería',
+    familia: FAMILIAS.GASTRO,
+    keywords: ['heladería', 'ice cream'],
+  },
+  {
+    rubro: 'pizzería',
+    familia: FAMILIAS.GASTRO,
+    keywords: ['pizzería', 'pizzeria', 'pizza'],
+  },
+  {
+    rubro: 'comida rápida',
+    familia: FAMILIAS.GASTRO,
+    keywords: ['taquería', 'hamburguesería', 'food truck', 'baleadas'],
+  },
+  {
+    rubro: 'bar y cervecería',
+    familia: FAMILIAS.GASTRO,
+    keywords: ['bar', 'cervecería', 'brewery', 'vinoteca', 'vino', 'cantina'],
+  },
+  {
+    rubro: 'cafetería',
+    familia: FAMILIAS.GASTRO,
+    keywords: ['cafetería', 'café', 'cafe', 'coffee'],
+  },
+  {
+    rubro: 'servicio de catering',
+    familia: FAMILIAS.GASTRO,
+    keywords: ['catering', 'banquetes'],
+  },
+  {
+    rubro: 'restaurante',
+    familia: FAMILIAS.GASTRO,
     keywords: [
       'restaurante',
       'restaurant',
-      'café',
-      'cafetería',
-      'bar',
       'comida',
       'cocina',
       'chef',
-      'catering',
       'comensal',
       'menú',
       'carta',
       'plato',
+      'comedor',
       'gastronomía',
       'gastronómico',
-      'comedor',
-      'taquería',
-      'pizzería',
-      'hamburguesería',
-      'heladería',
-      'panadería',
-      'pastelería',
-      'chocolatería',
-      'food',
-      'food truck',
-      'brewery',
-      'cervecería',
-      'vinoteca',
-      'vino',
-      'restaurant',
-      'cafe',
-      'coffee',
-      'bakery',
-      'pizzeria',
-      'brewery',
-      'catering',
-      'kitchen',
-      'menu',
       'dining',
       'bistro',
       'grill',
-      'repostería',
-      'pastelería',
-      'bakery',
-      'pastry',
+      'kitchen',
+      'menu',
+      'food',
     ],
   },
   {
-    sector: 'belleza, bienestar, suplementos',
+    rubro: 'barbería',
+    familia: FAMILIAS.BELLEZA,
+    keywords: ['barbería', 'barbero', 'barber', 'barbershop'],
+  },
+  {
+    rubro: 'estudio de tatuajes',
+    familia: FAMILIAS.BELLEZA,
+    keywords: ['tatuaje', 'tatuajes', 'tattoo', 'piercing'],
+  },
+  {
+    rubro: 'salón de uñas',
+    familia: FAMILIAS.BELLEZA,
+    keywords: ['uñas', 'manicura', 'pedicura', 'nails', 'nail salon'],
+  },
+  {
+    rubro: 'spa y masajes',
+    familia: FAMILIAS.BELLEZA,
+    keywords: ['spa', 'masajes', 'masaje', 'massage'],
+  },
+  {
+    rubro: 'centro de depilación',
+    familia: FAMILIAS.BELLEZA,
+    keywords: ['depilación', 'waxing'],
+  },
+  {
+    rubro: 'estudio de yoga y pilates',
+    familia: FAMILIAS.BELLEZA,
+    keywords: ['yoga', 'pilates', 'meditación'],
+  },
+  {
+    rubro: 'gimnasio',
+    familia: FAMILIAS.BELLEZA,
+    keywords: ['gimnasio', 'gym', 'crossfit', 'fitness', 'entrenador', 'trainer'],
+  },
+  {
+    rubro: 'venta de suplementos',
+    familia: FAMILIAS.BELLEZA,
+    keywords: ['suplementos', 'proteína', 'nutrición deportiva', 'supplements', 'protein'],
+  },
+  {
+    rubro: 'salón de belleza',
+    familia: FAMILIAS.BELLEZA,
     keywords: [
-      'belleza',
       'salón',
       'peluquería',
-      'barbería',
-      'barbero',
+      'belleza',
       'estética',
-      'spa',
-      'masajes',
-      'masaje',
       'cosmética',
       'cosméticos',
       'maquillaje',
-      'uñas',
-      'manicura',
-      'pedicura',
-      'cuidado personal',
-      'piel',
-      'bienestar',
-      'yoga',
-      'meditación',
-      'gimnasio',
-      'fitness',
-      'entrenador',
-      'suplementos',
-      'nutrición deportiva',
-      'proteína',
-      'beauty',
       'salon',
       'hair',
-      'barber',
-      'barbershop',
-      'spa',
-      'massage',
+      'beauty',
       'cosmetics',
       'makeup',
-      'nails',
-      'nail salon',
-      'wellness',
-      'yoga',
-      'gym',
-      'fitness',
-      'trainer',
-      'supplements',
-      'protein',
-      'tatuaje',
-      'tatuajes',
-      'tattoo',
-      'piercing',
-      'depilación',
-      'pilates',
-      'crossfit',
-      'terapia física',
     ],
   },
   {
-    sector: 'turismo, aventura, hotelería',
+    rubro: 'centro de bienestar',
+    familia: FAMILIAS.BELLEZA,
+    keywords: ['bienestar', 'wellness', 'cuidado personal', 'piel', 'skincare'],
+  },
+  {
+    rubro: 'hotel',
+    familia: FAMILIAS.TURISMO,
+    keywords: ['hotel', 'hotelería', 'resort', 'hospedaje', 'alojamiento', 'lodging', 'accommodation'],
+  },
+  {
+    rubro: 'hostal',
+    familia: FAMILIAS.TURISMO,
+    keywords: ['hostal', 'hostel'],
+  },
+  {
+    rubro: 'cabañas',
+    familia: FAMILIAS.TURISMO,
+    keywords: ['cabaña', 'cabañas', 'bungalow'],
+  },
+  {
+    rubro: 'centro de buceo',
+    familia: FAMILIAS.TURISMO,
+    keywords: ['buceo', 'snorkel', 'diving', 'snorkeling'],
+  },
+  {
+    rubro: 'agencia de viajes',
+    familia: FAMILIAS.TURISMO,
+    keywords: ['agencia de viajes', 'travel agency', 'viaje', 'viajes', 'viajero', 'vacaciones', 'vacation', 'travel'],
+  },
+  {
+    rubro: 'tour operador',
+    familia: FAMILIAS.TURISMO,
+    keywords: ['tour', 'excursión', 'operador turístico', 'paquete turístico', 'guía turístico', 'guía', 'guide'],
+  },
+  {
+    rubro: 'turismo de aventura',
+    familia: FAMILIAS.TURISMO,
     keywords: [
-      'hotel',
-      'hotelería',
-      'hospedaje',
-      'hostal',
-      'alojamiento',
-      'turismo',
-      'turista',
-      'vacaciones',
-      'viaje',
-      'viajes',
-      'viajero',
       'aventura',
-      'excursión',
-      'tour',
-      'guía',
-      'guía turístico',
-      'restaurante turístico',
-      'resort',
-      'bungalow',
-      'cabaña',
-      'playa',
-      'montaña',
-      'río',
       'ecoturismo',
-      'naturaleza',
-      'buceo',
-      'snorkel',
       'senderismo',
       'trekking',
       'canopy',
-      'agencia de viajes',
-      'operador turístico',
-      'paquete turístico',
-      'hotel',
-      'resort',
-      'hostel',
-      'lodging',
-      'accommodation',
-      'tourism',
-      'tourist',
-      'travel',
-      'vacation',
+      'rafting',
       'adventure',
-      'tour',
-      'guide',
-      'beach',
-      'mountain',
-      'ecotourism',
-      'nature',
-      'diving',
-      'snorkeling',
       'hiking',
-      'trekking',
-      'travel agency',
+      'ecotourism',
     ],
   },
   {
-    sector: 'comercio, tienda, retail',
+    rubro: 'turismo en general',
+    familia: FAMILIAS.TURISMO,
+    keywords: [
+      'turismo',
+      'turista',
+      'tourism',
+      'tourist',
+      'playa',
+      'montaña',
+      'río',
+      'naturaleza',
+      'beach',
+      'mountain',
+      'nature',
+    ],
+  },
+  {
+    rubro: 'venta de repuestos',
+    familia: FAMILIAS.TALLER,
+    keywords: ['repuestos', 'autopartes', 'llantas', 'auto parts'],
+  },
+  {
+    rubro: 'taller de motos',
+    familia: FAMILIAS.TALLER,
+    keywords: ['motos', 'moto', 'motocicleta', 'motorcycle'],
+  },
+  {
+    rubro: 'autolavado',
+    familia: FAMILIAS.TALLER,
+    keywords: ['autolavado', 'car wash', 'lavado de autos'],
+  },
+  {
+    rubro: 'venta de vehículos',
+    familia: FAMILIAS.TALLER,
+    keywords: ['concesionario', 'venta de carros', 'automóviles', 'dealership'],
+  },
+  {
+    rubro: 'tienda deportiva',
+    familia: FAMILIAS.TALLER,
+    keywords: ['deportiva', 'deportivo', 'deportes', 'deporte', 'sports'],
+  },
+  {
+    rubro: 'taller mecánico',
+    familia: FAMILIAS.TALLER,
+    keywords: ['taller', 'mecánico', 'mecánica', 'automotriz', 'enderezado', 'mechanic', 'automotive'],
+  },
+  {
+    rubro: 'constructora',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['construcción', 'constructor', 'constructora', 'obra', 'obras', 'construction', 'contractor', 'builder'],
+  },
+  {
+    rubro: 'remodelación',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['remodelación', 'remodelar', 'remodel'],
+  },
+  {
+    rubro: 'estudio de arquitectura',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['arquitecto', 'arquitecta', 'arquitectura', 'architect'],
+  },
+  {
+    rubro: 'ingeniería',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['ingeniero', 'ingeniera', 'ingeniería', 'engineer'],
+  },
+  {
+    rubro: 'electricista',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['electricista', 'electrician'],
+  },
+  {
+    rubro: 'plomería',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['plomero', 'plomería', 'fontanero', 'plumber'],
+  },
+  {
+    rubro: 'carpintería',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['carpintero', 'carpintería', 'ebanistería', 'carpenter'],
+  },
+  {
+    rubro: 'herrería y soldadura',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['herrería', 'herrero', 'soldadura', 'welding'],
+  },
+  {
+    rubro: 'pintura y acabados',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['pintor', 'pintura', 'painter'],
+  },
+  {
+    rubro: 'cerrajería',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['cerrajería', 'cerrajero', 'locksmith'],
+  },
+  {
+    rubro: 'refrigeración y aire acondicionado',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['refrigeración', 'aire acondicionado', 'hvac'],
+  },
+  {
+    rubro: 'empresa de limpieza',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['limpieza', 'limpiar', 'cleaning', 'cleaner'],
+  },
+  {
+    rubro: 'fumigación',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['fumigación', 'fumigadora', 'pest control'],
+  },
+  {
+    rubro: 'jardinería y piscinas',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['jardinería', 'jardinero', 'piscina', 'landscaping', 'gardening', 'gardener', 'pool'],
+  },
+  {
+    rubro: 'lavandería',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['lavandería', 'laundry'],
+  },
+  {
+    rubro: 'imprenta',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['imprenta', 'serigrafía', 'rotulación', 'printing'],
+  },
+  {
+    rubro: 'transporte y mudanzas',
+    familia: FAMILIAS.OFICIOS,
+    keywords: [
+      'transporte',
+      'transportista',
+      'mudanza',
+      'mudanzas',
+      'flete',
+      'moving',
+      'transport',
+      'transportation',
+      'shipping',
+    ],
+  },
+  {
+    rubro: 'mensajería y paquetería',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['mensajería', 'paquetería', 'delivery', 'courier', 'logística', 'logistics'],
+  },
+  {
+    rubro: 'taxi y traslados',
+    familia: FAMILIAS.OFICIOS,
+    keywords: ['taxi', 'uber', 'traslados'],
+  },
+  {
+    rubro: 'ferretería',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['ferretería', 'ferreteria', 'hardware store'],
+  },
+  {
+    rubro: 'zapatería',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['zapatería', 'calzado', 'zapatos', 'shoes', 'shoe store'],
+  },
+  {
+    rubro: 'joyería',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['joyería', 'jewelry'],
+  },
+  {
+    rubro: 'perfumería',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['perfumería', 'perfumes', 'perfumery'],
+  },
+  {
+    rubro: 'librería y papelería',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['librería', 'papelería', 'bookstore', 'stationery'],
+  },
+  {
+    rubro: 'floristería',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['floristería', 'florería', 'flower shop'],
+  },
+  {
+    rubro: 'juguetería',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['juguetería', 'toy store'],
+  },
+  {
+    rubro: 'mueblería y decoración',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['mueblería', 'muebles', 'decoración', 'hogar', 'furniture', 'home decor'],
+  },
+  {
+    rubro: 'artesanía y regalos',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['artesanía', 'regalos', 'gifts', 'bazar', 'souvenirs'],
+  },
+  {
+    rubro: 'pulpería y abarrotes',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['pulpería', 'abarrotes', 'supermercado', 'minisúper'],
+  },
+  {
+    rubro: 'agroservicio',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['agroservicio', 'agropecuaria', 'veterinaria agrícola'],
+  },
+  {
+    rubro: 'distribuidora mayorista',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['distribuidora', 'mayorista', 'wholesale'],
+  },
+  {
+    rubro: 'tienda de ropa',
+    familia: FAMILIAS.COMERCIO,
+    keywords: ['ropa', 'boutique', 'moda', 'fashion', 'clothing'],
+  },
+  {
+    rubro: 'tienda en línea',
+    familia: FAMILIAS.COMERCIO,
     keywords: [
       'tienda',
       'comercio',
@@ -285,236 +565,53 @@ const SECTOR_RULES: Array<{ sector: string; keywords: string[] }> = [
       'ecommerce',
       'shop',
       'store',
-      'producto',
-      'productos',
       'catálogo',
       'catalogo',
+      'producto',
+      'productos',
       'venta',
       'vender',
       'comprar',
       'online',
-      'boutique',
-      'moda',
-      'ropa',
       'accesorios',
-      'calzado',
-      'zapatos',
-      'joyería',
-      'regalos',
-      'artesanía',
-      'mueblería',
-      'muebles',
-      'decoración',
-      'hogar',
-      'store',
-      'shop',
-      'ecommerce',
-      'retail',
+      'accessories',
       'catalog',
       'products',
-      'fashion',
-      'clothing',
-      'accessories',
-      'shoes',
-      'jewelry',
-      'gifts',
-      'furniture',
-      'home decor',
-      'boutique',
-      'ferretería',
-      'ferreteria',
-      'librería',
-      'papelería',
-      'floristería',
-      'florería',
-      'juguetería',
-      'perfumería',
-      'zapatería',
-      'mueblería',
-      'agroservicio',
-      'distribuidora',
-      'mayorista',
-      'abarrotes',
-      'pulpería',
-      'bazar',
-      'hardware store',
-      'bookstore',
-      'stationery',
-      'flower shop',
-      'toy store',
-      'shoe store',
-      'furniture',
-      'wholesale',
-    ],
-  },
-  {
-    sector: 'oficios, construcción, limpieza, transporte',
-    keywords: [
-      'construcción',
-      'constructor',
-      'constructora',
-      'obra',
-      'obras',
-      'remodelación',
-      'remodelar',
-      'arquitecto',
-      'arquitectura',
-      'ingeniero',
-      'ingeniería',
-      'electricista',
-      'plomero',
-      'plomería',
-      'carpintero',
-      'carpintería',
-      'pintor',
-      'pintura',
-      'limpieza',
-      'limpiar',
-      'jardinería',
-      'jardinero',
-      'piscina',
-      'transporte',
-      'transportista',
-      'mudanza',
-      'mudanzas',
-      'flete',
-      'taxi',
-      'uber',
-      'delivery',
-      'mensajería',
-      'logística',
-      'construction',
-      'contractor',
-      'builder',
-      'remodel',
-      'architect',
-      'engineer',
-      'electrician',
-      'plumber',
-      'carpenter',
-      'painter',
-      'cleaning',
-      'cleaner',
-      'gardening',
-      'gardener',
-      'pool',
-      'transport',
-      'transportation',
-      'moving',
-      'logistics',
-      'delivery',
-      'courier',
-      'taxi',
-      'shipping',
-      'taller',
-      'mecánico',
-      'mecánica',
-      'automotriz',
-      'herrería',
-      'herrero',
-      'carpintería',
-      'carpintero',
-      'soldadura',
-      'imprenta',
-      'serigrafía',
-      'lavandería',
-      'cerrajería',
-      'refrigeración',
-      'aire acondicionado',
-      'fumigación',
-      'jardinería',
-      'workshop',
-      'mechanic',
-      'welding',
-      'printing',
-      'laundry',
-      'locksmith',
-      'landscaping',
-    ],
-  },
-  {
-    sector: 'turismo, aventura, hotelería',
-    keywords: [
-      'hotel',
-      'hotelería',
-      'hospedaje',
-      'hostal',
-      'alojamiento',
-      'turismo',
-      'turista',
-      'vacaciones',
-      'viaje',
-      'viajes',
-      'viajero',
-      'aventura',
-      'excursión',
-      'tour',
-      'guía',
-      'guía turístico',
-      'restaurante turístico',
-      'resort',
-      'bungalow',
-      'cabaña',
-      'playa',
-      'montaña',
-      'río',
-      'ecoturismo',
-      'naturaleza',
-      'buceo',
-      'snorkel',
-      'senderismo',
-      'trekking',
-      'canopy',
-      'agencia de viajes',
-      'operador turístico',
-      'paquete turístico',
-      'hotel',
-      'resort',
-      'hostel',
-      'lodging',
-      'accommodation',
-      'tourism',
-      'tourist',
-      'travel',
-      'vacation',
-      'adventure',
-      'tour',
-      'guide',
-      'beach',
-      'mountain',
-      'ecotourism',
-      'nature',
-      'diving',
-      'snorkeling',
-      'hiking',
-      'trekking',
-      'travel agency',
     ],
   },
 ];
 
 /**
- * Detects the closest sector from a user message.
+ * Los rubros agrupados por familia, en el orden en que los ofrece el formulario asistido.
  *
- * Matches on whole words only (split by whitespace), not substrings, so "barbería"
- * does not match "bar" (gastronomía) and "hotel boutique" does not match "boutique"
- * (comercio) before "hotel" (turismo).
- *
- * Returns the sector name from the design-kit table, or "comercio, tienda, retail"
- * as the broadest and safest fallback for an unknown request.
+ * Se deriva de las reglas en vez de escribirse de nuevo: el formulario, el detector y el design
+ * kit tienen que coincidir en las cadenas exactas, y una segunda lista escrita a mano es una
+ * segunda cosa que alguien se va a olvidar de actualizar.
  */
-/**
- * The sectors, in the order the assisted brief form offers them.
- *
- * Derived from the rules rather than typed out again: the form, the detector and the design kit
- * have to agree on the exact strings, because the brief prompt looks each one up in its table by
- * name. A second hand-written list is a second thing to forget to update.
- */
-export const SECTOR_NAMES: string[] = [...new Set(SECTOR_RULES.map((rule) => rule.sector))];
+export const RUBROS_POR_FAMILIA: Array<{ familia: Familia; rubros: string[] }> = Object.values(FAMILIAS).map(
+  (familia) => ({
+    familia,
+    rubros: [...new Set(RUBRO_RULES.filter((rule) => rule.familia === familia).map((rule) => rule.rubro))],
+  }),
+);
+
+/** Todos los rubros, sin agrupar. */
+export const RUBROS: string[] = RUBROS_POR_FAMILIA.flatMap((grupo) => grupo.rubros);
+
+/** Las familias visuales, para quien necesita la fila y no el rubro. */
+export const SECTOR_NAMES: string[] = Object.values(FAMILIAS);
 
 export interface SectorMatch {
+  /**
+   * El rubro específico, o cadena vacía cuando no lo reconocimos.
+   *
+   * Vacío no es lo mismo que desconocido por descuido: es la señal de que el modelo tiene que
+   * leerlo de la descripción del cliente en vez de recibir uno inventado por nosotros.
+   */
+  rubro: string;
+
   /** La fila de la tabla sectorial, o el default cuando no hubo coincidencia. */
-  sector: string;
+  sector: Familia | string;
 
   /**
    * Falso cuando ninguna palabra clave coincidió y `sector` es solo el default.
@@ -525,10 +622,10 @@ export interface SectorMatch {
    * Como el default era indistinguible de un acierto, el sitio salía con la tipografía, la paleta
    * y el ejemplo de un rubro que no era el del cliente, y nadie tenía forma de saberlo.
    *
-   * Algunos de esos casos ahora sí tienen palabra clave. Pero la lista de rubros que una agencia
-   * atiende no se termina nunca, así que el arreglo de fondo no es una lista más larga: es que
-   * cuando no sabemos, se diga. Quien recibe ese «no sé» —el modelo, que tiene la tabla completa
-   * enfrente y la descripción del negocio— elige mejor que un default.
+   * La lista de rubros que una agencia atiende no se termina nunca, así que el arreglo de fondo no
+   * es una lista más larga: es que cuando no sabemos, se diga. Quien recibe ese «no sé» —el
+   * modelo, que tiene la tabla completa enfrente y la descripción del negocio— elige mejor que un
+   * default.
    */
   matched: boolean;
 }
@@ -539,53 +636,52 @@ export interface SectorMatch {
  * Sigue siendo comercio porque es el tratamiento más neutro de la tabla, pero ahora viaja
  * acompañado de `matched: false`, que es lo que permite tratarlo como lo que es.
  */
-const FALLBACK_SECTOR = 'comercio, tienda, retail';
+const FALLBACK_SECTOR: Familia = FAMILIAS.COMERCIO;
+
+function sinTildes(text: string): string {
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
 
 export function detectSectorMatch(message: string): SectorMatch {
   if (!message) {
-    return { sector: FALLBACK_SECTOR, matched: false };
+    return { rubro: '', sector: FALLBACK_SECTOR, matched: false };
   }
 
-  const normalized = message
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+  const normalized = sinTildes(message).toLowerCase();
 
   /*
-   * Tokenize into whole words so we do not match substrings. "barbería" contains
-   * "bar" at the character level, but "bar" is a gastronomía keyword and barbería
-   * is a belleza keyword — the whole-word check prevents the false positive.
+   * Palabras enteras, no subcadenas. «barbería» contiene «bar» a nivel de caracteres, y «bar» es
+   * palabra clave de gastronomía: sin esto, toda barbería salía siendo una cantina.
    */
   const words = new Set(normalized.split(/[^a-z0-9]+/).filter(Boolean));
 
-  for (const rule of SECTOR_RULES) {
+  for (const rule of RUBRO_RULES) {
     for (const keyword of rule.keywords) {
-      const normalizedKeyword = keyword.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const normalizedKeyword = sinTildes(keyword);
+      const hit = normalizedKeyword.includes(' ')
+        ? normalized.includes(normalizedKeyword)
+        : words.has(normalizedKeyword);
 
-      /*
-       * Single-word keywords: exact whole-word match ("hotel", "barbería").
-       * Multi-word keywords: phrase match in the normalized text ("food truck",
-       * "cuidado personal", "guía turístico", "home decor").
-       */
-      if (normalizedKeyword.includes(' ')) {
-        if (normalized.includes(normalizedKeyword)) {
-          return { sector: rule.sector, matched: true };
-        }
-      } else if (words.has(normalizedKeyword)) {
-        return { sector: rule.sector, matched: true };
+      if (hit) {
+        return { rubro: rule.rubro, sector: rule.familia, matched: true };
       }
     }
   }
 
-  return { sector: FALLBACK_SECTOR, matched: false };
+  return { rubro: '', sector: FALLBACK_SECTOR, matched: false };
 }
 
 /**
- * El sector como string, para quien no necesita saber si fue un acierto o el default.
+ * La familia como string, para quien no necesita saber si fue un acierto o el default.
  *
  * Lo usa el catálogo de fotos: una paleta neutra es una respuesta razonable para un rubro
  * desconocido, y ahí el default no hace daño.
  */
 export function detectSector(message: string): string {
   return detectSectorMatch(message).sector;
+}
+
+/** El rubro específico detectado, o cadena vacía. */
+export function detectRubro(message: string): string {
+  return detectSectorMatch(message).rubro;
 }
