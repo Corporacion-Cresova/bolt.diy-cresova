@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectSectorMatch } from './sector-detector';
+import { FAMILIAS, RUBROS, detectSectorMatch } from './sector-detector';
 import { SECTORS_WITH_EXEMPLARS } from '~/lib/common/prompts/cresova-sectorial-exemplars';
 
 /**
@@ -21,6 +21,7 @@ const BELLEZA = 'belleza, bienestar, suplementos';
 const GASTRO = 'gastronomía, café, catering';
 const TURISMO = 'turismo, aventura, hotelería';
 const COMERCIO = 'comercio, tienda, retail';
+const TALLER = 'taller, motos, automotriz, deporte';
 
 /** Rubros que deben caer en una fila concreta de la tabla. */
 const ESPERADOS: Array<[string, string]> = [
@@ -51,7 +52,7 @@ const ESPERADOS: Array<[string, string]> = [
   ['gimnasio', BELLEZA],
   ['estudio de tatuajes', BELLEZA],
 
-  ['taller mecánico', OFICIOS],
+  ['taller mecánico', TALLER],
   ['constructora', OFICIOS],
   ['empresa de limpieza', OFICIOS],
   ['mensajería y paquetería', OFICIOS],
@@ -115,14 +116,47 @@ describe('la cobertura del detector de rubros', () => {
 
   it('todo sector reconocido o tiene ejemplo propio o es uno de los dos que viven en otro lado', () => {
     /*
-     * Turismo vive en los section exemplars (la tienda de buceo) y belleza todavía no tiene. Este
-     * test es el que avisa si aparece una fila nueva sin ejemplo y sin que nadie lo note.
+     * Turismo vive en los section exemplars (la tienda de buceo); belleza y taller todavía no
+     * tienen. Este test es el que avisa si aparece una fila nueva sin ejemplo y sin que nadie lo
+     * note.
      */
-    const conEjemplo = new Set([...SECTORS_WITH_EXEMPLARS, TURISMO, BELLEZA]);
+    const conEjemplo = new Set([...SECTORS_WITH_EXEMPLARS, TURISMO, BELLEZA, TALLER]);
     const detectados = new Set(ESPERADOS.map(([rubro]) => detectSectorMatch(pedido(rubro)).sector));
 
     for (const sector of detectados) {
       expect(conEjemplo.has(sector), `${sector} no tiene ejemplo ni excepción declarada`).toBe(true);
+    }
+  });
+
+  /*
+   * Lo que este archivo no verificaba y era el problema de fondo: que el rubro detectado sea UN
+   * rubro. La familia visual agrupa varios a propósito —una clínica y un bufete pueden compartir
+   * tipografía— pero el contenido del sitio no se escribe para una familia. Un brief que arranca
+   * diciendo «rubro: salud, legal, financiero, profesional» produce el promedio de los cuatro.
+   */
+  it.each(ESPERADOS)('«%s» devuelve un rubro específico, no la familia entera', (rubro) => {
+    const resultado = detectSectorMatch(pedido(rubro));
+
+    expect(resultado.rubro, `«${rubro}» no devolvió rubro`).not.toBe('');
+    expect(
+      Object.values(FAMILIAS) as string[],
+      `«${rubro}» devolvió la familia «${resultado.rubro}» en lugar de un rubro`,
+    ).not.toContain(resultado.rubro);
+  });
+
+  it('un rubro desconocido no inventa un rubro', () => {
+    for (const rubro of SIN_FILA) {
+      expect(detectSectorMatch(pedido(rubro)).rubro, `«${rubro}»`).toBe('');
+    }
+  });
+
+  it('ningún rubro del catálogo enumera varios rubros a la vez', () => {
+    /*
+     * La prueba de la forma. «panadería y repostería» es un rubro —un negocio que hace las dos
+     * cosas—, pero una lista separada por comas es una familia disfrazada de rubro.
+     */
+    for (const rubro of RUBROS) {
+      expect(rubro, `«${rubro}» parece una lista de rubros, no un rubro`).not.toContain(',');
     }
   });
 });

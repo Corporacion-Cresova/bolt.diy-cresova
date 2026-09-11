@@ -1,9 +1,22 @@
 import { useState } from 'react';
+import { toast } from 'react-toastify';
 import type { ProviderInfo } from '~/types/model';
+import { BriefStreamError, readBriefStream } from '~/lib/cresova/brief-stream';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('usePromptEnhancement');
 
+/**
+ * Corre el redactor de briefs y deja el resultado en la caja de texto.
+ *
+ * Las dos entradas —la varita, que reescribe lo que ya escribiste, y el botón del negocio, que
+ * parte de los datos del cliente— pasan por acá y por la misma ruta. Lo único que cambia es de
+ * dónde sale el texto de entrada.
+ *
+ * La lectura del stream vive en `readBriefStream` porque ahí estaban los modos de falla, y ahí
+ * están ahora las pruebas. Lo que queda acá es la regla de la caja: o termina con el brief, o
+ * termina como estaba. Nunca vacía.
+ */
 export function usePromptEnhancer() {
   const [enhancingPrompt, setEnhancingPrompt] = useState(false);
   const [promptEnhanced, setPromptEnhanced] = useState(false);
@@ -23,62 +36,40 @@ export function usePromptEnhancer() {
     setEnhancingPrompt(true);
     setPromptEnhanced(false);
 
-    const requestBody: any = {
-      message: input,
-      model,
-      provider,
-    };
-
-    if (apiKeys) {
-      requestBody.apiKeys = apiKeys;
-    }
-
-    const response = await fetch('/api/enhancer', {
-      method: 'POST',
-      body: JSON.stringify(requestBody),
-    });
-
-    const reader = response.body?.getReader();
-
     const originalInput = input;
 
-    if (reader) {
-      const decoder = new TextDecoder();
+    try {
+      const response = await fetch('/api/enhancer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: input, model, provider, ...(apiKeys ? { apiKeys } : {}) }),
+      });
 
-      let _input = '';
-      let _error;
+      await readBriefStream(response, setInput);
 
-      try {
-        setInput('');
+      setPromptEnhanced(true);
+      toast.success('Brief listo — revisalo y ajustá lo que haga falta');
+    } catch (error) {
+      logger.error('No se pudo armar el brief', error);
 
-        while (true) {
-          const { value, done } = await reader.read();
+      /*
+       * Lo escrito vuelve. Antes la caja se vaciaba antes de pedir nada, así que una falla se
+       * llevaba puesto el prompt del usuario además de no dejar brief.
+       */
+      setInput(originalInput);
 
-          if (done) {
-            break;
-          }
-
-          _input += decoder.decode(value);
-
-          logger.trace('Set input', _input);
-
-          setInput(_input);
-        }
-      } catch (error) {
-        _error = error;
-        setInput(originalInput);
-      } finally {
-        if (_error) {
-          logger.error(_error);
-        }
-
-        setEnhancingPrompt(false);
-        setPromptEnhanced(true);
-
-        setTimeout(() => {
-          setInput(_input);
-        });
-      }
+      toast.error(
+        error instanceof BriefStreamError
+          ? `No se pudo armar el brief: ${error.message}`
+          : 'No se pudo armar el brief.',
+      );
+    } finally {
+      /*
+       * Siempre. La versión anterior salía por un `if (reader)` cuando el cuerpo venía nulo —que es
+       * lo que la ruta devolvía en su rama de error— y dejaba el spinner girando y los dos botones
+       * deshabilitados hasta recargar la página.
+       */
+      setEnhancingPrompt(false);
     }
   };
 

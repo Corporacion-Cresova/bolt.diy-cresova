@@ -236,4 +236,35 @@ describe('the sectorial exemplars block', () => {
       expect(trio).toMatch(/Why it works/);
     }
   });
+
+  describe('el rubro específico', () => {
+    it('se nombra antes que el ejemplo, para que el contenido no sea el de la familia', () => {
+      const rendered = cresovaSectorialExemplars('salud, legal, financiero, profesional', true, 'clínica dental');
+
+      expect(rendered).toContain('EL RUBRO DE ESTE NEGOCIO ES: clínica dental');
+
+      /*
+       * El orden importa: si la instrucción del rubro llegara después del ejemplo, el ejemplo es
+       * lo último que el modelo lee antes de escribir.
+       */
+      expect(rendered.indexOf('clínica dental')).toBeLessThan(rendered.indexOf('=== SALUD'));
+    });
+
+    it('sin rubro reconocido no inventa uno', () => {
+      const rendered = cresovaSectorialExemplars('salud, legal, financiero, profesional', true);
+
+      expect(rendered).not.toContain('EL RUBRO DE ESTE NEGOCIO ES');
+    });
+
+    it('dice que el ejemplo es de la familia, no del rubro', () => {
+      /*
+       * La confusión que esto evita: el ejemplo de salud es un consultorio dental. Sin esta
+       * aclaración, un bufete de abogados con la misma familia recibe un consultorio dental
+       * resuelto y copia el tema además de la densidad.
+       */
+      const bufete = cresovaSectorialExemplars('salud, legal, financiero, profesional', true, 'bufete de abogados');
+
+      expect(bufete).toMatch(/familia visual, que agrupa varios rubros/);
+    });
+  });
 });
