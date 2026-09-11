@@ -281,17 +281,14 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               disabled={props.enhancingPrompt || props.isStreaming}
               onDescribe={(description) => {
                 props.enhancePrompt?.(description);
-                toast.success('Armando el brief del negocio');
+                toast.info('Armando el brief del negocio…');
               }}
             />
             <IconButton
               title="Generar brief a partir de lo escrito"
               disabled={props.input.length === 0 || props.enhancingPrompt}
               className={classNames('transition-all', props.enhancingPrompt ? 'opacity-100' : '')}
-              onClick={() => {
-                props.enhancePrompt?.();
-                toast.success('Brief generado — revisalo y ajustá lo que haga falta');
-              }}
+              onClick={() => props.enhancePrompt?.()}
             >
               {props.enhancingPrompt ? (
                 <div className="i-svg-spinners:90-ring-with-bg text-bolt-elements-loader-progress text-xl animate-spin"></div>

@@ -1,4 +1,5 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
+import { textStreamResponse } from '~/lib/.server/llm/text-stream-response';
 import { streamText } from '~/lib/.server/llm/stream-text';
 import type { IProviderSetting, ProviderInfo } from '~/types/model';
 import { generateText } from 'ai';
@@ -111,7 +112,8 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         providerSettings,
       });
 
-      return new Response(result.textStream, {
+      // Codificado a bytes: un cuerpo de strings sale como 200 vacío. Ver `text-stream-response.ts`.
+      return textStreamResponse(result.textStream, {
         status: 200,
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',

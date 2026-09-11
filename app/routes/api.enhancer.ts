@@ -1,6 +1,7 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
 import { streamText } from '~/lib/.server/llm/stream-text';
 import { cresovaBriefPrompt } from '~/lib/common/prompts/cresova-brief';
+import { textStreamResponse } from '~/lib/.server/llm/text-stream-response';
 import type { ProviderInfo } from '~/types/model';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
 import { createScopedLogger } from '~/utils/logger';
@@ -87,12 +88,16 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
       }
     })();
 
-    // Return the text stream directly since it's already text data
-    return new Response(result.textStream, {
+    /*
+     * El cuerpo va codificado a bytes. `result.textStream` encola strings, y un cuerpo de
+     * `Response` no los acepta: workerd contestaba 200 con cero bytes y recién después tiraba
+     * el error adentro del worker, así que el brief se generaba, se facturaba y nunca llegaba
+     * a la caja de texto. Ver `text-stream-response.ts`.
+     */
+    return textStreamResponse(result.textStream, {
       status: 200,
       headers: {
-        'Content-Type': 'text/event-stream',
-        Connection: 'keep-alive',
+        'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
       },
     });
@@ -106,7 +111,11 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
       });
     }
 
-    throw new Response(null, {
+    /*
+     * Con cuerpo, no `null`. El cliente lee el cuerpo para saber qué decirle a quien apretó el
+     * botón; un 500 vacío lo dejaba sin texto y sin explicación.
+     */
+    throw new Response('No se pudo armar el brief. Revisá el modelo seleccionado y volvé a intentar.', {
       status: 500,
       statusText: 'Internal Server Error',
     });
