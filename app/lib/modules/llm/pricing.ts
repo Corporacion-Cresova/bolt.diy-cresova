@@ -2,7 +2,7 @@
  * Precio por modelo, en USD por millón de tokens.
  *
  * Cada entrada viene del catálogo público de OpenRouter (`/api/v1/models`), verificada el
- * 2026-09-09. La tabla anterior estaba escrita a ojo y se equivocaba en todo lo que tocaba:
+ * 2026-09-11. La tabla anterior estaba escrita a ojo y se equivocaba en todo lo que tocaba:
  * DeepSeek V4 Pro figuraba a $0.14/$0.28 cuando cuesta $0.87/$1.74 — seis veces menos — y dos de
  * los cinco modelos del registro ni siquiera aparecían, así que sus generaciones se contabilizaban
  * en cero. Un contador que subestima seis veces es peor que no tener contador: con uno sabés que
@@ -32,7 +32,7 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'qwen/qwen3.8-flash': { inputPer1M: 0.15, outputPer1M: 0.47 },
   'tencent/hy4-preview': { inputPer1M: 0.834, outputPer1M: 2.501 },
   'deepseek/deepseek-v4-pro': { inputPer1M: 0.87, outputPer1M: 1.74 },
-  'deepseek/deepseek-v4-flash': { inputPer1M: 0.0855, outputPer1M: 0.1711 },
+  'deepseek/deepseek-v4-flash': { inputPer1M: 0.0676, outputPer1M: 0.1352 },
 };
 
 /**
