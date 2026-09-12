@@ -65,17 +65,17 @@ export const CRESOVA_DESIGN_KIT = `
   Every row has a LIGHT and a DARK ground. Both were measured on sites this agency shipped and a
   client approved; neither is a fallback for the other.
 
-  | Sector | Ground | bg | surface | ink | muted | accent | accent-strong | Type | Display weight |
-  |---|---|---|---|---|---|---|---|---|---|
-  | Turismo, aventura, hotelería | light | #F7F5F0 | #FFFFFF | #14322C | #5B6F69 | #0E6E62 | #0A4F46 | Bricolage Grotesque + Karla | 600 |
-  | Turismo, aventura, hotelería | dark | #0F1A17 | #16241F | #EDF2EF | #93A8A1 | #35B79C | #7FD9C4 | Fraunces + Plus Jakarta Sans | 600 |
-  | Gastronomía, café, catering | light | #FAF7F2 | #FFFFFF | #2A2118 | #6B5D4D | #7A2E2E | #5A1F1F | DM Serif Display + DM Sans | 600 |
-  | Belleza, bienestar, suplementos | light | #F8F7F5 | #FFFFFF | #1E2622 | #5F6B64 | #2F6B54 | #22503F | Cormorant Garamond + Karla | 300 |
-  | Belleza, bienestar, joyería, perfumería | dark | #121212 | #1C1A19 | #F5F1EA | #A9A198 | #C9A227 | #E4C25C | Cormorant Garamond + Manrope | 300 |
-  | Comercio, tienda, retail | light | #FAF8F4 | #FFFFFF | #241D14 | #6B6052 | #A4560A | #7C4008 | Fraunces + Work Sans | 600 |
-  | Oficios, construcción, limpieza, transporte | light | #F5F6F8 | #FFFFFF | #161D26 | #566270 | #2C5578 | #1E3C56 | Archivo + Source Sans 3 | 700 |
-  | Taller, motos, automotriz, deporte | dark | #141416 | #1E1E22 | #F4F2EF | #9B9BA3 | #E11D2E | #B3121F | Barlow Condensed + Barlow | 800 |
-  | Salud, legal, financiero, profesional | light | #F7F7F5 | #FFFFFF | #14192B | #565E75 | #1E3A6E | #14284D | Instrument Sans + Public Sans | 600 |
+  | Sector | Ground | bg | surface | tint | ink | muted | accent | accent-strong | Type | Display weight |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Turismo, aventura, hotelería | light | #F7F5F0 | #FFFFFF | #DBEFEA | #0B332D | #4F6C66 | #006F62 | #005046 | Bricolage Grotesque + Karla | 600 |
+  | Turismo, aventura, hotelería | dark | #0F1A17 | #16241F | #1D2D28 | #D2FBEF | #87A49C | #35B79C | #79DAC4 | Fraunces + Plus Jakarta Sans | 600 |
+  | Gastronomía, café, catering | light | #FAF7F2 | #FFFFFF | #FAE7E5 | #361A19 | #6D5351 | #7D2A2B | #5E1A1C | DM Serif Display + DM Sans | 600 |
+  | Belleza, bienestar, suplementos | light | #F8F7F5 | #FFFFFF | #DFF1E8 | #092B1F | #50695E | #007050 | #00543C | Cormorant Garamond + Karla | 300 |
+  | Belleza, bienestar, joyería, perfumería | dark | #121212 | #1C1A19 | #272216 | #FDF1D0 | #A59C85 | #C9A227 | #E4C25C | Cormorant Garamond + Manrope | 300 |
+  | Comercio, tienda, retail | light | #FAF8F4 | #FFFFFF | #F9E9DF | #2E1807 | #6D584A | #A4560A | #7C4008 | Fraunces + Work Sans | 600 |
+  | Oficios, construcción, limpieza, transporte | light | #F5F6F8 | #FFFFFF | #DFECF9 | #081E30 | #4C5E6F | #00558C | #003C69 | Archivo + Source Sans 3 | 700 |
+  | Taller, motos, automotriz, deporte | dark | #141416 | #1E1E22 | #312321 | #FFEDEB | #AB8F8C | #E11D2E | #B3121F | Barlow Condensed + Barlow | 800 |
+  | Salud, legal, financiero, profesional | light | #F7F7F5 | #FFFFFF | #E3ECFB | #0E1A2F | #4F5A6E | #173877 | #0B2659 | Instrument Sans + Public Sans | 600 |
 
   WHICH GROUND. Dark is not the daring choice and light is not the safe one; they say different
   things. Dark reads as craft, power and night trade — a workshop, a tattoo studio, a gym, a bar,
@@ -179,6 +179,7 @@ export const CRESOVA_DESIGN_KIT = `
         colors: {
           bg: 'rgb(var(--bg) / <alpha-value>)',
           surface: 'rgb(var(--surface) / <alpha-value>)',
+        tint: 'rgb(var(--tint) / <alpha-value>)',
           ink: 'rgb(var(--ink) / <alpha-value>)',
           muted: 'rgb(var(--muted) / <alpha-value>)',
           accent: 'rgb(var(--accent) / <alpha-value>)',
@@ -250,15 +251,23 @@ export const CRESOVA_DESIGN_KIT = `
   - Vary it: the hero and the closing call to action get more room than a trust strip.
 
   DEPTH AND RHYTHM (this is what «flat» actually means, and it is the easiest thing to fix):
-  - Sections ALTERNATE their ground: bg, then surface, then bg, then a 6% tint of the accent. Never
-    four sections running on the same colour. A whole page on one white is flat however good the
-    type is — this rule alone changes more than any other here.
+  - Sections ALTERNATE their ground across FOUR values, and \`tint\` is one of them: \`bg-bg\`,
+    \`bg-surface\`, \`bg-tint\`, and once \`bg-ink\` (inverted). Never four sections running on the
+    same colour. \`tint\` is a real token in the row — a solid ground carrying the accent's hue —
+    not an alpha of the accent laid over white.
+  - COUNT THEM. Of the sections that have a ground, at least a quarter are \`bg-tint\`, and at
+    least one is \`bg-ink\`. This is stated as a number because taste did not survive contact with
+    a real build: a generated logistics site came out with 5 sections on white, 4 on the grey \`bg\`
+    and one ink strip, and it read as having no colour at all. Measured by painted area: 93% of
+    that page was white or near-white and the solid accent covered 0.5%. Two grey grounds is not
+    rhythm, it is the same page twice.
   - Exactly three levels: bg (the page), surface (cards, panels), raised (one soft shadow). Nothing
     else gets a shadow.
   - Spend the boldness in ONE place. If the accent fights the ground, drop its saturation rather
     than swapping it for another colour.
-  - The accent is for actions and one or two emphases per screen. An accent everywhere reads as
-    loud, not as designed.
+  - The accent is for actions and one or two emphases per screen — but «one or two» counts
+    elements, not pixels. A page where the accent only ever appears on button fills has spent it on
+    nothing: give it one ground, one oversized number, or one rule under a headline as well.
 
   MOTION (a closed repertoire — do not invent more, and wrap all of it in
   @media (prefers-reduced-motion: reduce) so it can be turned off):
