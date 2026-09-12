@@ -33,7 +33,11 @@ export function StickyHeader({ links }: { links: { label: string; href: string }
 
         <nav className="hidden items-center gap-8 md:flex">
           {links.map((link) => (
-            <a key={link.href} href={link.href} className="text-sm text-muted transition-colors duration-150 hover:text-ink">
+            <a
+              key={link.href}
+              href={link.href}
+              className="text-sm text-muted transition-colors duration-150 hover:text-ink"
+            >
               {link.label}
             </a>
           ))}
@@ -42,7 +46,7 @@ export function StickyHeader({ links }: { links: { label: string; href: string }
         <button
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
-          className="md:hidden"
+          className="-mr-2 inline-flex min-h-touch min-w-touch items-center justify-center md:hidden"
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
@@ -51,7 +55,12 @@ export function StickyHeader({ links }: { links: { label: string; href: string }
       {open && (
         <nav className="flex flex-col gap-1 border-t border-ink/10 bg-bg px-6 py-4 md:hidden">
           {links.map((link) => (
-            <a key={link.href} href={link.href} onClick={() => setOpen(false)} className="py-2 text-sm text-muted">
+            <a
+              key={link.href}
+              href={link.href}
+              onClick={() => setOpen(false)}
+              className="flex min-h-touch items-center text-sm text-muted"
+            >
               {link.label}
             </a>
           ))}

@@ -197,6 +197,8 @@ export const CRESOVA_DESIGN_KIT = `
           body: ['1.0625rem', { lineHeight: '1.6' }],
         },
         maxWidth: { container: '1200px', measure: '65ch' },
+        minHeight: { touch: '44px' },
+        minWidth: { touch: '44px' },
         borderRadius: { control: '6px', panel: '12px' },
         boxShadow: { raised: '0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06)' },
       },
@@ -244,6 +246,23 @@ export const CRESOVA_DESIGN_KIT = `
   - Never more than two weights of the display face on one page.
   - Body text gets a measure of 60-75 characters (max-w-[65ch]). Full-width paragraphs read as
     unfinished no matter how good the rest is.
+
+  TOUCH TARGETS. Anything tappable is at least 44px tall — \`min-h-touch\` is declared in the
+  config for exactly this. Icon-only buttons get \`min-w-touch\` too. Measured at 390px on a
+  generated site: 10 of 21 tappable elements were under 44px, including the menu button at 20px and
+  the five catalogue filters at 34px. Those are the two things a person holding a phone actually
+  touches. Padding on a text link is not enough on its own — an \`<a>\` with \`py-2\` around 14px
+  text is 36px.
+
+  MOTION IS IN THE TEMPLATE, NOT IN YOUR HEAD. The Cresova Base template ships \`useReveal\` (an
+  IntersectionObserver hook) and the \`.revelar\` class, already wired into \`Section\` and the hero
+  column, so every section fades up as it enters the viewport with no work from you. USE THEM —
+  \`ref={revelar}\` plus \`className="revelar"\` — and stagger a row of cards with
+  \`style={{ '--retraso': \`\${i * 70}ms\` }}\`.
+  This is stated as a rule because of what happened without it: a generated site shipped 397KB of
+  JavaScript with ZERO occurrences of IntersectionObserver, while the same page declared
+  \`@keyframes float\` and \`@keyframes draw-line\` in its CSS and applied neither to a single
+  element. Writing the animation and not wiring it is the failure mode here, not forgetting it.
 
   VERTICAL RHYTHM:
   - Sections breathe: 96px of padding on mobile, 128-160px on desktop. Cramped, evenly padded

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useReveal } from '../lib/useReveal';
 
 /**
  * A page section, with its ground and its breathing room already decided.
@@ -13,7 +14,7 @@ type Ground = 'bg' | 'surface' | 'tint' | 'ink';
 const GROUNDS: Record<Ground, string> = {
   bg: 'bg-bg text-ink',
   surface: 'bg-surface text-ink',
-  tint: 'bg-accent/[0.06] text-ink',
+  tint: 'bg-tint text-ink',
   ink: 'bg-ink text-surface',
 };
 
@@ -33,9 +34,17 @@ const SIZES = {
 };
 
 export function Section({ children, ground = 'bg', id, size = 'normal' }: SectionProps) {
+  /*
+   * El reveal vive acá y no en cada sección: siete componentes pasan por este envoltorio, así que
+   * es un solo lugar y ninguna sección se olvida.
+   */
+  const revelar = useReveal<HTMLDivElement>();
+
   return (
     <section id={id} className={`${GROUNDS[ground]} ${SIZES[size]}`}>
-      <div className="mx-auto w-full max-w-container px-6 md:px-10">{children}</div>
+      <div ref={revelar} className="revelar mx-auto w-full max-w-container px-6 md:px-10">
+        {children}
+      </div>
     </section>
   );
 }

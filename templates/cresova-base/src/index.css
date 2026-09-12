@@ -12,6 +12,37 @@
 }
 
 /*
+ * El reveal al scroll. Lo enciende `useReveal`, que pone data-revelado="si" al entrar en pantalla.
+ *
+ * El retraso escalonado se pasa por `style` con --retraso, para que una fila de tarjetas entre una
+ * después de otra sin que haga falta una clase por posición.
+ */
+.revelar {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1) var(--retraso, 0ms),
+    transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) var(--retraso, 0ms);
+}
+
+.revelar[data-revelado='si'] {
+  opacity: 1;
+  transform: none;
+}
+
+/*
+ * Sin esto, quien pide menos movimiento en el sistema se queda con una página en blanco si el
+ * observador no llega a correr. El contenido gana siempre sobre la animación.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .revelar {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/*
  * Las nueve paletas sectoriales del design kit, verificadas como conjuntos.
  *
  * Elegí la fila que le corresponde al negocio, pegá sus siete valores en :root y borrá el resto.

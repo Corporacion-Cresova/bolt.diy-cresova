@@ -1,5 +1,6 @@
 import { ArrowRight } from 'lucide-react';
 import { Button } from './Button';
+import { useReveal } from '../lib/useReveal';
 import { site, whatsappLink } from '../lib/site';
 
 /**
@@ -30,10 +31,12 @@ export function Hero({
   secondaryAction,
   facts,
 }: HeroProps) {
+  const revelar = useReveal<HTMLDivElement>();
+
   return (
     <header className="bg-bg">
       <div className="mx-auto grid w-full max-w-container gap-10 px-6 py-16 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:items-center md:gap-14 md:px-10 md:py-24">
-        <div className="mide-por-columna">
+        <div ref={revelar} className="revelar mide-por-columna">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-accent">{eyebrow}</p>
           <h1 className="text-hero font-semibold">{title}</h1>
           <p className="mt-6 max-w-measure text-muted">{subtitle}</p>
