@@ -433,7 +433,7 @@ export const ANTI_PATTERN_SERVICES = `
     </h2>
     <ul class="mt-14 border-t border-ink/12">
       <li class="border-b border-ink/12 py-8">
-        <div class="grid gap-2 md:grid-cols-[4fr_6fr_auto] md:gap-10 md:px-2">
+        <div class="grid gap-2 md:grid-cols-[minmax(0,4fr)_minmax(0,6fr)_auto] md:gap-10 md:px-2">
           <h3 class="font-display text-xl font-semibold">Service one, named specifically</h3>
           <p class="text-[0.9375rem] text-muted">What it includes, in specific terms: deliverables, duration, what is included in the price.</p>
           <span class="font-display text-lg font-semibold text-accent">From $X</span>

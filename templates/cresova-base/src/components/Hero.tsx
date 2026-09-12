@@ -32,7 +32,7 @@ export function Hero({
 }: HeroProps) {
   return (
     <header className="bg-bg">
-      <div className="mx-auto grid w-full max-w-container gap-10 px-6 py-16 md:grid-cols-[3fr_2fr] md:items-center md:gap-14 md:px-10 md:py-24">
+      <div className="mx-auto grid w-full max-w-container gap-10 px-6 py-16 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:items-center md:gap-14 md:px-10 md:py-24">
         <div className="mide-por-columna">
           <p className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-accent">{eyebrow}</p>
           <h1 className="text-hero font-semibold">{title}</h1>

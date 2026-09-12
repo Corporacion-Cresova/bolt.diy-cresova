@@ -65,17 +65,17 @@ export const CRESOVA_DESIGN_KIT = `
   Every row has a LIGHT and a DARK ground. Both were measured on sites this agency shipped and a
   client approved; neither is a fallback for the other.
 
-  | Sector | Ground | bg | surface | ink | muted | accent | accent-strong | Type | Display weight |
-  |---|---|---|---|---|---|---|---|---|---|
-  | Turismo, aventura, hotelería | light | #F7F5F0 | #FFFFFF | #14322C | #5B6F69 | #0E6E62 | #0A4F46 | Bricolage Grotesque + Karla | 600 |
-  | Turismo, aventura, hotelería | dark | #0F1A17 | #16241F | #EDF2EF | #93A8A1 | #35B79C | #7FD9C4 | Fraunces + Plus Jakarta Sans | 600 |
-  | Gastronomía, café, catering | light | #FAF7F2 | #FFFFFF | #2A2118 | #6B5D4D | #7A2E2E | #5A1F1F | DM Serif Display + DM Sans | 600 |
-  | Belleza, bienestar, suplementos | light | #F8F7F5 | #FFFFFF | #1E2622 | #5F6B64 | #2F6B54 | #22503F | Cormorant Garamond + Karla | 300 |
-  | Belleza, bienestar, joyería, perfumería | dark | #121212 | #1C1A19 | #F5F1EA | #A9A198 | #C9A227 | #E4C25C | Cormorant Garamond + Manrope | 300 |
-  | Comercio, tienda, retail | light | #FAF8F4 | #FFFFFF | #241D14 | #6B6052 | #A4560A | #7C4008 | Fraunces + Work Sans | 600 |
-  | Oficios, construcción, limpieza, transporte | light | #F5F6F8 | #FFFFFF | #161D26 | #566270 | #2C5578 | #1E3C56 | Archivo + Source Sans 3 | 700 |
-  | Taller, motos, automotriz, deporte | dark | #141416 | #1E1E22 | #F4F2EF | #9B9BA3 | #E11D2E | #B3121F | Barlow Condensed + Barlow | 800 |
-  | Salud, legal, financiero, profesional | light | #F7F7F5 | #FFFFFF | #14192B | #565E75 | #1E3A6E | #14284D | Instrument Sans + Public Sans | 600 |
+  | Sector | Ground | bg | surface | tint | ink | muted | accent | accent-strong | Type | Display weight |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | Turismo, aventura, hotelería | light | #F7F5F0 | #FFFFFF | #DBEFEA | #0B332D | #4F6C66 | #006F62 | #005046 | Bricolage Grotesque + Karla | 600 |
+  | Turismo, aventura, hotelería | dark | #0F1A17 | #16241F | #1D2D28 | #D2FBEF | #87A49C | #35B79C | #79DAC4 | Fraunces + Plus Jakarta Sans | 600 |
+  | Gastronomía, café, catering | light | #FAF7F2 | #FFFFFF | #FAE7E5 | #361A19 | #6D5351 | #7D2A2B | #5E1A1C | DM Serif Display + DM Sans | 600 |
+  | Belleza, bienestar, suplementos | light | #F8F7F5 | #FFFFFF | #DFF1E8 | #092B1F | #50695E | #007050 | #00543C | Cormorant Garamond + Karla | 300 |
+  | Belleza, bienestar, joyería, perfumería | dark | #121212 | #1C1A19 | #272216 | #FDF1D0 | #A59C85 | #C9A227 | #E4C25C | Cormorant Garamond + Manrope | 300 |
+  | Comercio, tienda, retail | light | #FAF8F4 | #FFFFFF | #F9E9DF | #2E1807 | #6D584A | #A4560A | #7C4008 | Fraunces + Work Sans | 600 |
+  | Oficios, construcción, limpieza, transporte | light | #F5F6F8 | #FFFFFF | #DFECF9 | #081E30 | #4C5E6F | #00558C | #003C69 | Archivo + Source Sans 3 | 700 |
+  | Taller, motos, automotriz, deporte | dark | #141416 | #1E1E22 | #312321 | #FFEDEB | #AB8F8C | #E11D2E | #B3121F | Barlow Condensed + Barlow | 800 |
+  | Salud, legal, financiero, profesional | light | #F7F7F5 | #FFFFFF | #E3ECFB | #0E1A2F | #4F5A6E | #173877 | #0B2659 | Instrument Sans + Public Sans | 600 |
 
   WHICH GROUND. Dark is not the daring choice and light is not the safe one; they say different
   things. Dark reads as craft, power and night trade — a workshop, a tattoo studio, a gym, a bar,
@@ -138,6 +138,17 @@ export const CRESOVA_DESIGN_KIT = `
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 
+  GRID TRACKS. Every flexible column is written \`minmax(0,3fr)\`, never \`3fr\` on its own. A track
+  written as a bare fraction means \`minmax(auto, …)\`, and that \`auto\` is the MIN-CONTENT size of
+  whatever is inside it. Put a photo in the second column and the photo's intrinsic width becomes
+  that column's floor: it takes what it needs and the text column gets the leftovers. Measured on a
+  real generated site, a 60/40 hero over 1200px resolved to 294px / 770px instead of 638/426 — the
+  headline then fell to the floor of its clamp and the page opened with a title smaller than its own
+  subheads.
+
+  Every worked example below is written this way. This line exists because the failure is invisible:
+  nothing errors, the layout just quietly redistributes.
+
   TOKENS. Every worked example below writes \`bg-surface\`, \`text-ink\`, \`border-ink/10\`,
   \`text-accent\`. Those class names only exist if you PUT THEM IN \`tailwind.config.js\` in this
   same response. Defining the palette as CSS custom properties instead does not make them exist:
@@ -168,6 +179,7 @@ export const CRESOVA_DESIGN_KIT = `
         colors: {
           bg: 'rgb(var(--bg) / <alpha-value>)',
           surface: 'rgb(var(--surface) / <alpha-value>)',
+        tint: 'rgb(var(--tint) / <alpha-value>)',
           ink: 'rgb(var(--ink) / <alpha-value>)',
           muted: 'rgb(var(--muted) / <alpha-value>)',
           accent: 'rgb(var(--accent) / <alpha-value>)',
@@ -179,8 +191,8 @@ export const CRESOVA_DESIGN_KIT = `
         },
         fontWeight: { heading: 'var(--weight-display)' },
         fontSize: {
-          hero: ['clamp(2.75rem, 13cqw, 10rem)', { lineHeight: '0.98', letterSpacing: '-0.025em' }],
-          display: ['clamp(4.5rem, 12vw, 9rem)', { lineHeight: '1', letterSpacing: '-0.03em' }],
+          hero: ['clamp(2.5rem, 10cqw, 5rem)', { lineHeight: '1.03', letterSpacing: '-0.025em' }],
+          display: ['clamp(3rem, 8vw, 6rem)', { lineHeight: '1.05', letterSpacing: '-0.03em' }],
           section: ['clamp(1.75rem, 3vw, 2.5rem)', { lineHeight: '1.15', letterSpacing: '-0.015em' }],
           body: ['1.0625rem', { lineHeight: '1.6' }],
         },
@@ -213,23 +225,20 @@ export const CRESOVA_DESIGN_KIT = `
   - Container: 1200px max, 24px gutter mobile, 40px desktop.
 
   TYPE SCALE (the single biggest tell of a generated page is timid type — type that fits):
-  - Hero headline: clamp(2.75rem, 13cqw, 10rem), line-height 0.95–1.05, tracking -0.025em, and the
-    display weight of your sector row — which is 300 for jewellery and 800 for a workshop, not 600
-    for everything.
-    \`cqw\` and not \`vw\`, and that difference is not cosmetic. With 9vw the headline measured
-    itself against the window while living in a 60% column: at 1440px it came out at 129px inside
-    690px of space, broke into five lines, pushed the WhatsApp button below the fold and cut the
-    subtitle mid-sentence. This file warned about exactly that failure two lines below and the base
-    template committed it anyway, because nobody had rendered it. Container units make one number
-    serve both shapes: ~90px in a 60/40 column, ~156px in a full-width hero. Put
-    \`container-type: inline-size\` on the column the headline lives in.
-    The old ceiling here was 6.5rem, and it was set by taste rather than by evidence. Six sites this
-    agency shipped and clients approved were measured: their hero headlines render at 96, 120, 144,
-    152 and 160 CSS pixels. Three of the six break past what this file used to allow. 10rem is the
-    new ceiling and it is a ceiling, not a target: a long headline at 160px is a wall, a three word
-    one at 160px is a poster. Set it against the words you actually have.
-  - Display number (statistic, year, single count): clamp(4.5rem, 12vw, 9rem), tracking -0.03em.
-    One per page. This is the moment a number feels big.
+  - Hero headline: clamp(2.5rem, 10cqw, 5rem), line-height 1.03, tracking -0.025em, and the display
+    weight of your sector row — 300 for jewellery, 800 for a workshop, not 600 for everything.
+    \`cqw\` and not \`vw\`: the headline measures against the column it lives in, not the window.
+    Put \`container-type: inline-size\` on that column.
+    These numbers are measured, and the previous ones were not. The ceiling used to be 10rem,
+    justified by six sites whose headlines render at 96–160px — all six were tourism, tattoo and
+    sport, where a poster headline is the point. A clinic the client liked best measures 62px on a
+    body of 18px: a ratio of 3.4. The 10rem ceiling allowed 9.4, and a generated logistics site hit
+    it — a 160px h2 on 12px labels, which is the page that made this rule change. 5rem gives ~64px
+    in a 60/40 column on 17px body: 3.8. It is a CEILING, not a target. A long headline at 80px is
+    still a wall; set it against the words you actually have.
+  - Display number (statistic, year, single count): clamp(3rem, 8vw, 6rem), tracking -0.03em.
+    One per page, and it is a number or three words — never a sentence. This is the moment a number
+    feels big; at a sentence it is just loud.
   - Section heading: clamp(1.75rem, 3vw, 2.5rem), line-height 1.15.
   - Body: 1.0625rem, line-height 1.6. Small print: 0.875rem.
   - Never more than two weights of the display face on one page.
@@ -242,15 +251,23 @@ export const CRESOVA_DESIGN_KIT = `
   - Vary it: the hero and the closing call to action get more room than a trust strip.
 
   DEPTH AND RHYTHM (this is what «flat» actually means, and it is the easiest thing to fix):
-  - Sections ALTERNATE their ground: bg, then surface, then bg, then a 6% tint of the accent. Never
-    four sections running on the same colour. A whole page on one white is flat however good the
-    type is — this rule alone changes more than any other here.
+  - Sections ALTERNATE their ground across FOUR values, and \`tint\` is one of them: \`bg-bg\`,
+    \`bg-surface\`, \`bg-tint\`, and once \`bg-ink\` (inverted). Never four sections running on the
+    same colour. \`tint\` is a real token in the row — a solid ground carrying the accent's hue —
+    not an alpha of the accent laid over white.
+  - COUNT THEM. Of the sections that have a ground, at least a quarter are \`bg-tint\`, and at
+    least one is \`bg-ink\`. This is stated as a number because taste did not survive contact with
+    a real build: a generated logistics site came out with 5 sections on white, 4 on the grey \`bg\`
+    and one ink strip, and it read as having no colour at all. Measured by painted area: 93% of
+    that page was white or near-white and the solid accent covered 0.5%. Two grey grounds is not
+    rhythm, it is the same page twice.
   - Exactly three levels: bg (the page), surface (cards, panels), raised (one soft shadow). Nothing
     else gets a shadow.
   - Spend the boldness in ONE place. If the accent fights the ground, drop its saturation rather
     than swapping it for another colour.
-  - The accent is for actions and one or two emphases per screen. An accent everywhere reads as
-    loud, not as designed.
+  - The accent is for actions and one or two emphases per screen — but «one or two» counts
+    elements, not pixels. A page where the accent only ever appears on button fills has spent it on
+    nothing: give it one ground, one oversized number, or one rule under a headline as well.
 
   MOTION (a closed repertoire — do not invent more, and wrap all of it in
   @media (prefers-reduced-motion: reduce) so it can be turned off):
