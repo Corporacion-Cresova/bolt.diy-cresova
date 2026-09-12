@@ -23,7 +23,7 @@ export function ServiceList({ eyebrow, title, services, ground = 'surface' }: Se
         {services.map((service) => (
           <li
             key={service.name}
-            className="grid gap-2 border-b border-ink/10 py-7 md:grid-cols-[1fr_2fr_auto] md:items-baseline md:gap-10"
+            className="grid gap-2 border-b border-ink/10 py-7 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] md:items-baseline md:gap-10"
           >
             <h3 className="text-lg font-semibold">{service.name}</h3>
             <p className="max-w-measure text-muted">{service.description}</p>

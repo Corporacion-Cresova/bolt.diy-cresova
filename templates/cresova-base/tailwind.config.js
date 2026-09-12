@@ -39,20 +39,27 @@ export default {
       /* The scale the design kit asks for, so timid type is not reachable by accident. */
       fontSize: {
         /*
-         * `cqw` y no `vw`: el titular tiene que medirse contra la columna donde vive, no contra la
-         * ventana. Con 9vw, en el hero 60/40 a 1440px daba 129px dentro de una columna de 690 —
-         * cinco líneas, el botón de WhatsApp debajo del pliegue y el subtítulo cortado a media
-         * frase. El propio design kit advierte contra eso: «un titular largo a 160px es una pared».
-         *
-         * 13cqw da las dos cosas con un solo número: ~90px en la columna del 60/40 (tres líneas,
-         * el CTA arriba del pliegue) y ~156px en un hero de ancho completo, que es exactamente
-         * donde caen los seis sitios que el cliente aprobó (96, 120, 144, 152, 160 px).
-         *
+         * `cqw` y no `vw`: el titular se mide contra la columna donde vive, no contra la ventana.
          * Necesita un ancestro con `container-type: inline-size`; eso lo pone `.mide-por-columna`
-         * en index.css. Las container queries son soporte base en todos los navegadores desde 2023.
+         * en index.css.
+         *
+         * Los números vienen de medir un sitio generado, no de estimarlos. La versión anterior
+         * —`clamp(2.75rem, 13cqw, 10rem)`— se escribió suponiendo que la columna del hero medía
+         * 690px. Medida en un sitio real (zorzalexpress) medía 294, porque la pista del grid se
+         * colapsaba, y el titular caía al piso del clamp: 44px con interlineado de 43px, o sea
+         * líneas que se tocan. El mismo token, en un h2 de ancho completo, llegaba al techo de
+         * 160px. Un token que produce 44 y 160 en la misma página no es una escala.
+         *
+         * 10cqw con techo de 5rem: ~64px en la columna del 60/40 ya arreglada (638px) y 80px como
+         * máximo absoluto. La referencia es una clínica que el cliente aprobó, medida en el
+         * navegador: h1 de 62px sobre cuerpo de 18px, proporción 3,4x. Acá queda 64 sobre 17, o
+         * sea 3,8x. La versión anterior permitía 9,4x.
+         *
+         * El interlineado pasa de 0.98 a 1.03 por la misma razón: por debajo de 1 solo es seguro
+         * en tamaños de display, y este token también se usa en el piso.
          */
-        hero: ['clamp(2.75rem, 13cqw, 10rem)', { lineHeight: '0.98', letterSpacing: '-0.025em' }],
-        display: ['clamp(4.5rem, 12vw, 9rem)', { lineHeight: '1', letterSpacing: '-0.03em' }],
+        hero: ['clamp(2.5rem, 10cqw, 5rem)', { lineHeight: '1.03', letterSpacing: '-0.025em' }],
+        display: ['clamp(3rem, 8vw, 6rem)', { lineHeight: '1.05', letterSpacing: '-0.03em' }],
         section: ['clamp(1.75rem, 3vw, 2.5rem)', { lineHeight: '1.15', letterSpacing: '-0.015em' }],
         body: ['1.0625rem', { lineHeight: '1.6' }],
       },
