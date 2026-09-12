@@ -35,7 +35,7 @@ export function Catalogue({ eyebrow, title, products, ground = 'surface' }: Cata
           <button
             key={category}
             onClick={() => setActive(category)}
-            className={`rounded-full border px-4 py-1.5 text-sm transition-colors duration-150 ${
+            className={`inline-flex min-h-touch items-center rounded-full border px-4 text-sm transition-colors duration-150 ${
               active === category
                 ? 'border-accent bg-accent text-surface'
                 : 'border-ink/15 bg-transparent text-muted hover:border-ink/40 hover:text-ink'

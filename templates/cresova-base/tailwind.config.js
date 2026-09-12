@@ -68,6 +68,21 @@ export default {
         container: '1200px',
         measure: '65ch',
       },
+
+      /*
+       * El mínimo de un área tocable, y por qué es un token y no un número suelto en cada archivo.
+       *
+       * Medido a 390px sobre un sitio generado: 10 de 21 elementos tocables medían menos de 44px
+       * de alto. Entre ellos el botón del menú —20px— y los cinco filtros del catálogo —34px—, o
+       * sea las dos cosas que alguien con el teléfono en la mano de verdad toca. Los dos salieron
+       * textual de esta plantilla, que es lo que el modelo copia.
+       */
+      minHeight: {
+        touch: '44px',
+      },
+      minWidth: {
+        touch: '44px',
+      },
       borderRadius: {
         control: '6px',
         panel: '12px',
