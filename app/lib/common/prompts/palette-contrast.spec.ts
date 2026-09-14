@@ -19,6 +19,8 @@ interface Fila {
   ink: string;
   muted: string;
   accent: string;
+  accentStrong: string;
+  deep: string;
 }
 
 function filas(): Fila[] {
@@ -26,7 +28,18 @@ function filas(): Fila[] {
 
   return lineas.map((linea) => {
     const c = linea.split('|').map((x) => x.trim());
-    return { nombre: c[1], ground: c[2], bg: c[3], surface: c[4], tint: c[5], ink: c[6], muted: c[7], accent: c[8] };
+    return {
+      nombre: c[1],
+      ground: c[2],
+      bg: c[3],
+      surface: c[4],
+      tint: c[5],
+      ink: c[6],
+      muted: c[7],
+      accent: c[8],
+      accentStrong: c[9],
+      deep: c[10],
+    };
   });
 }
 
@@ -47,6 +60,29 @@ function sobreAcento(fila: Fila): string {
   return contraste('#FFFFFF', fila.accent) >= contraste(fila.bg, fila.accent) ? '#FFFFFF' : fila.bg;
 }
 
+/**
+ * El verde de la marca WhatsApp, leído del propio kit para que no pueda derivar.
+ *
+ * Vive fuera de la tabla sectorial porque no es una decisión por rubro: es el color de una marca
+ * ajena y es el mismo en las nueve filas.
+ */
+const WHATSAPP = (() => {
+  const triple = /--whatsapp:\s*(\d+)\s+(\d+)\s+(\d+)/.exec(CRESOVA_DESIGN_KIT);
+
+  if (!triple) {
+    return '';
+  }
+
+  return (
+    '#' +
+    triple
+      .slice(1)
+      .map((n) => Number(n).toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase()
+  );
+})();
+
 const TEXTO = 4.5;
 const ELEMENTO_GRANDE = 3.0;
 
@@ -59,6 +95,7 @@ describe('las paletas sectoriales se leen', () => {
      * tests de abajo pasarían por no tener nada que verificar.
      */
     expect(todas).toHaveLength(9);
+    expect(WHATSAPP, 'el kit dejó de declarar --whatsapp').toMatch(/^#[0-9A-F]{6}$/);
     expect(
       todas.every((f) => [f.bg, f.surface, f.tint, f.ink, f.muted, f.accent].every((c) => /^#[0-9A-F]{6}$/.test(c))),
     ).toBe(true);
@@ -75,11 +112,24 @@ describe('las paletas sectoriales se leen', () => {
       ['texto sobre accent', contraste(sobreAcento(fila), fila.accent), TEXTO],
       ['accent sobre bg', contraste(fila.accent, fila.bg), ELEMENTO_GRANDE],
       ['accent sobre tint', contraste(fila.accent, fila.tint), ELEMENTO_GRANDE],
+      ['bg sobre deep', contraste(fila.bg, fila.deep), TEXTO],
+      ['texto oscuro sobre el verde de WhatsApp', contraste('#0B2E18', WHATSAPP), TEXTO],
     ];
 
     const flojos = pares.filter(([, valor, minimo]) => valor < minimo);
 
     expect(flojos.map(([n, v, m]) => `${n}: ${v.toFixed(2)} < ${m}`)).toEqual([]);
+  });
+
+  it('deep contrasta con el fondo de SU fila, clara u oscura', () => {
+    /*
+     * El fallo que se vio renderizando las muestras: un deep oscuro fijo desaparecía en las tres
+     * filas oscuras, donde el fondo ya es oscuro. En una página oscura la banda invertida es la
+     * clara, así que deep se define por contraste con la fila y no por un valor.
+     */
+    for (const fila of todas) {
+      expect(contraste(fila.deep, fila.bg), `${fila.nombre} · ${fila.ground}`).toBeGreaterThan(7);
+    }
   });
 
   it('el tint es un fondo aparte, no el bg con otro nombre', () => {

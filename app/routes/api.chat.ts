@@ -1,4 +1,5 @@
 import { type ActionFunctionArgs } from '@remix-run/cloudflare';
+import { publicOrigin } from '~/lib/.server/images/public-origin';
 import { createDataStream, generateId } from 'ai';
 import { MAX_RESPONSE_SEGMENTS, type FileMap } from '~/lib/.server/llm/constants';
 import { CONTINUE_PROMPT } from '~/lib/common/prompts/prompts';
@@ -116,8 +117,12 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
    * Where this app answers from, so a generated image can be given an absolute URL. The site that
    * embeds it runs on the runner under a different host, so a relative path would never resolve,
    * and no environment variable holds this — the request does.
+   *
+   * Con `publicOrigin` y no con `new URL(request.url)`: Traefik termina el TLS y le pasa http al
+   * contenedor, así que las fotos salían con URL http dentro de una página https y el navegador
+   * las bloqueaba por contenido mixto.
    */
-  const origin = new URL(request.url).origin;
+  const origin = publicOrigin(request);
 
   const cookieHeader = request.headers.get('Cookie');
   const apiKeys = JSON.parse(parseCookies(cookieHeader || '').apiKeys || '{}');

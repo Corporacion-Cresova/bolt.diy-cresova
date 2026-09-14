@@ -45,27 +45,31 @@
 /*
  * Las nueve paletas sectoriales del design kit, verificadas como conjuntos.
  *
- * Elegí la fila que le corresponde al negocio, pegá sus siete valores en :root y borrá el resto.
- * Nunca mezcles dos filas: su contraste se verificó junta, no cruzada.
+ * Elegí la fila del negocio, pegá sus ocho valores en :root y borrá el resto. Nunca mezcles dos
+ * filas: su contraste se verificó junta, no cruzada.
  *
- * `tint` es el tercer fondo y es el token que faltaba. Sin él una página queda con dos grounds y
- * los dos son grises. Medido en un sitio generado de verdad: el 93 por ciento del área pintada
- * era blanco o casi blanco, y el acento sólido ocupaba el 0,5. `tint` lleva el tono del acento a
- * un fondo entero, que es lo que hace que una página clara se sienta con color en vez de lavada.
+ * `tint` es el tercer fondo: un color sólido con el tono del acento, no un alpha sobre blanco.
+ * `deep` es la banda a sangre que contrasta con la página — oscura en las filas claras y CLARA en
+ * las oscuras, porque en una página oscura la sección invertida es la clara. Eso se vio
+ * renderizando las muestras: con un deep oscuro fijo, la banda desaparecía en las tres filas
+ * oscuras.
  *
- * CLARAS                         bg          / surface     / tint          / ink         / muted       / accent     / accent-strong  peso
- * turismo, aventura, hotelería   247 245 240 / 255 255 255 / 219 239 234  / 11 51 45    / 79 108 102  / 0 111 98   / 0 80 70     600
- * gastronomía, café, catering    250 247 242 / 255 255 255 / 250 231 229  / 54 26 25    / 109 83 81   / 125 42 43  / 94 26 28    600
- * belleza, bienestar             248 247 245 / 255 255 255 / 223 241 232  / 9 43 31     / 80 105 94   / 0 112 80   / 0 84 60     300
- * comercio, tienda, retail       250 248 244 / 255 255 255 / 249 233 223  / 46 24 7     / 109 88 74   / 164 86 10  / 124 64 8    600
- * oficios, construcción          245 246 248 / 255 255 255 / 223 236 249  / 8 30 48     / 76 94 111   / 0 85 140   / 0 60 105    700
- * salud, legal, profesional      247 247 245 / 255 255 255 / 227 236 251  / 14 26 47    / 79 90 110   / 23 56 119  / 11 38 89    600
+ * El verde de WhatsApp no está en la tabla porque no es una decisión por rubro: es el color de
+ * una marca ajena, vale para las nueve filas y vive en :root como --whatsapp.
+ *
+ * CLARAS                        bg           / surface      / tint         / ink          / muted        / accent       / accent-strong/ deep          peso
+ * turismo, aventura, hotelería  247 245 240  / 255 255 255  / 219 239 234  / 11 51 45     / 79 108 102   / 0 133 117    / 0 80 70      / 14 27 25      600
+ * gastronomía, café, catering   250 247 242  / 255 255 255  / 250 231 229  / 54 26 25     / 109 83 81    / 163 44 49    / 94 26 28     / 33 21 20      600
+ * belleza, bienestar            248 247 245  / 255 255 255  / 223 241 232  / 9 43 31      / 80 105 94    / 0 132 93     / 0 84 60      / 15 27 22      300
+ * comercio, tienda, retail      250 248 244  / 255 255 255  / 249 233 223  / 46 24 7      / 109 88 74    / 183 91 0     / 124 64 8     / 32 22 15      600
+ * oficios, construcción         245 246 248  / 255 255 255  / 223 236 249  / 8 30 48      / 76 94 111    / 0 115 192    / 0 60 105     / 17 25 33      700
+ * salud, legal, profesional     247 247 245  / 255 255 255  / 227 236 251  / 14 26 47     / 79 90 110    / 52 95 178    / 13 54 133    / 19 24 34      600
  *
  * OSCURAS — no son la variante atrevida de las claras, dicen otra cosa: oficio, fuerza y comercio
  * nocturno. Si el rótulo, los uniformes o el local del cliente son oscuros, eso lo decide.
- * turismo/aventura (dark)        15 26 23    / 22 36 31    / 29 45 40     / 210 251 239 / 135 164 156 / 53 183 156 / 121 218 196 600
- * joyería, perfumería (dark)     18 18 18    / 28 26 25    / 39 34 22     / 253 241 208 / 165 156 133 / 201 162 39 / 228 194 92  300
- * taller, motos, deporte (dark)  20 20 22    / 30 30 34    / 49 35 33     / 255 237 235 / 171 143 140 / 225 29 46  / 179 18 31   800
+ * turismo/aventura (dark)       15 26 23     / 22 36 31     / 29 45 40     / 210 251 239  / 135 164 156  / 0 203 170    / 121 218 196  / 218 237 231   600
+ * joyería, perfumería (dark)    18 18 18     / 28 26 25     / 39 34 22     / 253 241 208  / 165 156 133  / 213 172 40   / 228 194 92   / 237 232 216   300
+ * taller, motos, deporte (dark) 20 20 22     / 30 30 34     / 49 35 33     / 255 237 235  / 171 143 140  / 242 54 61    / 179 18 31    / 246 227 225   800
  */
 :root {
   --bg: 247 245 240;
@@ -73,8 +77,12 @@
   --tint: 219 239 234;
   --ink: 11 51 45;
   --muted: 79 108 102;
-  --accent: 0 111 98;
+  --accent: 0 133 117;
   --accent-strong: 0 80 70;
+  --deep: 14 27 25;
+
+  /* El verde de la marca WhatsApp. No es una decisión por rubro: es el mismo en las nueve filas. */
+  --whatsapp: 37 211 102;
 
   /* must match the <link> in index.html — a family that is not loaded falls through silently */
   --font-display: 'Bricolage Grotesque';

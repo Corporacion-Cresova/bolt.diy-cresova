@@ -9,13 +9,13 @@ import { useReveal } from '../lib/useReveal';
  * everywhere. Alternate the ground as you go down the page — bg, surface, bg, tint — and never run
  * four sections on the same one.
  */
-type Ground = 'bg' | 'surface' | 'tint' | 'ink';
+type Ground = 'bg' | 'surface' | 'tint' | 'deep';
 
 const GROUNDS: Record<Ground, string> = {
   bg: 'bg-bg text-ink',
   surface: 'bg-surface text-ink',
   tint: 'bg-tint text-ink',
-  ink: 'bg-ink text-surface',
+  deep: 'bg-deep text-bg',
 };
 
 interface SectionProps {

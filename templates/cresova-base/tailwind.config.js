@@ -22,6 +22,14 @@ export default {
         muted: 'rgb(var(--muted) / <alpha-value>)',
         accent: 'rgb(var(--accent) / <alpha-value>)',
         'accent-strong': 'rgb(var(--accent-strong) / <alpha-value>)',
+        deep: 'rgb(var(--deep) / <alpha-value>)',
+
+        /*
+         * El verde de WhatsApp, fijo. Todos estos sitios tienen un botón de WhatsApp y hasta ahora
+         * cada uno inventaba su verde o lo pintaba del color del acento. Es el color de una marca
+         * ajena: no se elige por rubro y no se ajusta.
+         */
+        whatsapp: 'rgb(var(--whatsapp) / <alpha-value>)',
       },
       fontFamily: {
         display: ['var(--font-display)', 'system-ui', 'sans-serif'],
