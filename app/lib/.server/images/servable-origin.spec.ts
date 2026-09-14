@@ -47,6 +47,24 @@ describe('comprobarOrigenServible', () => {
     });
   });
 
+  it('lleva un límite de tiempo, y si se agota deja seguir', async () => {
+    /*
+     * La razón por la que este test existe: sin límite, esta petición colgó generaciones enteras.
+     * Corre antes del primer token y el worker le pregunta a su propio hostname público, un camino
+     * que sale a internet y vuelve por el proxy y que en varios despliegues no cierra. La
+     * generación se quedaba «al inicio», sin error y sin texto, y como el título del chat sale del
+     * primer artifact, el chat tampoco cambiaba de nombre.
+     */
+    const abortada = (async (_url: string, init?: RequestInit) => {
+      expect(init?.signal, 'la petición salió sin señal de aborto').toBeDefined();
+      throw Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' });
+    }) as unknown as typeof fetch;
+
+    await expect(comprobarOrigenServible('https://builder.cresova.com', abortada)).resolves.toMatchObject({
+      servible: true,
+    });
+  });
+
   it('pregunta por la ruta de las imágenes y no por otra', async () => {
     const espia = responde(404);
     await comprobarOrigenServible('https://builder.cresova.com', espia);
@@ -57,6 +75,21 @@ describe('comprobarOrigenServible', () => {
 
 describe('origenServible', () => {
   beforeEach(__olvidarOrigenes);
+
+  it('no recuerda una no-respuesta: la próxima vuelve a preguntar', async () => {
+    /*
+     * Una sonda que se agota devuelve «sí» para no frenar la construcción. Si eso se guardara, un
+     * único timeout dejaría a la instancia gastando en imágenes para siempre.
+     */
+    const rota = vi.fn(async () => {
+      throw new Error('timeout');
+    }) as unknown as typeof fetch;
+
+    await origenServible('https://builder.cresova.com', rota);
+    await origenServible('https://builder.cresova.com', rota);
+
+    expect(rota).toHaveBeenCalledTimes(2);
+  });
 
   it('pregunta una sola vez por origen', async () => {
     const espia = responde(404);
