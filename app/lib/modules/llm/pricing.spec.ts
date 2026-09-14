@@ -41,10 +41,19 @@ describe('la tabla de precios', () => {
 
 describe('calculateCost', () => {
   it('cobra entrada y salida por separado', () => {
-    // deepseek-v4-pro: $0.87/1M in, $1.74/1M out
+    /*
+     * El precio se lee de la tabla, no se escribe de nuevo acá.
+     *
+     * Lo que este test verifica es la aritmética —que entrada y salida se cobren a su tarifa y no
+     * a la misma—, no cuánto vale DeepSeek hoy. De eso se ocupa el test de deriva contra el
+     * catálogo público. Con los números repetidos a mano, cada cambio de precio del proveedor
+     * rompía tests que no tenían nada que ver: pasó tres veces en una semana.
+     */
+    const tarifa = MODEL_PRICING['deepseek/deepseek-v4-pro'];
     const { usd } = calculateCost('deepseek/deepseek-v4-pro', 1_000_000, 1_000_000);
 
-    expect(usd).toBeCloseTo(0.87 + 1.74, 6);
+    expect(usd).toBeCloseTo(tarifa.inputPer1M + tarifa.outputPer1M, 6);
+    expect(tarifa.inputPer1M, 'si entrada y salida valen igual, este test no prueba nada').not.toBe(tarifa.outputPer1M);
   });
 
   it('convierte a lempiras con la tasa declarada', () => {

@@ -8,7 +8,7 @@ interface TestimonialProps {
   quote: string;
   author: string;
   role: string;
-  ground?: 'bg' | 'surface' | 'tint' | 'ink';
+  ground?: 'bg' | 'surface' | 'tint' | 'deep';
 }
 
 export function Testimonial({ quote, author, role, ground = 'tint' }: TestimonialProps) {

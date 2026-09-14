@@ -65,17 +65,17 @@ export const CRESOVA_DESIGN_KIT = `
   Every row has a LIGHT and a DARK ground. Both were measured on sites this agency shipped and a
   client approved; neither is a fallback for the other.
 
-  | Sector | Ground | bg | surface | tint | ink | muted | accent | accent-strong | Type | Display weight |
-  |---|---|---|---|---|---|---|---|---|---|---|
-  | Turismo, aventura, hotelería | light | #F7F5F0 | #FFFFFF | #DBEFEA | #0B332D | #4F6C66 | #006F62 | #005046 | Bricolage Grotesque + Karla | 600 |
-  | Turismo, aventura, hotelería | dark | #0F1A17 | #16241F | #1D2D28 | #D2FBEF | #87A49C | #35B79C | #79DAC4 | Fraunces + Plus Jakarta Sans | 600 |
-  | Gastronomía, café, catering | light | #FAF7F2 | #FFFFFF | #FAE7E5 | #361A19 | #6D5351 | #7D2A2B | #5E1A1C | DM Serif Display + DM Sans | 600 |
-  | Belleza, bienestar, suplementos | light | #F8F7F5 | #FFFFFF | #DFF1E8 | #092B1F | #50695E | #007050 | #00543C | Cormorant Garamond + Karla | 300 |
-  | Belleza, bienestar, joyería, perfumería | dark | #121212 | #1C1A19 | #272216 | #FDF1D0 | #A59C85 | #C9A227 | #E4C25C | Cormorant Garamond + Manrope | 300 |
-  | Comercio, tienda, retail | light | #FAF8F4 | #FFFFFF | #F9E9DF | #2E1807 | #6D584A | #A4560A | #7C4008 | Fraunces + Work Sans | 600 |
-  | Oficios, construcción, limpieza, transporte | light | #F5F6F8 | #FFFFFF | #DFECF9 | #081E30 | #4C5E6F | #00558C | #003C69 | Archivo + Source Sans 3 | 700 |
-  | Taller, motos, automotriz, deporte | dark | #141416 | #1E1E22 | #312321 | #FFEDEB | #AB8F8C | #E11D2E | #B3121F | Barlow Condensed + Barlow | 800 |
-  | Salud, legal, financiero, profesional | light | #F7F7F5 | #FFFFFF | #E3ECFB | #0E1A2F | #4F5A6E | #173877 | #0B2659 | Instrument Sans + Public Sans | 600 |
+  | Sector | Ground | bg | surface | tint | ink | muted | accent | accent-strong | deep | Type | Display weight |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | Turismo, aventura, hotelería | light | #F7F5F0 | #FFFFFF | #DBEFEA | #0B332D | #4F6C66 | #008575 | #005046 | #0E1B19 | Bricolage Grotesque + Karla | 600 |
+  | Turismo, aventura, hotelería | dark | #0F1A17 | #16241F | #1D2D28 | #D2FBEF | #87A49C | #00CBAA | #79DAC4 | #DAEDE7 | Fraunces + Plus Jakarta Sans | 600 |
+  | Gastronomía, café, catering | light | #FAF7F2 | #FFFFFF | #FAE7E5 | #361A19 | #6D5351 | #A32C31 | #5E1A1C | #211514 | DM Serif Display + DM Sans | 600 |
+  | Belleza, bienestar, suplementos | light | #F8F7F5 | #FFFFFF | #DFF1E8 | #092B1F | #50695E | #00845D | #00543C | #0F1B16 | Cormorant Garamond + Karla | 300 |
+  | Belleza, bienestar, joyería, perfumería | dark | #121212 | #1C1A19 | #272216 | #FDF1D0 | #A59C85 | #D5AC28 | #E4C25C | #EDE8D8 | Cormorant Garamond + Manrope | 300 |
+  | Comercio, tienda, retail | light | #FAF8F4 | #FFFFFF | #F9E9DF | #2E1807 | #6D584A | #B75B00 | #7C4008 | #20160F | Fraunces + Work Sans | 600 |
+  | Oficios, construcción, limpieza, transporte | light | #F5F6F8 | #FFFFFF | #DFECF9 | #081E30 | #4C5E6F | #0073C0 | #003C69 | #111921 | Archivo + Source Sans 3 | 700 |
+  | Taller, motos, automotriz, deporte | dark | #141416 | #1E1E22 | #312321 | #FFEDEB | #AB8F8C | #F2363D | #B3121F | #F6E3E1 | Barlow Condensed + Barlow | 800 |
+  | Salud, legal, financiero, profesional | light | #F7F7F5 | #FFFFFF | #E3ECFB | #0E1A2F | #4F5A6E | #345FB2 | #0D3685 | #131822 | Instrument Sans + Public Sans | 600 |
 
   WHICH GROUND. Dark is not the daring choice and light is not the safe one; they say different
   things. Dark reads as craft, power and night trade — a workshop, a tattoo studio, a gym, a bar,
@@ -165,8 +165,8 @@ export const CRESOVA_DESIGN_KIT = `
   this time you caused it.
 
   SO: WHEN THE FILE ALREADY EXISTS, DO NOT REWRITE IT. Set the palette in \`src/index.css\`, which is
-  where that config reads its colours from: paste your sector's six values into \`:root\` and delete
-  the other rows. That is the whole palette change — six lines, one file.
+  where that config reads its colours from: paste your sector's eight values into \`:root\` and delete
+  the other rows. That is the whole palette change — eight lines, one file.
 
   ONLY WHEN THERE IS NO CONFIG YET, write this one. Not a shorter one: every token below is used by
   the worked examples further down, and a class that is not declared here does not exist.
@@ -184,6 +184,8 @@ export const CRESOVA_DESIGN_KIT = `
           muted: 'rgb(var(--muted) / <alpha-value>)',
           accent: 'rgb(var(--accent) / <alpha-value>)',
           'accent-strong': 'rgb(var(--accent-strong) / <alpha-value>)',
+          deep: 'rgb(var(--deep) / <alpha-value>)',
+          whatsapp: 'rgb(var(--whatsapp) / <alpha-value>)',
         },
         fontFamily: {
           display: ['var(--font-display)', 'system-ui', 'sans-serif'],
@@ -205,19 +207,26 @@ export const CRESOVA_DESIGN_KIT = `
     },
   };
 
-  Then define the six values in \`src/index.css\`, as RGB triplets so \`<alpha-value>\` works:
+  Then define your row's eight values in \`src/index.css\`, as RGB triplets so \`<alpha-value>\` works:
 
   :root {
     --bg: 247 245 240;
     --surface: 255 255 255;
-    --ink: 20 50 44;
-    --muted: 91 111 105;
-    --accent: 14 110 98;
-    --accent-strong: 10 79 70;
+    --tint: 219 239 234;
+    --ink: 11 51 45;
+    --muted: 79 108 102;
+    --accent: 0 133 117;
+    --accent-strong: 0 80 70;
+    --deep: 14 27 25;
+    --whatsapp: 37 211 102;
     --font-display: 'Bricolage Grotesque';
     --font-body: 'Karla';
     --weight-display: 600;
   }
+
+  \`--whatsapp\` is the same in all nine rows and is not in the table: it is another company's
+  brand colour, not a choice. Every one of these sites has a WhatsApp button, and until this token
+  existed each page either invented a green or painted it with the accent.
 
   The rest of the tokens (define once, then never hardcode):
   - Spacing scale: 4 8 12 16 24 32 48 64 96 128 160
@@ -271,11 +280,11 @@ export const CRESOVA_DESIGN_KIT = `
 
   DEPTH AND RHYTHM (this is what «flat» actually means, and it is the easiest thing to fix):
   - Sections ALTERNATE their ground across FOUR values, and \`tint\` is one of them: \`bg-bg\`,
-    \`bg-surface\`, \`bg-tint\`, and once \`bg-ink\` (inverted). Never four sections running on the
+    \`bg-surface\`, \`bg-tint\`, and once \`bg-deep\` (the inverted band). Never four sections running on the
     same colour. \`tint\` is a real token in the row — a solid ground carrying the accent's hue —
     not an alpha of the accent laid over white.
   - COUNT THEM. Of the sections that have a ground, at least a quarter are \`bg-tint\`, and at
-    least one is \`bg-ink\`. This is stated as a number because taste did not survive contact with
+    least one is \`bg-deep\`. This is stated as a number because taste did not survive contact with
     a real build: a generated logistics site came out with 5 sections on white, 4 on the grey \`bg\`
     and one ink strip, and it read as having no colour at all. Measured by painted area: 93% of
     that page was white or near-white and the solid accent covered 0.5%. Two grey grounds is not

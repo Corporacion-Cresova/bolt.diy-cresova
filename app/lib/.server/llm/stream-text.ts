@@ -13,6 +13,7 @@ import { detectBuildIntent } from '~/lib/cresova/build-intent';
 import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.server/images/pexels';
 import { keepPromptSafePhotos } from '~/lib/.server/images/prompt-safe-photos';
 import { generateOpenRouterCatalog, composeImageBriefs } from '~/lib/.server/images/openrouter-images';
+import { origenServible } from '~/lib/.server/images/servable-origin';
 import { detectSectorMatch } from '~/lib/cresova/sector-detector';
 import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
@@ -333,7 +334,24 @@ export async function streamText(props: {
       const imagesKey = serverEnv?.OPENROUTER_IMAGES_KEY || process.env.OPENROUTER_IMAGES_KEY;
       let combined: CatalogPhoto[] = [];
 
-      if (imagesEnabled) {
+      /*
+       * Antes de gastar: ¿puede el navegador de un cliente cargar lo que vamos a generar?
+       *
+       * Seis imágenes por sitio se generaron y se facturaron durante semanas mientras las URL
+       * salían en http —bloqueadas por contenido mixto— y la ruta que las sirve contestaba 401 a
+       * cualquiera sin la contraseña del proxy. La generación funcionaba; lo que fallaba era la
+       * entrega, y no había ninguna señal salvo una foto que no aparecía en la página del cliente.
+       */
+      const alcance = imagesEnabled && imagesKey ? await origenServible(origin ?? '') : { servible: true, motivo: '' };
+
+      if (imagesEnabled && !alcance.servible) {
+        logger.warn(
+          `Generación de imágenes salteada para no gastar de más: ${alcance.motivo} ` +
+            'Mientras tanto el sitio usa fotos de Pexels.',
+        );
+      }
+
+      if (imagesEnabled && alcance.servible) {
         /*
          * Detect the sector from the user's request so the image prompt uses the right
          * palette, mood and composition cues. Without this, the same generic 6-brief

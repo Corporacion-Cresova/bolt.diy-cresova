@@ -2,6 +2,8 @@ import { json, type LoaderFunctionArgs } from '@remix-run/cloudflare';
 import versionInfo from '~/version.json';
 import { generateOpenRouterCatalog } from '~/lib/.server/images/openrouter-images';
 import { imageStoreStats } from '~/lib/.server/images/image-store';
+import { publicOrigin } from '~/lib/.server/images/public-origin';
+import { origenServible } from '~/lib/.server/images/servable-origin';
 import { getMonthTotal, getTodayTotal, type DailyTotal } from '~/lib/modules/llm/cost-tracker';
 import { DEFAULT_IMAGE_MODEL, OPENROUTER_IMAGE_MODELS_ENDPOINT } from '~/lib/.server/images/openrouter-images';
 import { createScopedLogger } from '~/utils/logger';
@@ -52,6 +54,15 @@ export const loader = async ({ request, context }: LoaderFunctionArgs) => {
         ? 'OPENROUTER_IMAGES_KEY no llegó al runtime'
         : 'listo — agregá ?flux=1 para gastar $0.04 y probar una imagen de verdad',
     prueba: undefined as undefined | { ok: boolean; detalle: string; url?: string },
+
+    /*
+     * Lo que faltaba para poder diagnosticar esto sin entrar al contenedor: si una foto generada
+     * puede o no cargarse desde el sitio de un cliente. Se generaron y se facturaron durante
+     * semanas mientras la URL salía en http —bloqueada por contenido mixto— y la ruta contestaba
+     * 401 por la autenticación básica del proxy.
+     */
+    alcancePublico: await origenServible(publicOrigin(request)),
+    origenPublico: publicOrigin(request),
 
     /*
      * The generated images this instance is currently holding. Empty right after a redeploy and

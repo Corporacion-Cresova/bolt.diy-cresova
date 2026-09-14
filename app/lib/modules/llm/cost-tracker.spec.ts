@@ -8,7 +8,7 @@ import {
   trackGeneration,
   trackImage,
 } from './cost-tracker';
-import { USD_TO_HNL } from './pricing';
+import { MODEL_PRICING, USD_TO_HNL } from './pricing';
 
 describe('el día que cuenta el contador', () => {
   /*
@@ -51,7 +51,10 @@ describe('el acumulado', () => {
     expect(today.generations).toBe(2);
     expect(today.tokensInput).toBe(200_000);
     expect(today.tokensOutput).toBe(100_000);
-    expect(today.usd).toBeCloseTo(2 * (0.1 * 0.87 + 0.05 * 1.74), 6);
+
+    // Desde la tabla: lo que se prueba es que sume dos llamadas, no cuánto vale DeepSeek hoy.
+    const tarifa = MODEL_PRICING['deepseek/deepseek-v4-pro'];
+    expect(today.usd).toBeCloseTo(2 * (0.1 * tarifa.inputPer1M + 0.05 * tarifa.outputPer1M), 6);
     expect(today.hnl).toBeCloseTo(today.usd * USD_TO_HNL, 6);
   });
 
