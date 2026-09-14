@@ -94,24 +94,36 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     },
   });
 
-  const { messages, files, promptId, contextOptimization, supabase, chatMode, designScheme, maxLLMSteps } =
-    await request.json<{
-      messages: Messages;
-      files: any;
-      promptId?: string;
-      contextOptimization: boolean;
-      chatMode: 'discuss' | 'build';
-      designScheme?: DesignScheme;
-      supabase?: {
-        isConnected: boolean;
-        hasSelectedProject: boolean;
-        credentials?: {
-          anonKey?: string;
-          supabaseUrl?: string;
-        };
+  const {
+    messages,
+    files,
+    promptId,
+    contextOptimization,
+    supabase,
+    chatMode,
+    designScheme,
+    maxLLMSteps,
+    generateImages,
+  } = await request.json<{
+    messages: Messages;
+    files: any;
+    promptId?: string;
+    contextOptimization: boolean;
+    chatMode: 'discuss' | 'build';
+    designScheme?: DesignScheme;
+
+    /** El interruptor de la caja de chat. Sin él no se generan imágenes y no se gasta. */
+    generateImages?: boolean;
+    supabase?: {
+      isConnected: boolean;
+      hasSelectedProject: boolean;
+      credentials?: {
+        anonKey?: string;
+        supabaseUrl?: string;
       };
-      maxLLMSteps: number;
-    }>();
+    };
+    maxLLMSteps: number;
+  }>();
 
   /*
    * Where this app answers from, so a generated image can be given an absolute URL. The site that
@@ -386,6 +398,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
                 contextFiles: filteredFiles,
                 chatMode,
                 designScheme,
+                generateImages,
                 summary,
                 messageSliceId,
                 origin,
@@ -468,6 +481,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
             contextFiles: filteredFiles,
             chatMode,
             designScheme,
+            generateImages,
             summary,
             messageSliceId,
             origin,

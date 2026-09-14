@@ -17,6 +17,8 @@ import styles from './BaseChat.module.scss';
 import type { ProviderInfo } from '~/types/model';
 import { ColorSchemeDialog } from '~/components/ui/ColorSchemeDialog';
 import { BusinessBriefDialog } from '~/components/ui/BusinessBriefDialog';
+import { useStore } from '@nanostores/react';
+import { alternarGenerarImagenes, generarImagenes } from '~/lib/stores/image-generation';
 import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import { McpTools } from './MCPTools';
@@ -271,6 +273,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               <div className="i-ph:paperclip text-xl"></div>
             </IconButton>
             <WebSearch onSearchResult={(result) => props.onWebSearchResult?.(result)} disabled={props.isStreaming} />
+            <ImageGenerationToggle />
             {/*
              * Two ways to the same brief. This one starts from the business — a name, a rubro, a
              * line about what they sell — and exists because the wand beside it needs something
@@ -348,3 +351,39 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
     </div>
   );
 };
+
+/**
+ * Enciende y apaga las imágenes de IA para las próximas generaciones.
+ *
+ * Apagado por defecto. Seis imágenes de Flux por sitio son cerca de la quinta parte de lo que
+ * cuesta construirlo, y durante semanas ninguna llegó a verse en una página de cliente: salían por
+ * http dentro de una página https y la ruta que las sirve pide la contraseña del proxy. Apagarlo
+ * era una variable de entorno y un redeploy.
+ *
+ * El título dice el estado y el costo, porque un botón que solo dice «imágenes» no responde la
+ * única pregunta que importa antes de apretarlo.
+ */
+function ImageGenerationToggle() {
+  const activo = useStore(generarImagenes);
+
+  return (
+    <IconButton
+      title={
+        activo
+          ? 'Imágenes con IA: activadas — cada sitio genera 6 y cuesta alrededor de $0.24'
+          : 'Imágenes con IA: apagadas — el sitio usa fotos de Pexels, sin costo'
+      }
+      className={classNames('transition-all', activo ? 'text-accent-500' : '')}
+      onClick={() => {
+        const siguiente = alternarGenerarImagenes();
+        toast.info(
+          siguiente
+            ? 'Imágenes con IA activadas — unos $0.24 por sitio'
+            : 'Imágenes con IA apagadas — se usan fotos de Pexels',
+        );
+      }}
+    >
+      <div className={activo ? 'i-ph:images-fill text-xl' : 'i-ph:images text-xl'} />
+    </IconButton>
+  );
+}

@@ -14,6 +14,7 @@ import { buildPhotoQuery, fetchPhotoCatalog, type CatalogPhoto } from '~/lib/.se
 import { keepPromptSafePhotos } from '~/lib/.server/images/prompt-safe-photos';
 import { generateOpenRouterCatalog, composeImageBriefs } from '~/lib/.server/images/openrouter-images';
 import { origenServible } from '~/lib/.server/images/servable-origin';
+import { debeGenerarImagenes } from '~/lib/.server/images/should-generate';
 import { detectSectorMatch } from '~/lib/cresova/sector-detector';
 import { allowedHTMLElements } from '~/utils/markdown';
 import { LLMManager } from '~/lib/modules/llm/manager';
@@ -161,6 +162,16 @@ export async function streamText(props: {
   designScheme?: DesignScheme;
 
   /**
+   * Si esta generación puede pagar imágenes de IA.
+   *
+   * Lo decide quien aprieta el botón, no una variable de entorno. `CRESOVA_IMAGES_ENABLED` dice si
+   * la función existe en esta instancia; esto dice si se usa ahora. Sin el interruptor, cada sitio
+   * pagaba seis imágenes aunque no se fueran a ver, que es exactamente lo que pasó durante
+   * semanas.
+   */
+  generateImages?: boolean;
+
+  /**
    * Absolute origin this app is reachable at, taken from the incoming request.
    *
    * Generated images are served back by this app and embedded in a page that runs on the runner
@@ -182,6 +193,7 @@ export async function streamText(props: {
     summary,
     chatMode,
     designScheme,
+    generateImages,
     origin,
   } = props;
   let currentModel = DEFAULT_MODEL;
@@ -330,9 +342,20 @@ export async function streamText(props: {
        * this collapses to the old behaviour: Pexels only, no fall-through ever breaks a
        * build.
        */
-      const imagesEnabled = (serverEnv?.CRESOVA_IMAGES_ENABLED || process.env.CRESOVA_IMAGES_ENABLED) === 'true';
       const imagesKey = serverEnv?.OPENROUTER_IMAGES_KEY || process.env.OPENROUTER_IMAGES_KEY;
+      const decision = debeGenerarImagenes({
+        habilitadoEnElEntorno: (serverEnv?.CRESOVA_IMAGES_ENABLED || process.env.CRESOVA_IMAGES_ENABLED) === 'true',
+        llave: imagesKey,
+        pedidoPorElUsuario: generateImages,
+      });
+      const imagesEnabled = decision.generar;
       let combined: CatalogPhoto[] = [];
+
+      /*
+       * Dicho siempre, generen o no. La pregunta «¿por qué este sitio no trae fotos generadas?»
+       * no se podía contestar sin leer el código, porque el caso «no se generó» era silencioso.
+       */
+      logger.info(`Imágenes de IA: ${decision.generar ? 'sí' : 'no'} — ${decision.motivo}`);
 
       /*
        * Antes de gastar: ¿puede el navegador de un cliente cargar lo que vamos a generar?
@@ -342,7 +365,7 @@ export async function streamText(props: {
        * cualquiera sin la contraseña del proxy. La generación funcionaba; lo que fallaba era la
        * entrega, y no había ninguna señal salvo una foto que no aparecía en la página del cliente.
        */
-      const alcance = imagesEnabled && imagesKey ? await origenServible(origin ?? '') : { servible: true, motivo: '' };
+      const alcance = imagesEnabled ? await origenServible(origin ?? '') : { servible: true, motivo: '' };
 
       if (imagesEnabled && !alcance.servible) {
         logger.warn(

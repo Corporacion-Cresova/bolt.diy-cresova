@@ -23,10 +23,21 @@ const logger = createScopedLogger('servable-origin');
 export interface Servibilidad {
   servible: boolean;
   motivo: string;
+
+  /**
+   * Verdadero cuando el servidor contestó y la respuesta decide la pregunta.
+   *
+   * Existe para no recordar una no-respuesta. Una sonda que se agota devuelve «sí» para no frenar
+   * la construcción, y si eso se guardara, un único timeout dejaría a la instancia gastando en
+   * imágenes por el resto de su vida. Lo que no se pudo comprobar se vuelve a preguntar.
+   */
+  definitiva: boolean;
 }
 
 /** Un id que nunca va a existir: lo que importa es QUIÉN contesta, no qué contesta. */
 const SONDA = 'sonda-de-alcance-publico';
+
+const SONDA_TIMEOUT_MS = 2_000;
 
 /**
  * @param origin el origen público de esta app
@@ -39,12 +50,13 @@ export async function comprobarOrigenServible(origin: string, fetchImpl: typeof 
      * proteger, así que no hay contenido mixto que bloquear.
      */
     if (/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(origin)) {
-      return { servible: true, motivo: 'desarrollo local' };
+      return { servible: true, motivo: 'desarrollo local', definitiva: true };
     }
 
     return {
       servible: false,
       motivo: `el origen es ${origin}, en http: un navegador bloquea una imagen http dentro de una página https. Revisá que el proxy mande X-Forwarded-Proto.`,
+      definitiva: true,
     };
   }
 
@@ -52,12 +64,27 @@ export async function comprobarOrigenServible(origin: string, fetchImpl: typeof 
     const respuesta = await fetchImpl(`${origin}/api/cresova-image/${SONDA}.jpg`, {
       method: 'GET',
       redirect: 'manual',
+
+      /*
+       * Con límite de tiempo, y esto no es precaución teórica: sin él, esta petición colgó
+       * generaciones enteras. Corre antes del primer token, y el worker le está preguntando a su
+       * propio hostname público — o sea que sale a internet y vuelve por el proxy, un camino que
+       * en varios despliegues no cierra y se queda esperando. La generación se quedaba «al
+       * inicio», sin error y sin texto, y como el título del chat sale del primer artifact, el
+       * chat tampoco cambiaba de nombre.
+       *
+       * Dos segundos alcanzan para una respuesta que viene del mismo servidor. Si no llega, el
+       * catch de abajo decide seguir, que es lo correcto: una sonda lenta no es motivo para no
+       * construir el sitio.
+       */
+      signal: AbortSignal.timeout(SONDA_TIMEOUT_MS),
     });
 
     if (respuesta.status === 401 || respuesta.status === 403) {
       return {
         servible: false,
         motivo: `${origin}/api/cresova-image/ responde ${respuesta.status} a quien no está autenticado, así que el sitio del cliente tampoco va a poder cargar las fotos. Hay que eximir esa ruta de la autenticación básica del proxy.`,
+        definitiva: true,
       };
     }
 
@@ -65,7 +92,7 @@ export async function comprobarOrigenServible(origin: string, fetchImpl: typeof 
      * Cualquier otra respuesta significa que la petición llegó hasta la app. Un 404 es lo
      * esperado: la sonda no existe. Lo que se estaba comprobando era quién contesta.
      */
-    return { servible: true, motivo: `la ruta contesta ${respuesta.status} sin pedir autenticación` };
+    return { servible: true, motivo: `la ruta contesta ${respuesta.status} sin pedir autenticación`, definitiva: true };
   } catch (error) {
     /*
      * Una falla de red no es una respuesta. Puede ser que el contenedor no alcance su propio
@@ -75,7 +102,7 @@ export async function comprobarOrigenServible(origin: string, fetchImpl: typeof 
      */
     logger.warn(`No se pudo comprobar si ${origin} sirve imágenes públicamente: ${(error as Error).message}`);
 
-    return { servible: true, motivo: 'no se pudo comprobar; se asume que sí' };
+    return { servible: true, motivo: 'no se pudo comprobar; se asume que sí', definitiva: false };
   }
 }
 
@@ -88,14 +115,28 @@ export async function comprobarOrigenServible(origin: string, fetchImpl: typeof 
 const recordadas = new Map<string, Promise<Servibilidad>>();
 
 export function origenServible(origin: string, fetchImpl: typeof fetch = fetch): Promise<Servibilidad> {
-  let recordada = recordadas.get(origin);
+  const recordada = recordadas.get(origin);
 
-  if (!recordada) {
-    recordada = comprobarOrigenServible(origin, fetchImpl);
-    recordadas.set(origin, recordada);
+  if (recordada) {
+    return recordada;
   }
 
-  return recordada;
+  const enCurso = comprobarOrigenServible(origin, fetchImpl).then((resultado) => {
+    /*
+     * Solo se guarda una respuesta que decide. Si la sonda no llegó a contestar, se olvida, para
+     * que la próxima construcción vuelva a preguntar en vez de arrastrar un «sí» que nadie
+     * verificó.
+     */
+    if (!resultado.definitiva) {
+      recordadas.delete(origin);
+    }
+
+    return resultado;
+  });
+
+  recordadas.set(origin, enCurso);
+
+  return enCurso;
 }
 
 /** Seam de tests. El runtime no lo llama. */
